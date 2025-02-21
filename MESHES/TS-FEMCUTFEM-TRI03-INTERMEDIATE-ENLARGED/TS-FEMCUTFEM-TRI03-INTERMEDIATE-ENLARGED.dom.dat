@@ -1,0 +1,30 @@
+$------------------------------------------------------------
+DIMENSIONS
+  NODAL_POINTS=         1445
+  ELEMENTS=             2756
+  SPACE_DIMENSIONS=        2
+  TYPES_OF_ELEMENTS=      10
+  BOUNDARIES=            132
+END_DIMENSIONS
+$------------------------------------------------------------
+STRATEGY
+  INTEGRATION_RULE:                Open  
+  DOMAIN_INTEGRATION_POINTS:       0  
+  EXTRAPOLATE_BOUNDARY_CONDITIONS: On
+  BOUNDARY_ELEMENT:                On
+  GROUPS=                             100, Sequential_frontal  
+END_STRATEGY
+$-------------------------------------------------------------
+GEOMETRY
+  INCLUDE  TS-FEMCUTFEM-TRI03-INTERMEDIATE-ENLARGED.geo.dat
+END_GEOMETRY
+$-------------------------------------------------------------
+SETS
+  ELEME, ALL = 10
+  END_ELEME
+END_SETS
+$-------------------------------------------------------------
+BOUNDARY_CONDITIONS
+  INCLUDE  TS-FEMCUTFEM-TRI03-INTERMEDIATE-ENLARGED.fix.dat
+END_BOUNDARY_CONDITIONS
+$-------------------------------------------------------------

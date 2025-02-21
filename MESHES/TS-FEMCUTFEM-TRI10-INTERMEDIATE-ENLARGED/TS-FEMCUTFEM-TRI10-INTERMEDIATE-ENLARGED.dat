@@ -1,0 +1,17 @@
+$-------------------------------------------------------------------
+RUN_DATA
+  ALYA:                   TS-FEMCUTFEM-TRI10-INTERMEDIATE-ENLARGED
+END_RUN_DATA
+$-------------------------------------------------------------------
+PROBLEM_DATA
+  TIME_COUPLING:          Global, From_ritical
+  TIME_INTERVAL=          0.0, 1.0  
+  TIME_STEP_SIZE=         1.0  
+  NUMBER_OF_STEPS=        1
+  EQUILI_MODULE:          On
+  END_EQUILI_MODULE
+  PARALL_SERVICE:         Off
+    PARTITION_TYPE:     FACES
+  END_PARALL_SERVICE
+END_PROBLEM_DATA
+$-------------------------------------------------------------------

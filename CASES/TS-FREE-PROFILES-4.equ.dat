@@ -1,0 +1,129 @@
+$------------------------------------------------------------                         
+PHYSICAL_PROBLEM  
+
+$$ PROBLEM CASE PARAMETERS
+   PLASB:    FREED      $ PLASMA BOUNDARY:   FREED/FIXED
+   PLASC:    PROFI      $ PLASMA CURRENT MODEL:    LINEA/NONLI/ZHENG/PROFI
+ 
+   NUMMATERIAL:     1              $ 1>CHAMBER  2> CHAMBER+METAL 3<CHAMBER+METAL+VACUUM
+   TOTAL_CURRENT:   -15000000.0    $ TOTAL PLASMA TOROIDAL CURRENT
+   GEOMETRY:        AXISYMETRIC    $ AXISYMETRIC/FULL3D
+
+$$ VACUUM VESSEL GEOMETRY: (ITER)                       
+   R0TOK:       6.0       $ PLASMA REGION MAJOR RADIUS  
+   EPSILON:     0.32      $ PLASMA REGION INVERSE ASPECT RATIO
+   KAPPA:       1.7       $ PLASMA REGION ELONGATION
+   DELTA:       0.33      $ PLASMA REGION TRIANGULARITY
+
+$$ PLASMA REGION GEOMETRY: (ITER)
+   CONTROL_POINTS:        4
+   R_SADDLE:              5.5 
+   Z_SADDLE:              -2.7 
+   R_RIGHTMOST:           7.2
+   Z_RIGHTMOST:           0.2
+   R_LEFTMOST:            4.8
+   Z_LEFTMOST:            0.6
+   R_TOPP:                5.9
+   Z_TOPP:                2.4
+
+$$ PARAMETERS FOR PRESSURE AND TOROIDAL FIEL PROFILES
+   B0_equ:     9.0       $ TOROIDAL FIELD MAGNITUDE ON MAGNETIC AXIS
+   q0_equ:     0.7       $ TOKAMAK SAFETY FACTOR
+   np_equ:     2.0       $ EXPONENT FOR PRESSURE PROFILE p_hat FUNCTION
+   g0_equ:     -34.4     $ 1 TOROIDAL FIELD VALUE AT MAGNETIC AXIS
+   ng_equ:     2.0       $ EXPONENT FOR TOROIDAL FIELD PROFILE g_hat FUNCTION
+
+$$ PARAMETERS FOR EXTERNAL COILS AND SOLENOIDS (MAGNETS)
+   N_COILS:              6
+   Rposi:   3.9431
+   Zposi:   7.5741    
+   Inten:   5.73e8
+
+   Rposi:   8.2851
+   Zposi:   6.5398   
+   Inten:   -2.88e8
+
+   Rposi:   11.9919
+   Zposi:   3.2752  
+   Inten:   -5.81e8
+
+   Rposi:   11.9630
+   Zposi:   -2.2336  
+   Inten:   -4.78e8
+
+   Rposi:   8.3908
+   Zposi:   -6.7269  
+   Inten:   -7.9e8
+
+   Rposi:   4.3340
+   Zposi:   -7.4665  
+   Inten:   17.2e8
+
+   N_SOLENOIDS:          5
+   Rposi:   1.696
+   Zlowe:   -5.415
+   Zuppe:   -3.6067
+   Nturn:   1000
+   Inten:   5.9e5
+
+   Rposi:   1.696
+   Zlowe:   -3.6067
+   Zuppe:   -1.7983
+   Nturn:   1000
+   Inten:   -10.3e5
+
+   Rposi:   1.696
+   Zlowe:   -1.7983
+   Zuppe:   1.8183
+   Nturn:   1000
+   Inten:   -41.6e5
+
+   Rposi:   1.696
+   Zlowe:   1.8183
+   Zuppe:   3.6267
+   Nturn:   1000
+   Inten:   -4.05e5
+
+   Rposi:   1.696
+   Zlowe:   3.6267
+   Zuppe:   5.435
+   Nturn:   1000
+   Inten:   -4.82e5
+                                                  
+END_PHYSICAL_PROBLEM                                                                  
+$------------------------------------------------------------                         
+NUMERICAL_TREATMENT    
+  QUADRATURE_ORDER:  2         $ ORDER OF NUMERICAL INTEGRATION QUADRATURES                    
+  EXT_ITER:          10        $ EXTERNAL LOOP (PHI_B) MAXIMUM ITERATIONS
+  EXT_TOL:           1.0e-4    $ EXTERNAL LOOP (PHI_B) CONVERGENCE TOLERANCE
+  INT_ITER:          10        $ INTERNAL LOOP (PHI_NORM) MAXIMUM ITERATIONS
+  INT_TOL:           1.0e-5    $ INTERNAL LOOP (PHI_NORM) CONVERGENCE TOLERANCE
+  BETA_equ:          1.0e5     $ NITSCHE'S METHOD PENALTY PARAMETER
+  ZETA_equ:          1.0e4     $ GHOST PENALTY PARAMETER
+  RELAXATION:        1.0       $ AIKITEN'S METHOD RELAXATION PARAMETER
+  EXTR_R0:           6.0       $ MAGNETIC AXIS OPTIMIZATION ROUTINE INITIAL GUESS R COORDINATE
+  EXTR_Z0:           0.0       $ MAGNETIC AXIS OPTIMIZATION ROUTINE INITIAL GUESS Z COORDINATE
+  SADD_R0:           5.0       $ ACTIVE SADDLE POINT OPTIMIZATION ROUTINE INITIAL GUESS R COORDINATE
+  SADD_Z0:          -3.0       $ ACTIVE SADDLE POINT OPTIMIZATION ROUTINE INITIAL GUESS Z COORDINATE
+  OPTI_ITMAX:        50        $ CRITICAL POINTS OPTIMIZATION ALGORITHM MAXIMAL ITERATIONS NUMBER
+  OPTI_TOL:          1.0e-6    $ CRITICAL POINTS OPTIMIZATION ALGORITHM SOLUTION TOLERANCE
+                               
+  ALGEBRAIC_SOLVER     
+    SOLVER:                GMRES, KRYLOV=100
+    CONVERGENCE:           ITERA=10000, TOLER=1.0e-10, ADAPTIVE, RATIO=1.0e-3
+    OUTPUT:                CONVERGENCE
+    PRECONDITIONER:        DIAGONAL
+  END_ALGEBRAIC_SOLVER        
+
+END_NUMERICAL_TREATMENT                                                         
+$------------------------------------------------------------
+OUTPUT_&_POST_PROCESS  
+
+  POSTPROCESS PHIPOL,  STEPS=1
+$  POSTPROCESS CURRENT, STEPS=1
+  POSTPROCESS BFIELD,  STEPS=1
+$  POSTPROCESS AFIELD,  STEPS=1
+$  POSTPROCESS PRESS,  STEPS=1
+
+END_OUTPUT_&_POST_PROCESS  
+$------------------------------------------------------------
