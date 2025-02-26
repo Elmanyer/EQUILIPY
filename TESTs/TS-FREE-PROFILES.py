@@ -57,10 +57,7 @@ from GradShafranovFEMCutFEM import *
 MESH = 'TS-FEMCUTFEM-TRI06-MEDIUM-RECTANGLE'
 
 ### SELECT SOLUTION CASE FILE:
-#CASE = 'TS-FREE-PROFILES-ORIG'       
-#CASE = 'TS-FREE-PROFILES-2'
-#CASE = 'TS-FREE-PROFILES-3'
-
+#CASE = 'TS-FREE-PROFILES'       
 CASE = 'TS-FREE-PROFILES-RECTANGLE'    
 
 ##############################################################

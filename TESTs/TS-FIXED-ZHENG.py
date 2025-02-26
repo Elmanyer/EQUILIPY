@@ -48,7 +48,7 @@ CASE = 'TS-FIXED-ZHENG'
 ##############################################################
 ##############################################################
 
-## CREATE GRAD-SHAFRANOV PROBLEM 
+## CREATE GRAD-SHAFRANOV PROBLEM Hmbsc
 Problem = GradShafranovFEMCutFEM(MESH,CASE)
 ## DECLARE OUTPUT SWITCHS:
 ##### GHOST PENALTY STABILISATION
