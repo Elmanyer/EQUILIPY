@@ -1,10 +1,10 @@
 $------------------------------------------------------------
 DIMENSIONS
-  NODAL_POINTS=          375
-  ELEMENTS=              649
+  NODAL_POINTS=         1445
+  ELEMENTS=             2756
   SPACE_DIMENSIONS=        2
   TYPES_OF_ELEMENTS=      10
-  BOUNDARIES=             99
+  BOUNDARIES=            132
 END_DIMENSIONS
 $------------------------------------------------------------
 STRATEGY
@@ -16,7 +16,7 @@ STRATEGY
 END_STRATEGY
 $-------------------------------------------------------------
 GEOMETRY
-  INCLUDE  TRI03-COARSE.geo.dat
+  INCLUDE  TRI03-INTERMEDIATE.geo.dat
 END_GEOMETRY
 $-------------------------------------------------------------
 SETS
@@ -25,6 +25,6 @@ SETS
 END_SETS
 $-------------------------------------------------------------
 BOUNDARY_CONDITIONS
-  INCLUDE  TRI03-COARSE.fix.dat
+  INCLUDE  TRI03-INTERMEDIATE.fix.dat
 END_BOUNDARY_CONDITIONS
 $-------------------------------------------------------------

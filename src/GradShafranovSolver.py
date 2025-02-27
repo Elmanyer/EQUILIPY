@@ -48,7 +48,8 @@ class GradShafranovSolver:
     def __init__(self,MESH,CASE):
         # WORKING DIRECTORY
         pwd = os.getcwd()
-        self.pwd = pwd[:pwd.rfind("EQUILIPY")+18]
+        self.pwd = pwd[:-6]
+        print('Working directory: ' + self.pwd)
         
         # INPUT FILES:
         self.mesh_folder = self.pwd + '/MESHES/' + MESH
@@ -2578,10 +2579,10 @@ class GradShafranovSolver:
         """
         
         # COPY DOM.DAT FILE
-        MeshDataFile = self.mesh_folder +'/'+ 'TS-FEMCUTFEM-' + self.MESH +'.dom.dat'
+        MeshDataFile = self.mesh_folder +'/' + self.MESH +'.dom.dat'
         shutil.copy2(MeshDataFile,self.outputdir+'/'+self.CASE+'-'+self.MESH+'.dom.dat')
         # COPY GEO.DAT FILE
-        MeshFile = self.mesh_folder +'/'+ 'TS-FEMCUTFEM-' + self.MESH +'.geo.dat'
+        MeshFile = self.mesh_folder +'/' + self.MESH +'.geo.dat'
         shutil.copy2(MeshFile,self.outputdir+'/'+self.CASE+'-'+self.MESH+'.geo.dat')
         # COPY EQU.DAT FILE
         EQUILIDataFile = self.case_file +'.equ.dat'

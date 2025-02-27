@@ -1,10 +1,10 @@
 $------------------------------------------------------------
 DIMENSIONS
-  NODAL_POINTS=        12675
-  ELEMENTS=             6238
+  NODAL_POINTS=         5645
+  ELEMENTS=             2756
   SPACE_DIMENSIONS=        2
   TYPES_OF_ELEMENTS=      11
-  BOUNDARIES=            198
+  BOUNDARIES=            132
 END_DIMENSIONS
 $------------------------------------------------------------
 STRATEGY
@@ -16,7 +16,7 @@ STRATEGY
 END_STRATEGY
 $-------------------------------------------------------------
 GEOMETRY
-  INCLUDE  TRI06-FINE-ENLARGED.geo.dat
+  INCLUDE  TRI06-INTERMEDIATE.geo.dat
 END_GEOMETRY
 $-------------------------------------------------------------
 SETS
@@ -25,6 +25,6 @@ SETS
 END_SETS
 $-------------------------------------------------------------
 BOUNDARY_CONDITIONS
-  INCLUDE  TRI06-FINE-ENLARGED.fix.dat
+  INCLUDE  TRI06-INTERMEDIATE.fix.dat
 END_BOUNDARY_CONDITIONS
 $-------------------------------------------------------------

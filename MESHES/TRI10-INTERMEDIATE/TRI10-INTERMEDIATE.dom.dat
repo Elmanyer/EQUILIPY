@@ -16,7 +16,7 @@ STRATEGY
 END_STRATEGY
 $-------------------------------------------------------------
 GEOMETRY
-  INCLUDE  TRI10-INTERMEDIATE-ENLARGED.geo.dat
+  INCLUDE  TRI10-INTERMEDIATE.geo.dat
 END_GEOMETRY
 $-------------------------------------------------------------
 SETS
@@ -25,6 +25,6 @@ SETS
 END_SETS
 $-------------------------------------------------------------
 BOUNDARY_CONDITIONS
-  INCLUDE  TRI10-INTERMEDIATE-ENLARGED.fix.dat
+  INCLUDE  TRI10-INTERMEDIATE.fix.dat
 END_BOUNDARY_CONDITIONS
 $-------------------------------------------------------------
