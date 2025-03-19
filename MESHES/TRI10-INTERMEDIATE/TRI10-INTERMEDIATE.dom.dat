@@ -1,7 +1,7 @@
 $------------------------------------------------------------
 DIMENSIONS
-  NODAL_POINTS=        12601
-  ELEMENTS=             2756
+  NODAL_POINTS=          7678
+  ELEMENTS=              1662
   SPACE_DIMENSIONS=        2
   TYPES_OF_ELEMENTS=      16
   BOUNDARIES=            132
