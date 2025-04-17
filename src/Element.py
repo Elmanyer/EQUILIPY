@@ -31,7 +31,9 @@ from ShapeFunctions import *
 from scipy import optimize
 from itertools import chain
 import matplotlib.path as mpath
+import matplotlib.pyplot as plt
 from Segment import *
+from InterfaceApprox import *
 
 class Element:
     
@@ -92,7 +94,31 @@ class Element:
         self.Nesub = None           # NUMBER OF SUBELEMENTS GENERATED IN TESSELLATION
         self.SubElements = None
         self.interfedge = None
+        
+        self.area, self.length = self.ComputeArea_Length()
         return
+    
+    ##################################################################################################
+    #################################### ELEMENTAL ATTRIBUTES ########################################
+    ##################################################################################################
+    
+    def ComputeArea(self):
+        match self.ElType:
+            case 1:
+                area = compute_triangle_area(self.Xe)
+            case 2:
+                area = compute_quadrilateral_area(self.Xe)
+        return area
+    
+    def ComputeArea_Length(self):
+        match self.ElType:
+            case 1:
+                area = compute_triangle_area(self.Xe)
+                length = np.sqrt(4*area/np.sqrt(3)) 
+            case 2:
+                area = compute_quadrilateral_area(self.Xe)
+                length = np.sqrt(area)
+        return area, length
     
     
     ##################################################################################################
@@ -113,9 +139,10 @@ class Element:
         Output: 
              X: coodinates of mapped point in reference element.
         """
-        
-        N, foo, foo = EvaluateReferenceShapeFunctions(Xi, self.ElType, self.ElOrder)
-        X = N @ self.Xe
+        X = np.zeros([self.dim])
+        for i in range(self.n):
+            Nig, foo, foo = ShapeFunctionsReference(Xi, self.ElType, self.ElOrder, i+1)
+            X += Nig*self.Xe[i,:]
         return X
     
     def InverseMapping(self, X):
@@ -188,73 +215,101 @@ class Element:
         """
         Total radial magnetic field at point X such that    Br = -1/R dpsi/dZ
         """
-        Br = 0
+        # MAP PHYSICAL POINT TO REFERENCE ELEMENT
         XI = self.InverseMapping(X)
-        for i in range(self.n):
-            foo, foo, dNdeta = ShapeFunctionsReference(XI, self.ElType, self.ElOrder, i+1)
-            Br -= dNdeta*self.PSIe[i]/X[0]
+        # COMPUTE REFERENCE SHAPE FUNCTIONS DERIVATIVES AT MAPPED POINT
+        foo, dNdxi, dNdeta = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder)
+        # EVALUATE JACOBIAN OF TRANSFORMATION AT POINT
+        invJ, foo = Jacobian(self.Xe,dNdxi[0],dNdeta[0])
+        # OBTAIN GRADIENT IN PHYSICAL SPACE 
+        Ngrad = invJ@np.array([dNdxi[0], dNdeta[0]])
+        # COMPUTE RADIAL MAGNETIC COMPONENT
+        Br = - Ngrad[1,:]@self.PSIe/X[0]
         return Br
     
-    def Bre(self):
+    def Brg(self):
         """
-        Elemental nodes total radial magnetic field such that    Br = -1/R dpsi/dZ
+        Total radial magnetic field at integration nodes such that    Br = -1/R dpsi/dZ
         """
-        Bre = np.zeros([self.n])
-        XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
-        foo, foo, dNdeta = EvaluateReferenceShapeFunctions(XIe, self.ElType, self.ElOrder)
-        for inode in range(self.n):
-            Bre[inode] = -self.PSIe@dNdeta[inode,:]/self.Xe[inode,0]
-        return Bre
+        Brg = np.zeros([self.ng])
+        # LOOP OVER INTEGRATION NODES
+        for ig in range(self.ng):
+            # COMPUTE GRADIENT IN PHYSICAL SPACE
+            Ngrad = self.invJg[ig,:,:]@np.array([self.dNdxig[ig,:],self.dNdetag[ig,:]])
+            # COMPUTE RADIAL MAGNETIC COMPONENT
+            Brg[ig] = - Ngrad[1,:]@self.PSIe/self.Xg[ig,0]
+        return Brg
+    
     
     def Bz(self,X):
         """
         Total vertical magnetic field at point X such that    Bz = 1/R dpsi/dR
         """
-        Bz = 0
+        # MAP PHYSICAL POINT TO REFERENCE ELEMENT
         XI = self.InverseMapping(X)
-        for i in range(self.n):
-            foo, dNdxi, foo = ShapeFunctionsReference(XI, self.ElType, self.ElOrder, i+1)
-            Bz += dNdxi*self.PSIe[i]/X[0]
+        # COMPUTE REFERENCE SHAPE FUNCTIONS DERIVATIVES AT MAPPED POINT
+        foo, dNdxi, dNdeta = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder)
+        # EVALUATE JACOBIAN OF TRANSFORMATION AT POINT
+        invJ, foo = Jacobian(self.Xe,dNdxi[0],dNdeta[0])
+        # OBTAIN GRADIENT IN PHYSICAL SPACE 
+        Ngrad = invJ@np.array([dNdxi[0], dNdeta[0]])
+        # COMPUTE VERTICAL MAGNETIC COMPONENT
+        Bz = Ngrad[0,:]@self.PSIe/X[0]
         return Bz
     
-    def Bze(self):
+    def Bzg(self):
         """
-        Elemental nodes total vertical magnetic field such that    Bz = 1/R dpsi/dR
+        Total radial magnetic field at integration nodes such that    Br = -1/R dpsi/dZ
         """
-        Bze = np.zeros([self.n])
-        XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
-        foo, dNdxi, foo = EvaluateReferenceShapeFunctions(XIe, self.ElType, self.ElOrder)
-        for inode in range(self.n):
-            Bze[inode] = self.PSIe@dNdxi[inode,:]/self.Xe[inode,0]
-        return Bze
+        Bzg = np.zeros([self.ng])
+        # LOOP OVER INTEGRATION NODES
+        for ig in range(self.ng):
+            # COMPUTE GRADIENT IN PHYSICAL SPACE
+            Ngrad = self.invJg[ig,:,:]@np.array([self.dNdxig[ig,:],self.dNdetag[ig,:]])
+            # COMPUTE VERTICAL MAGNETIC COMPONENT
+            Bzg[ig] += Ngrad[0,:]*self.PSIe/self.Xg[ig,0]
+        return Bzg
     
     def Brz(self,X):
         """
         Total magnetic field vector at point X such that    (Br, Bz) = (-1/R dpsi/dZ, 1/R dpsi/dR)
         """
-        Brz = np.zeros([2])
+        # MAP PHYSICAL POINT TO REFERENCE ELEMENT
         XI = self.InverseMapping(X)
-        for i in range(self.n):
-            foo, dNdxi, dNdeta = ShapeFunctionsReference(XI, self.ElType, self.ElOrder, i+1)
-            Brz[0] -= dNdeta*self.PSIe[i]/X[0]
-            Brz[1] += dNdxi*self.PSIe[i]/X[0]
+        # COMPUTE REFERENCE SHAPE FUNCTIONS DERIVATIVES AT MAPPED POINT
+        foo, dNdxi, dNdeta = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder)
+        # EVALUATE JACOBIAN OF TRANSFORMATION AT POINT
+        invJ, foo = Jacobian(self.Xe,dNdxi[0],dNdeta[0])
+        # OBTAIN GRADIENT IN PHYSICAL SPACE  
+        Ngrad = invJ@np.array([dNdxi[0], dNdeta[0]])
+        # COMPUTE MAGNETIC VECTOR
+        Brz = Ngrad[[1,0],:]@self.PSIe/X[0]
+        Brz[0] *= -1
         return Brz
     
-    def Brze(self):
+    def Brzg(self):
         """
-        Elemental nodes total magnetic field vector such that    (Br, Bz) = (-1/R dpsi/dZ, 1/R dpsi/dR)
+        Total radial magnetic field at integration nodes such that    Br = -1/R dpsi/dZ
         """
-        Brze = np.zeros([self.n,2])
-        XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
-        foo, dNdxi, dNdeta = EvaluateReferenceShapeFunctions(XIe, self.ElType, self.ElOrder)
-        for inode in range(self.n):
-            Brze[inode,0] = -self.PSIe@dNdeta[inode,:]/self.Xe[inode,0]
-            Brze[inode,1] = self.PSIe@dNdxi[inode,:]/self.Xe[inode,0]
-        return Brze
+        Brzg = np.zeros([self.ng,self.dim])
+        # LOOP OVER INTEGRATION NODES
+        for ig in range(self.ng):
+            # COMPUTE GRADIENT IN PHYSICAL SPACE
+            Ngrad = self.invJg[ig,:,:]@np.array([self.dNdxig[ig,:],self.dNdetag[ig,:]])
+            # COMPUTE MAGNETIC VECTOR
+            Brzg = Ngrad[[1,0],:]@self.PSIe/self.Xg[ig,0]
+            Brzg[0] *= -1
+        return Brzg
     
     ##################################################################################################
     ######################### CUT ELEMENTS INTERFACE APPROXIMATION ###################################
     ##################################################################################################
+    
+    def PHI(self,X):
+        """ ISOPARAMETRIC INTERPOLATION OF LEVEL-SET FUNCTION PHI EVALUATED AT POINT X"""
+        N, foo, foo = EvaluateReferenceShapeFunctions(X, self.ElType, self.ElOrder)
+        return N@self.LSe
+    
     
     def InterfaceApproximation(self,interface_index):
         """
@@ -277,14 +332,10 @@ class Element:
         # OBTAIN REFERENCE ELEMENT COORDINATES
         XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
 
-        # GENERATE ELEMENTAL PLASMA/VACUUM INTERFACE APPROXIMATION OBJECT
-        self.InterfApprox = InterfaceApprox(index = interface_index,
-                                            Nsegments = self.ElOrder)
-        
         # FIND POINTS ON INTERFACE USING ELEMENTAL INTERPOLATION
         #### INTERSECTION WITH EDGES
         XIintEND = np.zeros([2,2])
-        self.InterfApprox.ElIntNodes = np.zeros([2,self.nedge],dtype=int)
+        ElIntNodes = np.zeros([2,self.nedge],dtype=int)
         k = 0
         for iedge in range(self.numedges):  # Loop over elemental edges
             # Check for sign change along the edge
@@ -293,17 +344,16 @@ class Element:
             if self.LSe[inode] * self.LSe[jnode] < 0:
                 # FIND HIGH-ORDER NODES BETWEEN VERTICES
                 #edge_index = get_edge_index(self.ElType,inode,jnode)
-                self.InterfApprox.ElIntNodes[k,:2] = [inode, jnode]
+                ElIntNodes[k,:2] = [inode, jnode]
                 for knode in range(self.ElOrder-1):
-                    self.InterfApprox.ElIntNodes[k,2+knode] = self.numedges + iedge*(self.ElOrder-1) + knode
+                    ElIntNodes[k,2+knode] = self.numedges + iedge*(self.ElOrder-1) + knode
                     
                 if abs(XIe[jnode,0]-XIe[inode,0]) < 1e-6: # VERTICAL EDGE
                     #### DEFINE CONSTRAINT PHI FUNCTION
                     xi = XIe[inode,0]
                     def PHIedge(eta):
                         X = np.array([xi,eta[0]],dtype=float).reshape((1,2))
-                        N, foo, foo = EvaluateReferenceShapeFunctions(X, self.ElType, self.ElOrder)
-                        return N@self.LSe
+                        return self.PHI(X)
                     #### FIND INTERSECTION POINT:
                     Eta0 = 1/2  # INITIAL GUESS FOR ROOT SOLVER
                     sol = optimize.root(PHIedge, Eta0)
@@ -316,8 +366,7 @@ class Element:
                         return eta
                     def PHIedge(xi):
                         X = np.array([xi,edgeconstraint(xi)]).reshape((1,2))
-                        N, foo, foo = EvaluateReferenceShapeFunctions(X, self.ElType, self.ElOrder)
-                        return N@self.LSe
+                        return self.PHI(X)
                     #### FIND INTERSECTION POINT:
                     Xi0 = 1/2  # INITIAL GUESS FOR ROOT SOLVER
                     sol = optimize.root(PHIedge, Xi0)
@@ -325,7 +374,7 @@ class Element:
                 k += 1
                     
         if self.ElOrder == 1: # LINEAR ELEMENT INTERFACE APPROXIMATION -> LINEAR APPROXIMATION 
-            self.InterfApprox.XIint = XIintEND 
+            XIint = XIintEND 
         else:
             #### HIGH-ORDER INTERFACE NODES
             # IN THIS CASE, WITH USE THE REGULARITY OF THE REFERENCE TRIANGLE TO FIND THE NODES
@@ -333,9 +382,6 @@ class Element:
             # ELEMENTAL EDGES, EACH INTERIOR NODE CAN BE FOUND BY IMPOSING TWO CONDITIONS:
             #    - PHI = 0
             #    - NODE ON LINE DIVIDING THE INTERFACE ARC
-            def PHI(X):
-                N, foo, foo = EvaluateReferenceShapeFunctions(X, self.ElType, self.ElOrder)
-                return N@self.LSe
 
             def fun(X):
                 F = np.zeros([X.shape[0]])
@@ -343,7 +389,7 @@ class Element:
                 XHO = X.reshape((self.ElOrder-1,self.dim)) 
                 # PHI = 0 ON NODES
                 for inode in range(self.ElOrder-1):
-                    F[inode] = PHI(XHO[inode,:].reshape((1,2)))
+                    F[inode] = self.PHI(XHO[inode,:].reshape((1,2)))
                 # EQUAL DISTANCES BETWEEN INTERFACE NODES
                 if self.ElOrder == 2:
                     F[-1] = np.linalg.norm(XIintEND[0,:]-X)-np.linalg.norm(XIintEND[1,:]-X)
@@ -372,46 +418,26 @@ class Element:
 
             ##### STORE INTERFACE APPROXIMATION DATA IN INTERFACE OBJECT 
             ## CONCATENATE INTERFACE NODES
-            self.InterfApprox.XIint = np.concatenate((XIintEND,XIintINT),axis=0)
+            XIint = np.concatenate((XIintEND,XIintINT),axis=0)
         
         
         ## MAP BACK TO PHYSICAL SPACE
         # EVALUATE REFERENCE SHAPE FUNCTIONS AT POINTS TO MAP (INTERFACE NODES)
-        Nint, foo, foo = EvaluateReferenceShapeFunctions(self.InterfApprox.XIint, self.ElType, self.ElOrder)
+        Nint, foo, foo = EvaluateReferenceShapeFunctions(XIint, self.ElType, self.ElOrder)
         # COMPUTE SCALAR PRODUCT
-        self.InterfApprox.Xint = Nint@self.Xe
+        Xint = Nint@self.Xe
         
         ## ASSOCIATE ELEMENTAL CONNECTIVITY TO INTERFACE SEGMENTS
         lnods = [0,np.arange(2,self.ElOrder+1),1]
-        self.InterfApprox.Tint = list(chain.from_iterable([x] if not isinstance(x, np.ndarray) else x for x in lnods))
-    
-        #### GENERATE SEGMENT OBJECTS AND STORE INTERFACE DATA
-        self.InterfApprox.Segments = [Segment(index = iseg,
-                                    ElOrder = self.ElOrder,
-                                    Tseg = None,
-                                    Xseg = self.InterfApprox.Xint[self.InterfApprox.Tint[iseg:iseg+2],:],
-                                    XIseg = self.InterfApprox.XIint[self.InterfApprox.Tint[iseg:iseg+2],:]) 
-                                    for iseg in range(self.InterfApprox.Nsegments)]  
-            
-        for SEGMENT in self.InterfApprox.Segments:
-            # COMPUTE INNER HIGH-ORDER NODES IN EACH SEGMENT CONFORMING THE INTERFACE APPROXIMATION (BOTH REFERENCE AND PHYSICAL SPACE)
-            XsegHO = np.zeros([SEGMENT.n,SEGMENT.dim])
-            XIsegHO = np.zeros([SEGMENT.n,SEGMENT.dim])
-            XsegHO[:2,:] = SEGMENT.Xseg
-            XIsegHO[:2,:] = SEGMENT.XIseg
-            dx = (SEGMENT.Xseg[1,0]-SEGMENT.Xseg[0,0])/(SEGMENT.n-1)
-            dy = (SEGMENT.Xseg[1,1]-SEGMENT.Xseg[0,1])/(SEGMENT.n-1)
-            dxi = (SEGMENT.XIseg[1,0]-SEGMENT.XIseg[0,0])/(SEGMENT.n-1)
-            deta = (SEGMENT.XIseg[1,1]-SEGMENT.XIseg[0,1])/(SEGMENT.n-1)
-            for iinnernode in range(2,SEGMENT.n):
-                XsegHO[iinnernode,:] = [SEGMENT.Xseg[0,0]+(iinnernode-1)*dx,
-                                        SEGMENT.Xseg[0,1]+(iinnernode-1)*dy]
-                XIsegHO[iinnernode,:] = [SEGMENT.XIseg[0,0]+(iinnernode-1)*dxi,
-                                        SEGMENT.XIseg[0,1]+(iinnernode-1)*deta]
-            # STORE HIGH-ORDER SEGMENT ELEMENTS CONFORMING HIGH-ORDER INTERFACE APPROXIMATION
-            SEGMENT.Xseg = XsegHO
-            SEGMENT.XIseg = XIsegHO
-               
+        Tint = list(chain.from_iterable([x] if not isinstance(x, np.ndarray) else x for x in lnods))
+        
+        # GENERATE ELEMENTAL PLASMA/VACUUM INTERFACE APPROXIMATION OBJECT
+        self.InterfApprox = InterfaceApprox(index = interface_index,
+                                            n = self.nedge,
+                                            Xint = Xint,
+                                            XIint = XIint,
+                                            Tint = Tint,
+                                            ElIntNodes = ElIntNodes)     
         return 
     
     
@@ -419,33 +445,37 @@ class Element:
     ##################################### INTERFACE NORMALS ##########################################
     ##################################################################################################
     
-    def InterfaceNormal(self):
+    def InterfaceNormals(self):
         """ 
-        This function computes the interface normal vector pointing outwards. 
+        This function computes the interface normal vector pointing outwards at the Gaussian integration nodes. 
         """
         # COMPUTE THE NORMAL VECTOR FOR EACH SEGMENT CONFORMING THE INTERFACE APPROXIMATION
-        for SEGMENT in self.InterfApprox.Segments:
-            #### PREPARE TEST NORMAL VECTOR IN PHYSICAL SPACE
-            dx = SEGMENT.Xseg[1,0] - SEGMENT.Xseg[0,0]
-            dy = SEGMENT.Xseg[1,1] - SEGMENT.Xseg[0,1]
-            ntest_xy = np.array([-dy, dx]) 
-            ntest_xy = ntest_xy/np.linalg.norm(ntest_xy) 
-            
+        self.InterfApprox.NormalVec = list()
+        self.InterfApprox.NormalVecREF = list()
+        for ig in range(self.InterfApprox.ng):
+            #### PREPARE NORMAL VECTOR IN PHYSICAL SPACE
+            Ngrad = self.InterfApprox.invJg[ig,:,:]@np.array([self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:]])
+            dphidr, dphidz = Ngrad@self.LSe
+            ntest_rz = np.array([dphidr,dphidz])
+            ntest_rz = ntest_rz/np.linalg.norm(ntest_rz)
             #### PERFORM THE TEST IN REFERENCE SPACE
-            # PREPARE TEST NORMAL VECTOR IN REFERENCE SPACE
-            dxi = SEGMENT.XIseg[1,0] - SEGMENT.XIseg[0,0]
-            deta = SEGMENT.XIseg[1,1] - SEGMENT.XIseg[0,1]
-            ntest_xieta = np.array([-deta, dxi])                     # test this normal vector
+            # COMPUTE DERIVATIVES OF INTERPOLATED PHI 
+            dphidxi = self.InterfApprox.dNdxig[ig,:]@self.LSe
+            dphideta = self.InterfApprox.dNdetag[ig,:]@self.LSe
+            # PREPARE TEST NORMAL VECTOR 
+            ntest_xieta = np.array([dphidxi, dphideta])
             ntest_xieta = ntest_xieta/np.linalg.norm(ntest_xieta)    # normalize
-            XIsegmean = np.mean(SEGMENT.XIseg, axis=0)               # mean point on interface
-            XItest = XIsegmean + 0.5*ntest_xieta                     # physical point on which to test the Level-Set 
-            # INTERPOLATE LEVEL-SET IN REFERENCE SPACE
+            # PREPARE TEST POINT              
+            XItest = self.InterfApprox.XIg[ig,:] + 0.5*ntest_xieta   # point on which to test the Level-Set 
+            # INTERPOLATE LEVEL-SET ON TEST POINT
             LStest = self.ElementalInterpolationREFERENCE(XItest,self.LSe)
             # CHECK SIGN OF LEVEL-SET 
             if LStest > 0:  # TEST POINT OUTSIDE PLASMA REGION
-                SEGMENT.NormalVec = ntest_xy
+                self.InterfApprox.NormalVec.append(ntest_rz)
+                self.InterfApprox.NormalVecREF.append(ntest_xieta)
             else:   # TEST POINT INSIDE PLASMA REGION --> NEED TO TAKE THE OPPOSITE NORMAL VECTOR
-                SEGMENT.NormalVec = -1*ntest_xy
+                self.InterfApprox.NormalVec.append(-1*ntest_rz)
+                self.InterfApprox.NormalVecREF.append(-1*ntest_xieta)
         return 
      
     
@@ -692,7 +722,7 @@ class Element:
     ############################### ELEMENTAL NUMERICAL QUADRATURES ##################################
     ##################################################################################################
         
-    def ComputeStandardQuadrature2D(self,NumQuadOrder):
+    def ComputeStandardQuadrature2D(self,NumQuadOrder2D):
         """
         Computes the numerical integration quadratures for 2D elements that are not cut by any interface.
         This function applies the standard FEM integration methodology using reference shape functions 
@@ -713,7 +743,7 @@ class Element:
         
         # COMPUTE THE STANDARD QUADRATURE ON THE REFERENCE SPACE IN 2D
         #### REFERENCE ELEMENT QUADRATURE TO INTEGRATE SURFACES 
-        self.XIg, self.Wg, self.ng = GaussQuadrature(self.ElType,NumQuadOrder)
+        self.XIg, self.Wg, self.ng = GaussQuadrature(self.ElType,NumQuadOrder2D)
         
         # EVALUATE THE REFERENCE SHAPE FUNCTIONS ON THE STANDARD REFERENCE QUADRATURE ->> STANDARD FEM APPROACH
         # EVALUATE REFERENCE SHAPE FUNCTIONS 
@@ -732,11 +762,12 @@ class Element:
         self.detJg = np.zeros([self.ng])
         for ig in range(self.ng):
             self.invJg[ig,:,:], self.detJg[ig] = Jacobian(self.Xe,self.dNdxig[ig,:],self.dNdetag[ig,:])
+            self.detJg[ig] = abs(self.detJg[ig])
             
         return    
     
     
-    def ComputeAdaptedQuadratures(self,NumQuadOrder):
+    def ComputeAdaptedQuadratures(self,NumQuadOrder2D,NumQuadOrder1D):
         """ 
         Computes the numerical integration quadratures for both 2D and 1D elements that are cut by an interface. 
         This function uses an adapted quadrature approach, modifying the standard FEM quadrature method to accommodate 
@@ -787,11 +818,11 @@ class Element:
         # COMPUTE INTEGRATION QUADRATURE FOR EACH SUBELEMENT
         for SUBELEM in self.SubElements:
             # STANDARD REFERENCE ELEMENT QUADRATURE (2D)
-            XIg2Dstand, SUBELEM.Wg, SUBELEM.ng = GaussQuadrature(SUBELEM.ElType,NumQuadOrder)
+            XIg2Dstand, SUBELEM.Wg, SUBELEM.ng = GaussQuadrature(SUBELEM.ElType,NumQuadOrder2D)
             # EVALUATE SUBELEMENTAL REFERENCE SHAPE FUNCTIONS 
-            N2Dstand, foo, foo = EvaluateReferenceShapeFunctions(XIg2Dstand, SUBELEM.ElType, SUBELEM.ElOrder)
+            Nstand2D, dNdxistand2D, dNdetastand2D = EvaluateReferenceShapeFunctions(XIg2Dstand, SUBELEM.ElType, SUBELEM.ElOrder)
             # MAP 2D REFERENCE GAUSS INTEGRATION NODES ON THE REFERENCE SUBELEMENTS  ->> ADAPTED 2D QUADRATURE FOR SUBELEMENTS
-            SUBELEM.XIg = N2Dstand @ SUBELEM.XIe
+            SUBELEM.XIg = Nstand2D @ SUBELEM.XIe
             # EVALUATE ELEMENTAL REFERENCE SHAPE FUNCTIONS ON ADAPTED REFERENCE QUADRATURE
             SUBELEM.Ng, SUBELEM.dNdxig, SUBELEM.dNdetag = EvaluateReferenceShapeFunctions(SUBELEM.XIg, self.ElType, self.ElOrder)
             # MAPP ADAPTED REFERENCE QUADRATURE ON PHYSICAL ELEMENT
@@ -801,37 +832,42 @@ class Element:
             SUBELEM.invJg = np.zeros([SUBELEM.ng,SUBELEM.dim,SUBELEM.dim])
             SUBELEM.detJg = np.zeros([SUBELEM.ng])
             for ig in range(SUBELEM.ng):
-                SUBELEM.invJg[ig,:,:], SUBELEM.detJg[ig] = Jacobian(self.Xe,SUBELEM.dNdxig[ig,:],SUBELEM.dNdetag[ig,:])
+                SUBELEM.invJg[ig,:,:], SUBELEM.detJg[ig] = Jacobian(SUBELEM.Xe,dNdxistand2D[ig,:],dNdetastand2D[ig,:])
+                SUBELEM.detJg[ig] = abs(SUBELEM.detJg[ig])
         
         ######### ADAPTED QUADRATURE TO INTEGRATE OVER ELEMENTAL INTERFACE APPROXIMATION (1D)
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
-        XIg1Dstand, Wg1D, Ng1D = GaussQuadrature(0,NumQuadOrder)
+        XIg1Dstand, self.InterfApprox.Wg, self.InterfApprox.ng = GaussQuadrature(0,NumQuadOrder1D)
         #### QUADRATURE TO INTEGRATE LINES (1D)
-        N1D, dNdxi1D, foo = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.nedge-1)
+        N1D, dNdxi1D, foo = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder)
                 
-        for SEGMENT in self.InterfApprox.Segments:
-            SEGMENT.ng = Ng1D
-            SEGMENT.Wg = Wg1D
-            SEGMENT.detJg = np.zeros([SEGMENT.ng])
-            # MAP 1D REFERENCE STANDARD GAUSS INTEGRATION NODES ON THE REFERENCE INTERFACE ->> ADAPTED 1D QUADRATURE FOR INTERFACE
-            SEGMENT.XIg = N1D @ SEGMENT.XIseg
-            # EVALUATE 2D REFERENCE SHAPE FUNCTION ON INTERFACE ADAPTED QUADRATURE
-            SEGMENT.Ng, SEGMENT.dNdxig, SEGMENT.dNdetag = EvaluateReferenceShapeFunctions(SEGMENT.XIg, self.ElType, self.ElOrder)
-            # MAPP REFERENCE INTERFACE ADAPTED QUADRATURE ON PHYSICAL ELEMENT 
-            SEGMENT.Xg = N1D @ SEGMENT.Xseg
-            for ig in range(SEGMENT.ng):
-                SEGMENT.detJg[ig] = Jacobian1D(SEGMENT.Xseg,dNdxi1D[ig,:]) 
-                    
+        # MAP 1D REFERENCE STANDARD GAUSS INTEGRATION NODES ON THE REFERENCE INTERFACE ->> ADAPTED 1D QUADRATURE FOR INTERFACE
+        self.InterfApprox.XIg = N1D @ self.InterfApprox.XIint
+        # EVALUATE 2D REFERENCE SHAPE FUNCTION ON INTERFACE ADAPTED QUADRATURE
+        self.InterfApprox.Ng, self.InterfApprox.dNdxig, self.InterfApprox.dNdetag = EvaluateReferenceShapeFunctions(self.InterfApprox.XIg, self.ElType, self.ElOrder)
+        # MAP REFERENCE INTERFACE ADAPTED QUADRATURE ON PHYSICAL ELEMENT 
+        self.InterfApprox.Xg = N1D @ self.InterfApprox.Xint
+        # EVALUATE INTEGRATION ENTITIES (JACOBIAN INVERSE MATRIX AND DETERMINANT) ON ADAPTED QUADRATURES NODES
+        self.InterfApprox.invJg = np.zeros([self.InterfApprox.ng,self.dim,self.dim])
+        self.InterfApprox.detJg = np.zeros([self.InterfApprox.ng])
+        self.InterfApprox.detJg1D = np.zeros([self.InterfApprox.ng])
+        for ig in range(self.InterfApprox.ng):
+            self.InterfApprox.invJg[ig,:,:], self.InterfApprox.detJg[ig] = Jacobian(self.Xe,self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:])
+            self.InterfApprox.detJg1D[ig] = Jacobian1D(self.InterfApprox.Xint,dNdxi1D[ig,:])
+            self.InterfApprox.detJg[ig] = abs(self.InterfApprox.detJg[ig])
+            
+        # COMPUTE OUTWARDS NORMAL VECTORS ON INTEGRATION NODES
+        self.InterfaceNormals()
         return 
     
     
-    def ComputeGhostFacesQuadratures(self,NumQuadOrder):
+    def ComputeGhostFacesQuadratures(self,NumQuadOrder1D):
         
         ######### ADAPTED QUADRATURE TO INTEGRATE OVER ELEMENTAL GHOST FACES
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
-        XIg1Dstand, Wg1D, Ng1D = GaussQuadrature(0,NumQuadOrder)
+        XIg1Dstand, Wg1D, Ng1D = GaussQuadrature(0,NumQuadOrder1D)
         #### QUADRATURE TO INTEGRATE LINES (1D)
-        N1D, dNdxi1D, foo = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.nedge-1)
+        N1D, dNdxi1D, foo = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder)
                     
         ######### ADAPTED QUADRATURE TO INTERGRATE OVER ELEMENTAL GHOST FACES (1D)
         for FACE in self.GhostFaces:
@@ -843,16 +879,411 @@ class Element:
             # EVALUATE 2D REFERENCE SHAPE FUNCTION ON ELEMENTAL CUT EDGE 
             FACE.Ng, FACE.dNdxig, FACE.dNdetag = EvaluateReferenceShapeFunctions(FACE.XIg, self.ElType, self.ElOrder)
             # DISCARD THE NODAL SHAPE FUNCTIONS WHICH ARE NOT ON THE FACE (ZERO VALUE)
-            FACE.Ng = FACE.Ng[:,FACE.Tseg]
-            FACE.dNdxig = FACE.dNdxig[:,FACE.Tseg]
-            FACE.dNdetag = FACE.dNdetag[:,FACE.Tseg]
+            #FACE.Ng = FACE.Ng[:,FACE.Tseg]
+            #FACE.dNdxig = FACE.dNdxig[:,FACE.Tseg]
+            #FACE.dNdetag = FACE.dNdetag[:,FACE.Tseg]
             # MAPP REFERENCE INTERFACE ADAPTED QUADRATURE ON PHYSICAL ELEMENT 
             FACE.Xg = N1D @ FACE.Xseg
+            # EVALUATE INTEGRATION ENTITIES (JACOBIAN INVERSE MATRIX AND DETERMINANT) ON ADAPTED QUADRATURES NODES
+            FACE.invJg = np.zeros([FACE.ng,FACE.dim,FACE.dim])
+            FACE.detJg = np.zeros([FACE.ng])
+            FACE.detJg1D = np.zeros([FACE.ng])
             for ig in range(FACE.ng):
-                FACE.detJg[ig] = Jacobian1D(FACE.Xseg,dNdxi1D[ig,:]) 
+                FACE.invJg[ig,:,:], FACE.detJg[ig] = Jacobian(self.Xe,FACE.dNdxig[ig,:],FACE.dNdetag[ig,:])
+                FACE.detJg[ig] = abs(FACE.detJg[ig])
+                FACE.detJg1D[ig] = Jacobian1D(FACE.Xseg,dNdxi1D[ig,:]) 
+        return
+    
+    def PlotInterfaceApproximation(self,LSfunc):
+        #### DEFINE SUBSPACES COMPUTATIONAL GRIDS, PHYSICAL AND REFERENCE
+        Rmin = min(self.Xe[:,0])
+        Rmax = max(self.Xe[:,0])
+        Zmin = min(self.Xe[:,1])
+        Zmax = max(self.Xe[:,1])
+        dR = (Rmax-Rmin)/5
+        dZ = (Zmax-Zmin)/5
+        Rmin -= dR
+        Rmax += dR
+        Zmin -= dZ
+        Zmax += dZ
+        Ximin = -0.2
+        Ximax = 1.2
+        Etamin = -0.2
+        Etamax = 1.2
+        Nr = 40
+        Nz = 40
+        
+        #### PHYSICAL SPACE
+        # PHYSICAL SUBPLOT GRID
+        xgrid = np.linspace(Rmin,Rmax,Nr)
+        ygrid = np.linspace(Zmin,Zmax,Nz)
+        X = np.zeros([Nr*Nz,2])
+        for ix in range(Nr):
+            for iy in range(Nz):
+                X[ix*Nr+iy,:] = [xgrid[ix],ygrid[iy]]
+        # COMPUTE EXACT LEVEL-SET VALUES
+        PHIexact = np.zeros([Nr*Nz])
+        for i in range(len(X[:,0])):
+            PHIexact[i] = LSfunc(X[i,:])
+        # COMPUTE INTERPOLATED LEVEL-SET FUNCTION IN PHYSICAL SPACE
+        PHIint = np.zeros([Nr*Nz])
+        for i in range(len(X[:,0])):
+            PHIint[i] = self.ElementalInterpolationPHYSICAL(X[i,:],self.LSe)
+
+        #### REFERENCE SPACE
+        # REFERENCE SUBPLOT GRID
+        xigrid = np.linspace(Ximin,Ximax,Nr)
+        etagrid = np.linspace(Etamin,Etamax,Nz)
+        XI = np.zeros([Nr*Nz,2])
+        for ix in range(Nr):
+            for iy in range(Nz):
+                XI[ix*Nr+iy,:] = [xigrid[ix],etagrid[iy]]
+        # MAP EXACT LEVEL-SET FUNCTION TO REFERENCE SPACE
+        PHIexactREF = np.zeros([Nr*Nz])
+        for i in range(len(XI[:,0])):
+            PHIexactREF[i] = LSfunc(self.Mapping(XI[i,:]))
+        # COMPUTE INTERPOLATED LEVEL-SET FUNCTION IN REFERENCE SPACE
+        PHIintREF = np.zeros([Nr*Nz])
+        for i in range(len(XI[:,0])):
+            PHIintREF[i] = self.ElementalInterpolationREFERENCE(XI[i,:],self.LSe)
+        
+        # REPRESENTING LEVEL-SET ELEMENTAL APPROXIMATION
+        fig, axs = plt.subplots(1, 2, figsize=(12,5))
+        #### LEFT PLOT: PHYSICAL SPACE
+        # PLOT ELEMENT EDGES
+        for iedge in range(self.nedge):
+            axs[0].plot([self.Xe[iedge,0],self.Xe[int((iedge+1)%self.nedge),0]],[self.Xe[iedge,1],self.Xe[int((iedge+1)%self.nedge),1]], color='k', linewidth=2)
+        # PLOT NODES WITH NEGATIVE OR POSITIVE LEVEL-SET VALUES
+        for inode in range(len(self.Xe[:,0])):
+            if self.LSe[inode] < 0:
+                cl = 'blue'
+            else:
+                cl = 'red'
+            axs[0].scatter(self.Xe[inode,0],self.Xe[inode,1],s=60,color=cl,zorder=7)
+        for inode in range(self.n):
+            axs[0].text(self.Xe[inode,0]-dR/6,self.Xe[inode,1]+dZ/6,str(inode),fontsize=12)
+        # PLOT INTERFACE
+        axs[0].tricontour(X[:,0],X[:,1],PHIexact,levels=[0],colors='red', linewidths=3)
+        # PLOT INTERPOLATED INTERFACE
+        axs[0].tricontour(X[:,0],X[:,1],PHIint,levels=[0],colors='violet', linewidths=3)
+        #axs[0].contour(xgrid,ygrid,PHIint,levels=[0],colors='violet', linewidths=3)
+        # PLOT INTERSECTION POINTS
+        axs[0].scatter(self.InterfApprox.Xint[:,0],self.InterfApprox.Xint[:,1],s=60,marker='o',color='green',zorder=7)
+        axs[0].set_ylim([Zmin,Zmax])
+        axs[0].set_xlim([Rmin,Rmax])
+
+        #### RIGHT PLOT: REFERENCE SPACE
+        XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
+        # PLOT ELEMENT EDGES
+        for iedge in range(self.nedge):
+            axs[1].plot([XIe[iedge,0],XIe[int((iedge+1)%self.nedge),0]],[XIe[iedge,1],XIe[int((iedge+1)%self.nedge),1]], color='k', linewidth=2)
+        for inode in range(len(XIe[:,0])):
+            axs[1].scatter(XIe[inode,0],XIe[inode,1],s=60,color='k',zorder=7)
+        # PLOT NODES WITH NEGATIVE OR POSITIVE LEVEL-SET VALUES
+        for inode in range(len(XIe[:,0])):
+            if self.LSe[inode] < 0:
+                cl = 'blue'
+            else:
+                cl = 'red'
+            axs[1].scatter(XIe[inode,0],XIe[inode,1],s=60,color=cl,zorder=7)
+        for inode in range(len(XIe[:,0])):
+            axs[1].text(XIe[inode,0]+0.03,XIe[inode,1]+0.03,str(inode),fontsize=12)
+        # PLOT INTERFACE
+        axs[1].tricontour(XI[:,0],XI[:,1],PHIexactREF,levels=[0],colors='red', linewidths=3)
+        #axs[1].tricontour(XIe[:,0],XIe[:,1],PHIe,levels=[0],colors='red', linewidths=3)
+        # PLOT INTERPOLATED INTERFACE
+        axs[1].tricontour(XI[:,0],XI[:,1],PHIintREF,levels=[0],colors='violet', linewidths=3)
+        # PLOT INTERSECTION POINTS
+        axs[1].scatter(self.InterfApprox.XIint[:,0],self.InterfApprox.XIint[:,1],s=60,marker='o',color='green',zorder=7)
+        axs[1].set_ylim([Etamin,Etamax])
+        axs[1].set_xlim([Ximin,Ximax])
+        plt.show()
         
         return
     
+    
+    def CheckReferenceQuadratures(self):
+        #### DEFINE REFERENCE SUBSPACE COMPUTATIONAL GRID
+        Ximin = -0.2
+        Ximax = 1.2
+        Etamin = -0.2
+        Etamax = 1.2
+        Nr = 40
+        Nz = 40
+        XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
+        
+        # REFERENCE SUBPLOT GRID
+        xigrid = np.linspace(Ximin,Ximax,Nr)
+        etagrid = np.linspace(Etamin,Etamax,Nz)
+        XI = np.zeros([Nr*Nz,2])
+        for ix in range(Nr):
+            for iy in range(Nz):
+                XI[ix*Nr+iy,:] = [xigrid[ix],etagrid[iy]]
+        # COMPUTE INTERPOLATED LEVEL-SET FUNCTION IN REFERENCE SPACE
+        PHIintREF = np.zeros([Nr*Nz])
+        for i in range(len(XI[:,0])):
+            PHIintREF[i] = self.ElementalInterpolationREFERENCE(XI[i,:],self.LSe)
+        
+        colorlist = ['orange','gold','grey','cyan']
+        fig, axs = plt.subplots(1, 2, figsize=(10,5))
+        # LEFT PLOT: PARENT ELEMENT
+        axs[0].set_ylim([Etamin,Etamax])
+        axs[0].set_xlim([Ximin,Ximax])
+        # PLOT ELEMENT EDGES
+        for iedge in range(self.nedge):
+            axs[0].plot([XIe[iedge,0],XIe[int((iedge+1)%self.nedge),0]],[XIe[iedge,1],XIe[int((iedge+1)%self.nedge),1]], color='k', linewidth=3)
+        # PLOT NODES WITH NEGATIVE OR POSITIVE LEVEL-SET VALUES
+        for inode in range(len(XIe[:,0])):
+            if self.LSe[inode] < 0:
+                cl = 'blue'
+            else:
+                cl = 'red'
+            axs[0].scatter(XIe[inode,0],XIe[inode,1],s=60,color=cl,zorder=7)
+        for inode in range(len(XIe[:,0])):
+            axs[0].text(XIe[inode,0]+0.03,XIe[inode,1]+0.03,str(inode),fontsize=12)
+        # PLOT INTERPOLATED INTERFACE
+        axs[0].tricontour(XI[:,0],XI[:,1],PHIintREF,levels=[0],colors='violet', linewidths=3)
+        # PLOT INTERSECTION POINTS
+        axs[0].scatter(self.InterfApprox.XIint[:,0],self.InterfApprox.XIint[:,1],s=60,marker='o',color='green',zorder=7)
+
+        #### RIGHT PLOT: HIGH-ORDER SUBELEMENTS
+        axs[1].set_ylim([Etamin,Etamax])
+        axs[1].set_xlim([Ximin,Ximax])
+        xitext = [-0.05,0,-0.05]
+        etatext = [0.05,0.05,-0.05]
+        for isub, SUBELEM in enumerate(self.SubElements):
+            # PLOT SUBELEMENT EDGES
+            for iedge in range(SUBELEM.nedge):
+                inode = iedge
+                jnode = int((iedge+1)%SUBELEM.nedge)
+                if iedge == self.interfedge[isub]:
+                    inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
+                    xcoords = [SUBELEM.XIe[inode,0],SUBELEM.XIe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),0],SUBELEM.XIe[jnode,0]]
+                    xcoords = list(chain.from_iterable([x] if not isinstance(x, np.ndarray) else x for x in xcoords))
+                    ycoords = [SUBELEM.XIe[inode,1],SUBELEM.XIe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),1],SUBELEM.XIe[jnode,1]]
+                    ycoords = list(chain.from_iterable([y] if not isinstance(y, np.ndarray) else y for y in ycoords))
+                    axs[1].plot(xcoords,ycoords, color=colorlist[isub], linewidth=3)
+                else:
+                    axs[1].plot([SUBELEM.XIe[inode,0],SUBELEM.XIe[jnode,0]],[SUBELEM.XIe[inode,1],SUBELEM.XIe[jnode,1]], color=colorlist[isub], linewidth=3)
+            axs[1].scatter(SUBELEM.XIe[:,0],SUBELEM.XIe[:,1],s=60,color=colorlist[isub],zorder=7)
+            axs[1].scatter(SUBELEM.XIg[:,0],SUBELEM.XIg[:,1],s=60,marker='x',color=colorlist[isub],zorder=7)
+            # WRITE NODE NUMBER
+            #for inode in range(SUBELEM.n):
+            #    axs[1].text(SUBELEM.XIe[inode,0]+xitext[isub],SUBELEM.XIe[inode,1]+etatext[isub],str(inode),fontsize=12, color=colorlist[isub])
+        # PLOT REFERENCE INTERFACE APPROXIMATION QUADRATURE
+        axs[1].scatter(self.InterfApprox.XIg[:,0],self.InterfApprox.XIg[:,1,],s=60,marker='x',color='green',zorder=7)
+        plt.show()
+        
+        ###### CHECK QUADRATURES
+        # SURFACE INTEGRATION QUADARTURES -> COMPUTE ELEMENTAL AREA
+        totalarea = 0
+        totalintegral = 0  
+        for isub, SUBELEM in enumerate(self.SubElements):
+            # COMPUTE AREA ARITHMETICALLY
+            if self.interfedge[isub] == -1:  # REGULAR TRIANGLE
+                area = compute_triangle_area(SUBELEM.XIe)
+            else:
+                Xepoly = np.zeros([3+SUBELEM.ElOrder-1,2])
+                ipoint = 0
+                for iedge in range(SUBELEM.nedge):
+                    inode = iedge
+                    jnode = int((iedge+1)%SUBELEM.nedge)
+                    if iedge == 0:
+                        Xepoly[ipoint,:] = SUBELEM.XIe[inode,:]
+                        Xepoly[ipoint+1,:] = SUBELEM.XIe[jnode,:]
+                        ipoint += 2
+                    elif iedge == self.interfedge[isub]:
+                        inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
+                        Xepoly[ipoint:ipoint+(SUBELEM.ElOrder-1),:] = SUBELEM.XIe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),:]
+                        ipoint += SUBELEM.ElOrder-1
+                    else:
+                        Xepoly[ipoint,:] = SUBELEM.XIe[inode,:]
+                        ipoint += 1
+                area = polygon_area(Xepoly,SUBELEM.ElOrder,self.interfedge[isub])
+            
+            #area = compute_triangle_area(Xesub)
+            
+            # COMPUTE INTEGRAL
+            invJg = np.zeros([SUBELEM.ng,2,2])
+            detJg = np.zeros([SUBELEM.ng])
+            for ig in range(SUBELEM.ng):
+                invJg[ig,:,:], detJg[ig] = Jacobian(SUBELEM.XIe,SUBELEM.dNdxig[ig,:],SUBELEM.dNdetag[ig,:])
+        
+            integral = 0
+            for ig in range(SUBELEM.ng):
+                for inode in range(SUBELEM.n):
+                    integral += SUBELEM.Ng[ig,inode]*abs(detJg[ig])*SUBELEM.Wg[ig]
+                #integral += abs(detJg[ig])*Wg2Dstand[ig]
+                    
+            print("SUBELEMENT ,", isub," POLYGONAL DECOMPOSITION AREA = ", area)
+            totalarea += area
+            print("SUBELEMENT ,", isub," INTEGRAL AREA = ", integral)
+            totalintegral += abs(integral)
+            
+        trianglearea = compute_triangle_area(XIe)
+        print("ELEMENT AREA = ", trianglearea)
+        print("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
+        print("ELEMENTAL INTEGRAL AREA = ", totalintegral)
+        
+        # LINE INTEGRATION QUADRATURES
+        # PIECE-WISE LINEAR APPROXIMATION
+        length = 0
+        for inode in range(self.ElOrder):
+            lengthi = np.linalg.norm(self.InterfApprox.XIint[self.InterfApprox.Tint[inode+1],:]-self.InterfApprox.XIint[self.InterfApprox.Tint[inode],:])
+            length += lengthi
+        print('PIECE-WISE LINEAR INTERFACE ARC LENGTH APPROXIMATION = ', length)
+        
+        # OBTAIN 1D STANDARD GAUSS QUADRATURE
+        XIg1Dstand, foo, foo = GaussQuadrature(0,self.InterfApprox.ng)
+        # EVALUATE SUBELEMENTAL REFERENCE SHAPE FUNCTIONS 
+        foo, dNdxi1D, foo = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder)
+        # COMPUTE 1D MAPPING DETERMINANT 
+        detJg1D = np.zeros([self.InterfApprox.ng])
+        for ig in range(self.InterfApprox.ng):
+            detJg1D[ig] = Jacobian1D(self.InterfApprox.XIint,dNdxi1D[ig,:])
+        
+        integral = 0
+        for ig in range(self.InterfApprox.ng):
+            for inode in range(self.n):
+                integral += self.InterfApprox.Ng[ig,inode]*detJg1D[ig]*self.InterfApprox.Wg[ig]
+        print('ISOPARAMETRIC INTERFACE ARC LENGTH APPROXIMATION = ', integral)
+        return
+    
+    
+    
+    def CheckPhysicalQuadratures(self):
+        #### DEFINE SUBSPACES COMPUTATIONAL GRIDS, PHYSICAL AND REFERENCE
+        Rmin = min(self.Xe[:,0])
+        Rmax = max(self.Xe[:,0])
+        Zmin = min(self.Xe[:,1])
+        Zmax = max(self.Xe[:,1])
+        dR = (Rmax-Rmin)/5
+        dZ = (Zmax-Zmin)/5
+        Rmin -= dR
+        Rmax += dR
+        Zmin -= dZ
+        Zmax += dZ
+        Nr = 40
+        Nz = 40
+        
+        #### PHYSICAL SPACE
+        # PHYSICAL SUBPLOT GRID
+        xgrid = np.linspace(Rmin,Rmax,Nr)
+        ygrid = np.linspace(Zmin,Zmax,Nz)
+        X = np.zeros([Nr*Nz,2])
+        for ix in range(Nr):
+            for iy in range(Nz):
+                X[ix*Nr+iy,:] = [xgrid[ix],ygrid[iy]]
+        # COMPUTE INTERPOLATED LEVEL-SET FUNCTION IN PHYSICAL SPACE
+        PHIint = np.zeros([Nr*Nz])
+        for i in range(len(X[:,0])):
+            PHIint[i] = self.ElementalInterpolationPHYSICAL(X[i,:],self.LSe)
+        
+        colorlist = ['orange','gold','grey','cyan']
+        fig, axs = plt.subplots(1, 2, figsize=(12,5))
+        #### LEFT PLOT: PHYSICAL ELEMENT
+        axs[0].set_ylim([Zmin,Zmax])
+        axs[0].set_xlim([Rmin,Rmax])
+        # PLOT ELEMENT EDGES
+        for iedge in range(self.nedge):
+            axs[0].plot([self.Xe[iedge,0],self.Xe[int((iedge+1)%self.nedge),0]],[self.Xe[iedge,1],self.Xe[int((iedge+1)%self.nedge),1]], color='k', linewidth=2)
+        # PLOT NODES WITH NEGATIVE OR POSITIVE LEVEL-SET VALUES
+        for inode in range(self.n):
+            if self.LSe[inode] < 0:
+                cl = 'blue'
+            else:
+                cl = 'red'
+            axs[0].scatter(self.Xe[inode,0],self.Xe[inode,1],s=60,color=cl,zorder=7)
+        for inode in range(self.n):
+            axs[0].text(self.Xe[inode,0]-dR/6,self.Xe[inode,1]+dZ/6,str(inode),fontsize=12)
+        # PLOT INTERPOLATED INTERFACE
+        axs[0].tricontour(X[:,0],X[:,1],PHIint,levels=[0],colors='violet', linewidths=3)
+        # PLOT INTERSECTION POINTS
+        axs[0].scatter(self.InterfApprox.Xint[:,0],self.InterfApprox.Xint[:,1],s=60,marker='o',color='green',zorder=7)
+
+        #### RIGHT PLOT: TESSELLATED PHYSICAL ELEMENT
+        axs[1].set_ylim([Zmin,Zmax])
+        axs[1].set_xlim([Rmin,Rmax])
+        xtext = [0.05,-0.02,-0.1]
+        ytext = [-0.25,0.08,-0.25]
+        for isub, SUBELEM in enumerate(self.SubElements):
+            # PLOT SUBELEMENT EDGES
+            for iedge in range(SUBELEM.nedge):
+                inode = iedge
+                jnode = int((iedge+1)%SUBELEM.nedge)
+                if iedge == self.interfedge[isub]:
+                    inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
+                    xcoords = [SUBELEM.Xe[inode,0],SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),0],SUBELEM.Xe[jnode,0]]
+                    xcoords = list(chain.from_iterable([x] if not isinstance(x, np.ndarray) else x for x in xcoords))
+                    ycoords = [SUBELEM.Xe[inode,1],SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),1],SUBELEM.Xe[jnode,1]]
+                    ycoords = list(chain.from_iterable([y] if not isinstance(y, np.ndarray) else y for y in ycoords))
+                    axs[1].plot(xcoords,ycoords, color=colorlist[isub], linewidth=3)
+                else:
+                    axs[1].plot([SUBELEM.Xe[inode,0],SUBELEM.Xe[jnode,0]],[SUBELEM.Xe[inode,1],SUBELEM.Xe[jnode,1]], color=colorlist[isub], linewidth=3)
+            axs[1].scatter(SUBELEM.Xe[:,0],SUBELEM.Xe[:,1],s=60,color=colorlist[isub],zorder=7)
+            axs[1].scatter(SUBELEM.Xg[:,0],SUBELEM.Xg[:,1],s=60,marker='x',color=colorlist[isub],zorder=7)
+            # WRITE NODE NUMBER
+            #for inode in range(SUBELEM.n):
+            #    axs[1].text(SUBELEM.Xe[inode,0]+xtext[isub],SUBELEM.Xe[inode,1]+ytext[isub],str(inode),fontsize=12, color=colorlist[isub])
+        # PLOT REFERENCE INTERFACE APPROXIMATION QUADRATURE
+        axs[1].scatter(self.InterfApprox.Xg[:,0],self.InterfApprox.Xg[:,1,],s=60,marker='x',color='green',zorder=7)
+        
+        # CHECK QUADRATURES
+        totalarea = 0
+        totalintegral = 0  
+        for isub, SUBELEM in enumerate(self.SubElements):
+            # COMPUTE AREA ARITHMETICALLY
+            if self.interfedge[isub] == -1:  # REGULAR TRIANGLE
+                area = compute_triangle_area(SUBELEM.Xe)
+            else:
+                Xepoly = np.zeros([3+SUBELEM.ElOrder-1,2])
+                ipoint = 0
+                for iedge in range(SUBELEM.nedge):
+                    inode = iedge
+                    jnode = int((iedge+1)%SUBELEM.nedge)
+                    if iedge == 0:
+                        Xepoly[ipoint,:] = SUBELEM.Xe[inode,:]
+                        Xepoly[ipoint+1,:] = SUBELEM.Xe[jnode,:]
+                        ipoint += 2
+                    elif iedge == self.interfedge[isub]:
+                        inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
+                        Xepoly[ipoint:ipoint+(SUBELEM.ElOrder-1),:] = SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),:]
+                        ipoint += SUBELEM.ElOrder-1
+                    else:
+                        Xepoly[ipoint,:] = SUBELEM.Xe[inode,:]
+                        ipoint += 1
+                area = polygon_area(Xepoly,SUBELEM.ElOrder,self.interfedge[isub])
+            
+            # COMPUTE INTEGRAL
+            integral = 0
+            for ig in range(SUBELEM.ng):
+                for inode in range(SUBELEM.n):
+                    integral += SUBELEM.Ng[ig,inode]*abs(SUBELEM.detJg[ig])*SUBELEM.Wg[ig]
+                    
+            print("SUBELEMENT ,", isub," POLYGONAL DECOMPOSITION AREA = ", area)
+            totalarea += area
+            print("SUBELEMENT ,", isub," INTEGRAL AREA = ", integral)
+            totalintegral += abs(integral)
+            
+        trianglearea = compute_triangle_area(self.Xe)
+        print("ELEMENT AREA = ", trianglearea)
+        print("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
+        print("ELEMENTAL INTEGRAL AREA = ", totalintegral)
+        
+        # LINE INTEGRATION QUADRATURES
+        # PIECE-WISE LINEAR APPROXIMATION
+        length = 0
+        for inode in range(self.ElOrder):
+            lengthi = np.linalg.norm(self.InterfApprox.Xint[self.InterfApprox.Tint[inode+1],:]-self.InterfApprox.Xint[self.InterfApprox.Tint[inode],:])
+            length += lengthi
+        print('PIECE-WISE LINEAR INTERFACE ARC LENGTH APPROXIMATION = ', length)
+        
+        integral = 0
+        for ig in range(self.InterfApprox.ng):
+            for inode in range(self.n):
+                integral += self.InterfApprox.Ng[ig,inode]*self.InterfApprox.detJg1D[ig]*self.InterfApprox.Wg[ig]
+        print('ISOPARAMETRIC INTERFACE ARC LENGTH APPROXIMATION = ', integral)
+        return
     
     ##################################################################################################
     ################################ ELEMENTAL INTEGRATION ###########################################
@@ -881,27 +1312,26 @@ class Element:
         The function loops over Gauss integration nodes to compute these contributions and assemble the elemental system.
         """
                     
-        LHSe = np.zeros([len(self.Te),len(self.Te)])
-        RHSe = np.zeros([len(self.Te)])
+        LHSe = np.zeros([self.n,self.n])
+        RHSe = np.zeros([self.n])
         
         # LOOP OVER GAUSS INTEGRATION NODES
         for ig in range(self.ng):  
             # SHAPE FUNCTIONS GRADIENT IN PHYSICAL SPACE
             Ngrad = self.invJg[ig,:,:]@np.array([self.dNdxig[ig,:],self.dNdetag[ig,:]])
+            # R coordinate
             R = self.Xg[ig,0]
             if args:   # DIMENSIONLESS SOLUTION CASE  -->> args[0] = R0
                 Ngrad *= args[0]
                 R /= args[0]
             # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM 
-            for i in range(len(self.Te)):   # ROWS ELEMENTAL MATRIX
-                for j in range(len(self.Te)):   # COLUMNS ELEMENTAL MATRIX
+            for i in range(self.n):   # ROWS ELEMENTAL MATRIX
+                for j in range(self.n):   # COLUMNS ELEMENTAL MATRIX
                     # COMPUTE LHS MATRIX TERMS
                     ### STIFFNESS TERM  [ nabla(N_i)*nabla(N_j) ]  
-                    LHSe[i,j] -= Ngrad[:,j]@Ngrad[:,i]*self.detJg[ig]*self.Wg[ig]
-                    ### GRADIENT TERM (ASYMMETRIC)  [ (1/R)*N_i*dNdr_j ]  ONLY RESPECT TO R
-                    LHSe[i,j] += (1/R)*self.Ng[ig,j]*Ngrad[0,i]*self.detJg[ig]*self.Wg[ig]
+                    LHSe[i,j] -= (1/R)*Ngrad[:,j]@Ngrad[:,i]*self.detJg[ig]*self.Wg[ig]
                 # COMPUTE RHS VECTOR TERMS [ (source term)*N_i ]
-                RHSe[i] += SourceTermg[ig] * self.Ng[ig,i] *self.detJg[ig]*self.Wg[ig]
+                RHSe[i] += (1/R)*SourceTermg[ig] * self.Ng[ig,i] *self.detJg[ig]*self.Wg[ig]
                 
         return LHSe, RHSe
     
@@ -929,33 +1359,36 @@ class Element:
         The function loops over interface segments and Gauss integration nodes to compute these contributions and assemble the global system.
         """
         
-        LHSe = np.zeros([len(self.Te),len(self.Te)])
-        RHSe = np.zeros([len(self.Te)])
+        LHSe = np.zeros([self.n,self.n])
+        RHSe = np.zeros([self.n])
     
-        # LOOP OVER SEGMENTS CONSTITUTING THE INTERFACE ELEMENTAL APPROXIMATION
-        for SEGMENT in self.InterfApprox.Segments:
-            # LOOP OVER GAUSS INTEGRATION NODES
-            for ig in range(SEGMENT.ng):  
-                # SHAPE FUNCTIONS GRADIENT IN PHYSICAL SPACE
-                n_dot_Ngrad = SEGMENT.NormalVec@np.array([SEGMENT.dNdxig[ig,:],SEGMENT.dNdetag[ig,:]])
-                if args:   # DIMENSIONLESS SOLUTION CASE  -->> args[0] = R0
-                    n_dot_Ngrad *= args[0]
+        # LOOP OVER GAUSS INTEGRATION NODES
+        for ig in range(self.InterfApprox.ng):  
+            # SHAPE FUNCTIONS GRADIENT IN PHYSICAL SPACE
+            Ngrad = self.InterfApprox.invJg[ig,:,:]@np.array([self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:]])
+            # NORMAL VECTOR GRADIENT
+            n_dot_Ngrad = self.InterfApprox.NormalVec[ig]@Ngrad
+            # R cordinate
+            R = self.InterfApprox.Xg[ig,0]
+            if args:   # DIMENSIONLESS SOLUTION CASE  -->> args[0] = R0
+                n_dot_Ngrad *= args[0]
+                R /= args[0]
+            # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM
+            for i in range(self.n):  # ROWS ELEMENTAL MATRIX
+                for j in range(self.n):  # COLUMNS ELEMENTAL MATRIX
+                    # COMPUTE LHS MATRIX TERMS
+                    ### DIRICHLET BOUNDARY TERM  [ N_i*(n dot nabla(N_j)) ]  
+                    LHSe[i,j] += (1/R)*self.InterfApprox.Ng[ig,i] * n_dot_Ngrad[j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                    ### SYMMETRIC NITSCHE'S METHOD TERM   [ N_j*(n dot nabla(N_i)) ]
+                    LHSe[i,j] += (1/R)*n_dot_Ngrad[i]*self.InterfApprox.Ng[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                    ### PENALTY TERM   [ beta * (N_i*N_j) ]
+                    LHSe[i,j] += beta * (1/self.length) * self.InterfApprox.Ng[ig,i] * self.InterfApprox.Ng[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     
-                # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM
-                for i in range(len(self.Te)):  # ROWS ELEMENTAL MATRIX
-                    for j in range(len(self.Te)):  # COLUMNS ELEMENTAL MATRIX
-                        # COMPUTE LHS MATRIX TERMS
-                        ### DIRICHLET BOUNDARY TERM  [ N_i*(n dot nabla(N_j)) ]  
-                        LHSe[i,j] += SEGMENT.Ng[ig,i] * n_dot_Ngrad[j] * SEGMENT.detJg[ig] * SEGMENT.Wg[ig]
-                        ### SYMMETRIC NITSCHE'S METHOD TERM   [ N_j*(n dot nabla(N_i)) ]
-                        LHSe[i,j] += n_dot_Ngrad[i]*SEGMENT.Ng[ig,j] * SEGMENT.detJg[ig] * SEGMENT.Wg[ig]
-                        ### PENALTY TERM   [ beta * (N_i*N_j) ]
-                        LHSe[i,j] += beta * SEGMENT.Ng[ig,i] * SEGMENT.Ng[ig,j] * SEGMENT.detJg[ig] * SEGMENT.Wg[ig]
-                    # COMPUTE RHS VECTOR TERMS 
-                    ### SYMMETRIC NITSCHE'S METHOD TERM  [ PSI_D * (n dot nabla(N_i)) ]
-                    RHSe[i] +=  SEGMENT.PSIgseg[ig] * n_dot_Ngrad[i] * SEGMENT.detJg[ig] * SEGMENT.Wg[ig]
-                    ### PENALTY TERM   [ beta * N_i * PSI_D ]
-                    RHSe[i] +=  beta * SEGMENT.PSIgseg[ig] * SEGMENT.Ng[ig,i] * SEGMENT.detJg[ig] * SEGMENT.Wg[ig]
+                # COMPUTE RHS VECTOR TERMS 
+                ### SYMMETRIC NITSCHE'S METHOD TERM  [ PSI_D * (n dot nabla(N_i)) ]
+                RHSe[i] +=  (1/R)*self.InterfApprox.PSIg[ig] * n_dot_Ngrad[i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                ### PENALTY TERM   [ beta * N_i * PSI_D ]
+                RHSe[i] +=  beta * (1/self.length) * self.InterfApprox.PSIg[ig] * self.InterfApprox.Ng[ig,i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
         
         return LHSe, RHSe
     
@@ -1177,4 +1610,29 @@ def get_edge_index(ElType,inode,jnode):
         element_edges = [(0,1), (1,2), (2,3), (3,0)]
     
     return element_edges.index((inode,jnode))
+
+
+def compute_triangle_area(Xe):
+    x1, y1 = Xe[0,:]
+    x2, y2 = Xe[1,:]
+    x3, y3 = Xe[2,:]
+    # Calculate the area using the determinant formula
+    area = 0.5 * np.abs(x1*(y2 - y3) + x2*(y3 - y1) + x3*(y1 - y2))
+    return area
+
+def polygon_area(Xe,ElOrder,interfedge):
+    totalarea = 0
+    for isub in range(ElOrder):
+        Xesub = Xe[0,:].reshape((1,2))
+        Xesub = np.concatenate((Xesub,Xe[interfedge+isub:interfedge+isub+2,:]),axis=0)
+        totalarea += compute_triangle_area(Xesub)
+    return totalarea
+
+def compute_quadrilateral_area(Xe):
+    # Split the quadrilateral into two triangles
+    triangle1 = Xe[:3,:]
+    triangle2 = np.concatenate((Xe[2:,:], np.reshape(Xe[0,:],(1,2))), axis=0)
+    # Compute the area of the two triangles and sum them
+    area = compute_triangle_area(triangle1) + compute_triangle_area(triangle2)
+    return area     
     

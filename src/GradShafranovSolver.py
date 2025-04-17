@@ -23,17 +23,14 @@
 # modeled using the Grad-Shafranov PDE for an axisymmetrical system such as a tokamak. 
  
 
-import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib as mpl
-import matplotlib.path as mpath
 import os
 import shutil
 from random import random
 from scipy.interpolate import griddata
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
-from GaussQuadrature import *
+from math import ceil
 from ShapeFunctions import *
 from Element import *
 from Magnet import *
@@ -89,7 +86,7 @@ class GradShafranovSolver:
         self.out_pickle = False             # OUTPUT SWITCH FOR SIMULATION DATA PYTHON PICKLE
         
         # PROBLEM CASE PARAMETERS
-        self.PLASMA_BOUNDARY = None         # PLASMA BOUNDARY BEHAVIOUR: self.FIXED_BOUNDARY  or  self.FREE_BOUNDARY 
+        self.FIXED_BOUNDARY = None          # PLASMA BOUNDARY FIXED BEHAVIOUR: True  or  False 
         self.PLASMA_CURRENT = None          # PLASMA CURRENT MODELISATION: self.LINEAR_CURRENT, self.NONLINEAR_CURRENT or self.PROFILES_CURRENT
         self.TOTAL_CURRENT = None           # TOTAL CURRENT IN PLASMA
         
@@ -113,6 +110,7 @@ class GradShafranovSolver:
         self.residu_INT = None              # INTERNAL LOOP RESIDU
         self.residu_EXT = None              # EXTERNAL LOOP RESIDU
         self.PSIerror = None
+        self.PSIrelerror = None
         
         # VACCUM VESSEL FIRST WALL GEOMETRY
         self.epsilon = None                 # VACUUM VESSEL INVERSE ASPECT RATIO
@@ -174,14 +172,17 @@ class GradShafranovSolver:
         self.Zmin = None                    # COMPUTATIONAL MESH MINIMAL Y (Z) COORDINATE
         self.meanArea = None                # MESH ELEMENTS MEAN AREA
         self.meanLength = None              # MESH ELEMENTS MEAN LENTH
+        self.nge = None                     # NUMBER OF INTEGRATION NODES PER ELEMENT (STANDARD SURFACE QUADRATURE)
+        self.Xg = None                      # INTEGRATION NODAL MESH COORDINATES MATRIX 
+        self.Brzfield = None                # MAGNETIC (R,Z) COMPONENTS FIELD AT INTEGRATION NODES
         
         # NUMERICAL TREATMENT PARAMETERS
         self.LHS = None                     # GLOBAL CutFEM SYSTEM LEFT-HAND-SIDE MATRIX
         self.RHS = None                     # GLOBAL CutFEM SYSTEM RIGHT-HAND-SIDE VECTOR
         self.LHSred = None                  # REDUCED (IMPOSED BC) GLOBAL CutFEM SYSTEM LEFT-HAND-SIDE MATRIX
         self.RHSred = None                  # REDUCED (IMPOSED BC) GLOBAL CutFEM SYSTEM RIGHT-HAND-SIDE VECTOR
-        self.QuadratureOrder = None         # NUMERICAL INTEGRATION QUADRATURE ORDER
-        self.SoleOrder = 2                  # SOLENOID ELEMENT (BAR) ORDER
+        self.QuadratureOrder2D = None       # NUMERICAL INTEGRATION QUADRATURE ORDER (2D)
+        self.QuadratureOrder1D = None       # NUMERICAL INTEGRATION QUADRATURE ORDER (1D)
         
         self.PlasmaBoundGhostFaces = None   # LIST OF PLASMA BOUNDARY GHOST FACES
         self.PlasmaBoundGhostElems = None   # LIST OF ELEMENTS CONTAINING PLASMA BOUNDARY FACES
@@ -210,28 +211,21 @@ class GradShafranovSolver:
         self.OPTI_ITMAX = None
         self.OPTI_TOL = None
                 
-        # EQUILIPY PARAMETRISATION WITH FLAGS
-        #### PLASMA BOUNDARY BEHAVIOUR FLAGS
-        self.FIXED_BOUNDARY = 0
-        self.FREE_BOUNDARY = 1
-        self.SINGLE_ITERATION = None
         #### PLASMA MODEL PARAMETERS
         self.LINEAR_CURRENT = 0
         self.NONLINEAR_CURRENT = 1
         self.ZHENG_CURRENT = 2
         self.PROFILES_CURRENT = 3
-        self.PSI_INDEPENDENT_CURRENT = None
-        #### SEGMENTS' SET FLAGS
-        self.INTERFAPPROX = 0
-        self.GHOSTFACES = 1
+        self.FAKE_CURRENT = 4
         
         # PLASMA MODELS COEFFICIENTS
         self.coeffsLINEAR = None                       # TOKAMAK FIRST WALL LEVEL-0 CONTOUR COEFFICIENTS (LINEAR PLASMA MODEL CASE SOLUTION)
         self.coeffsNONLINEAR = [1.15*np.pi, 1.15, -0.5]  # [Kr, Kz, R0] 
         self.coeffsZHENG = None
+        self.coeffsF4E = None
         
-        self.L2error = None
-        
+        self.ErrorL2norm = None
+        self.RelErrorL2norm = None
         return
     
     def print_all_attributes(self):
@@ -379,12 +373,6 @@ class GradShafranovSolver:
         
         print('Done!')
         
-        # COMPUTE MESH MEAN SIZE
-        self.meanArea, self.meanLength = self.ComputeMeshElementMeanSize()
-        print("         · MESH ELEMENTS MEAN AREA = " + str(self.meanArea) + " m^2")
-        print("         · MESH ELEMENTS MEAN LENGTH = " + str(self.meanLength) + " m")
-        print("         · RECOMMENDED NITSCHE'S PENALTY PARAMETER VALUE    beta ~ C·" + str(self.ElOrder**2/self.meanLength))
-        
         return
     
     def ReadEQUILIdata(self):
@@ -400,9 +388,9 @@ class GradShafranovSolver:
                 case 'PLASB:':          # READ PLASMA BOUNDARY CONDITION (FIXED OR FREE)
                     match line[1]:
                         case 'FIXED':
-                            self.PLASMA_BOUNDARY =  self.FIXED_BOUNDARY
+                            self.FIXED_BOUNDARY = True
                         case 'FREED':
-                            self.PLASMA_BOUNDARY = self.FREE_BOUNDARY
+                            self.FIXED_BOUNDARY = False
                 case 'PLASC:':         # READ MODEL FOR PLASMA CURRENT (LINEAR, NONLINEAR, ZHENG OR DEFINED USING PROFILES FOR PRESSURE AND TOROIDAL FIELD)
                     match line[1]:
                         case 'LINEA':
@@ -413,6 +401,8 @@ class GradShafranovSolver:
                             self.PLASMA_CURRENT = self.ZHENG_CURRENT
                         case 'PROFI':
                             self.PLASMA_CURRENT = self.PROFILES_CURRENT
+                        case 'FAKE':
+                            self.PLASMA_CURRENT = self.FAKE_CURRENT
                 case 'TOTAL_CURRENT:':        # READ TOTAL PLASMA CURRENT
                     self.TOTAL_CURRENT = float(line[1])
             return
@@ -505,7 +495,7 @@ class GradShafranovSolver:
         def BlockNumericalTreatement(self,line):
             match line[0]:
                 case 'QUADRATURE_ORDER:':   # READ NUMERICAL INTEGRATION QUADRATURE ORDER
-                    self.QuadratureOrder = int(line[1])
+                    self.QuadratureOrder2D = int(line[1])
                 case 'EXT_ITER:':         # READ MAXIMAL NUMBER OF ITERATION FOR EXTERNAL LOOP
                     self.EXT_ITER = int(line[1])
                 case 'EXT_TOL:':          # READ TOLERANCE FOR EXTERNAL LOOP
@@ -556,13 +546,13 @@ class GradShafranovSolver:
                 # READ TOKAMAK FIRST WALL GEOMETRY PARAMETERS
                 BlockVacuumVesselGeometry(self,l)
                 # READ CONTROL POINTS COORDINATES FOR F4E PLASMA SHAPE
-                if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+                if not self.FIXED_BOUNDARY:
                     BlockPlasmaShape(self,l)
                 # READ PARAMETERS FOR PRESSURE AND TOROIDAL FIELD PROFILES
                 if self.PLASMA_CURRENT == self.PROFILES_CURRENT:
                     BlockProfiles(self,l)
                 # READ COIL PARAMETERS
-                if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+                if not self.FIXED_BOUNDARY:
                     i,j = BlockExternalMagnets(self,l,i,j)
                 # READ NUMERICAL TREATMENT PARAMETERS
                 BlockNumericalTreatement(self,l)
@@ -702,8 +692,8 @@ class GradShafranovSolver:
                 PSIexact = self.coeffsZHENG[0]+self.coeffsZHENG[1]*X[0]**2+self.coeffsZHENG[2]*(X[0]**4-4*X[0]**2*X[1]**2)+self.coeffsZHENG[3]*(np.log(X[0])
                                     *X[0]**2-X[1]**2)+(self.coeffsZHENG[4]*X[0]**4)/8 - (self.coeffsZHENG[5]*X[1]**2)/2
                 
-            case "FAKE":
-                PSIexact = np.sin(2*X[0])+0.1*X[1]**3
+            case self.FAKE_CURRENT:
+                PSIexact = X[0]**4 + X[0]**2*X[1]**2 + X[1]**4
         
         return PSIexact
     
@@ -797,8 +787,8 @@ class GradShafranovSolver:
             case self.PROFILES_CURRENT:
                 source = -self.mu0*X[0]**2*self.dPdPSI(PSI) - 0.5*self.dG2dPSI(PSI)
                 
-        if self.PLASMA_CURRENT == 'FAKE':
-            source = -4*np.sin(2*X[0]) + 0.6*X[1]
+            case self.FAKE_CURRENT:
+                source = 10*X[0]**2 + 12*X[1]**2
 
         return source
         
@@ -808,7 +798,7 @@ class GradShafranovSolver:
     ###################################### LEVEL-SET DESCRIPTION #####################################
     ##################################################################################################
     
-    def F4E_PlasmaLS(self):
+    def ComputeF4EPlasmaLScoeffs(self):
         """ # IN ORDER TO FIND THE CURVE PARAMETRIZING THE PLASMA REGION BOUNDARY, WE LOOK FOR THE COEFFICIENTS DEFINING
         # A 3rd ORDER HAMILTONIAN FROM WHICH WE WILL TAKE THE 0-LEVEL CURVE AS PLASMA REGION BOUNDARY. THAT IS
         #
@@ -935,19 +925,39 @@ class GradShafranovSolver:
         coeffs_red = np.linalg.solve(R, y)  # Hamiltonian coefficients  [5x1]
         
         coeffs = np.insert(coeffs_red,1,-1,0)        # insert second coefficient A02 = -1
+        return coeffs
+    
+    def F4EPlasmaLS(self,X):
+        P0 = np.array([self.R_SADDLE, self.Z_SADDLE])
+        P2 = np.array([self.R_LEFTMOST, self.Z_LEFTMOST])
+        Xstar = X[0] - P0[0]
+        Ystar = X[1] - P0[1]
         
-        # 2. OBTAIN LEVEL-SET VALUES ON MESH NODES
         # HAMILTONIAN  ->>  Z(x,y) = H(x,y) = x**2 + A11xy + A02y**2 + A30x**3 + A21x**2y + A12xy**2 + A03y**3
-        Xstar = self.X[:,0]-P0[0]
-        Ystar = self.X[:,1]-P0[1]
-        LS = np.zeros([self.Nn])
-        for i in range(self.Nn):
-            LS[i] = Xstar[i]**2+coeffs[0]*Xstar[i]*Ystar[i]+coeffs[1]*Ystar[i]**2+coeffs[2]*Xstar[i]**3+coeffs[3]*Xstar[i]**2*Ystar[i]+coeffs[4]*Xstar[i]*Ystar[i]**2+coeffs[5]*Ystar[i]**3
-
+        LS = Xstar**2+self.coeffsF4E[0]*Xstar*Ystar+self.coeffsF4E[1]*Ystar**2+self.coeffsF4E[2]*Xstar**3+self.coeffsF4E[3]*Xstar**2*Ystar+self.coeffsF4E[4]*Xstar*Ystar**2+self.coeffsF4E[5]*Ystar**3
+        
         # MODIFY HAMILTONIAN VALUES SO THAT OUTSIDE THE PLASMA REGION THE LEVEL-SET IS POSITIVE  
-        for i in range(self.Nn):
-            if self.X[i,0] < P2[0] or self.X[i,1] < P0[1]:
-                LS[i] = np.abs(LS[i])
+        if X[0] < P2[0] or X[1] < P0[1]:
+            LS = np.abs(LS)
+        return LS
+    
+    def ParabolicLS(self,X):
+        return (X[0]-6)**2+X[1]**2-2
+    
+    
+    def InitialPlasmaLevelSetFunction(self,X):
+        # FOR THE FIXED BOUNDARY CASE, WE AIM AT VALIDATING THE CORRECT INTEGRATION OF THE GRAD-SHAFRANOV'S EQUATION USING CUTFEM BY INTEGRATING 
+        # A VERSION OF THE EQUATION FOR WHICH WE POSSES AN ANALYTICAL SOLUTION. IN ORDER TO DO SO, WE WANT TO DEFINE A FIXED PLASMA BOUNDARY 
+        # SMALLER THAN THE VACUUM VESSEL (COMPUTATIONAL DOMAIN), SO THAT BOUNDARY CONDITIONS (ANALYTICAL SOLUTION) CAN WEAKLY BE IMPOSED ON THE 
+        # BOUNDARY AND THUS CHECK IF THE CUTFEM INTEGRATION SCHEME WORKS CORRECTLY. 
+        
+        if self.FIXED_BOUNDARY:  
+            if self.PLASMA_CURRENT == self.FAKE_CURRENT:
+                LS = self.ParabolicLS(X)
+            else:
+                LS = (-1)*self.PSIAnalyticalSolution(X,self.ZHENG_CURRENT)
+        else:    
+            LS = self.F4EPlasmaLS(X)
         return LS
     
     
@@ -1065,7 +1075,7 @@ class GradShafranovSolver:
         PSI_B = np.zeros([self.Nnbound])    
         
         # FOR FIXED PLASMA BOUNDARY PROBLEM, THE PSI BOUNDARY VALUES PSI_B ARE EQUAL TO THE ANALYTICAL SOLUTION
-        if self.PLASMA_BOUNDARY == self.FIXED_BOUNDARY:
+        if self.FIXED_BOUNDARY:
             for inode, node in enumerate(self.BoundaryNodes):
                 # ISOLATE BOUNDARY NODE COORDINATES
                 Xbound = self.X[node,:]
@@ -1073,7 +1083,7 @@ class GradShafranovSolver:
                 PSI_B[inode] = self.PSIAnalyticalSolution(Xbound,self.PLASMA_CURRENT)
 
         # FOR THE FREE BOUNDARY PROBLEM, THE PSI BOUNDARY VALUES ARE COMPUTED BY PROJECTING THE MAGNETIC CONFINEMENT EFFECT USING THE GREENS FUNCTION FORMALISM
-        elif self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:  
+        else:  
             for inode, node in enumerate(self.BoundaryNodes):
                 # ISOLATE BOUNDARY NODE COORDINATES
                 Xbound = self.X[node,:]
@@ -1127,18 +1137,18 @@ class GradShafranovSolver:
         edgemap = {}  # Dictionary to map edges to elements
 
         # Loop over all elements to populate the edgemap dictionary
-        for ELEM in self.Elements:
+        for ELEMENT in self.Elements:
             # Initiate elemental nearest neigbhors attribute
-            ELEM.neighbours = -np.ones([self.numedges],dtype=int)
+            ELEMENT.neighbours = -np.ones([self.numedges],dtype=int)
             # Get the edges of the element (as sorted tuples for uniqueness)
             edges = list()
-            for iedge in range(ELEM.numedges):
-                edges.append(tuple(sorted([ELEM.Te[iedge],ELEM.Te[int((iedge+1)%ELEM.numedges)]])))
+            for iedge in range(ELEMENT.numedges):
+                edges.append(tuple(sorted([ELEMENT.Te[iedge],ELEMENT.Te[int((iedge+1)%ELEMENT.numedges)]])))
             
             for local_edge_idx, edge in enumerate(edges):
                 if edge not in edgemap:
                     edgemap[edge] = []
-                edgemap[edge].append((ELEM.index, local_edge_idx))
+                edgemap[edge].append((ELEMENT.index, local_edge_idx))
         
         # Loop over the edge dictionary to find neighbours
         for edge, elements in edgemap.items():
@@ -1216,23 +1226,34 @@ class GradShafranovSolver:
             return region, DiffHighOrderNodes
             
         for ielem in range(self.Ne):
-            regionplasma, DHONplasma = CheckElementalVerticesLevelSetSigns(self.Elements[ielem].LSe)    
+            regionplasma, DHONplasma = CheckElementalVerticesLevelSetSigns(self.Elements[ielem].LSe)
             if regionplasma < 0:   # ALL PLASMA LEVEL-SET NODAL VALUES NEGATIVE -> INSIDE PLASMA DOMAIN 
+                # ALREADY CLASSIFIED AS VACUUM VESSEL ELEMENT (= BOUNDARY ELEMENT)
+                if self.Elements[ielem].Dom == 2:  
+                    # REMOVE FROM VACUUM VESSEL WALL ELEMENT LIST
+                    self.VacVessWallElems = self.VacVessWallElems[self.VacVessWallElems != ielem]
+                # REDEFINE CLASSIFICATION
                 self.PlasmaElems[kplasm] = ielem
                 self.Elements[ielem].Dom = -1
                 kplasm += 1
             elif regionplasma == 0:  # DIFFERENT SIGN IN PLASMA LEVEL-SET NODAL VALUES -> PLASMA/VACUUM INTERFACE ELEMENT
+                # ALREADY CLASSIFIED AS VACUUM VESSEL ELEMENT (= BOUNDARY ELEMENT)
+                if self.Elements[ielem].Dom == 2:  
+                    # REMOVE FROM VACUUM VESSEL WALL ELEMENT LIST
+                    self.VacVessWallElems = self.VacVessWallElems[self.VacVessWallElems != ielem]
+                # REDEFINE CLASSIFICATION
                 self.PlasmaBoundElems[kint] = ielem
                 self.Elements[ielem].Dom = 0
                 kint += 1
             elif regionplasma > 0: # ALL PLASMA LEVEL-SET NODAL VALUES POSITIVE -> OUTSIDE PLASMA DOMAIN
-                if self.Elements[ielem].Dom == 2:  # ALREADY CLASSIFIED AS VACUUM VESSEL ELEMENT
+                if self.Elements[ielem].Dom == 2:  # ALREADY CLASSIFIED AS VACUUM VESSEL ELEMENT (= BOUNDARY ELEMENT)
                     continue
-                else:  # IF NOT VACUUM VESSEL ELEMENTS -> VACUUM ELEMENTS
+                else:
+                    # VACUUM ELEMENTS
                     self.VacuumElems[kvacuu] = ielem
                     self.Elements[ielem].Dom = +1
                     kvacuu += 1
-                  
+                    
             # IF THERE EXISTS 'HIGH-ORDER' NODES WITH DIFFERENT PLASMA LEVEL-SET SIGN
             if DHONplasma:
                 self.OLDplasmaBoundLevSet = self.PlasmaLS.copy()
@@ -1247,6 +1268,9 @@ class GradShafranovSolver:
         
         # GATHER NON-CUT ELEMENTS  
         self.NonCutElems = np.concatenate((self.PlasmaElems, self.VacuumElems, self.VacVessWallElems), axis=0)
+        
+        if len(self.NonCutElems) + len(self.PlasmaBoundElems) != self.Ne:
+            raise ValueError("Non-cut elements + Cut elements =/= Total number of elements  --> Wrong mesh classification!!")
         
         # CLASSIFY NODES ACCORDING TO NEW ELEMENT CLASSIFICATION
         self.ClassifyNodes()
@@ -1288,7 +1312,8 @@ class GradShafranovSolver:
             for node in self.T[ielem,:]:
                 self.VacuumNodes.add(node)
         for node in self.BoundaryNodes:
-            self.VacuumNodes.remove(node)   
+            if node in self.VacuumNodes:
+                self.VacuumNodes.remove(node)   
         
         self.PlasmaNodes = np.array(sorted(list(self.PlasmaNodes)))
         self.VacuumNodes = np.array(sorted(list(self.VacuumNodes)))
@@ -1304,8 +1329,7 @@ class GradShafranovSolver:
         """  
         nnodes = 0
         for ielem in self.PlasmaBoundElems:
-            for SEGMENT in self.Elements[ielem].InterfApprox.Segments:
-                nnodes += SEGMENT.ng
+                nnodes += self.Elements[ielem].InterfApprox.ng
         return nnodes
     
     
@@ -1322,22 +1346,102 @@ class GradShafranovSolver:
         GhostFaces_dict = dict()    # [(CUT_EDGE_NODAL_GLOBAL_INDEXES): {(ELEMENT_INDEX_1, EDGE_INDEX_1), (ELEMENT_INDEX_2, EDGE_INDEX_2)}]
         
         for ielem in self.PlasmaBoundElems:
-            ELEM = self.Elements[ielem]
-            for iedge, neighbour in enumerate(ELEM.neighbours):
+            ELEMENT = self.Elements[ielem]
+            for iedge, neighbour in enumerate(ELEMENT.neighbours):
                 if neighbour >= 0 and self.Elements[neighbour].Dom <= 0:
                     # IDENTIFY THE CORRESPONDING FACE IN THE NEIGHBOUR ELEMENT
                     NEIGHBOUR = self.Elements[neighbour]
-                    neighbour_edge = list(NEIGHBOUR.neighbours).index(ELEM.index)
+                    neighbour_edge = list(NEIGHBOUR.neighbours).index(ELEMENT.index)
                     # OBTAIN GLOBAL INDICES OF GHOST FACE NODES
-                    nodes = np.zeros([ELEM.nedge],dtype=int)
+                    nodes = np.zeros([ELEMENT.nedge],dtype=int)
                     nodes[0] = iedge
-                    nodes[1] = (iedge+1)%ELEM.numedges
+                    nodes[1] = (iedge+1)%ELEMENT.numedges
                     for knode in range(self.ElOrder-1):
                         nodes[2+knode] = self.numedges + iedge*(self.ElOrder-1)+knode
-                    if tuple(sorted(ELEM.Te[nodes])) not in GhostFaces_dict:
-                        GhostFaces_dict[tuple(sorted(ELEM.Te[nodes]))] = set()
-                    GhostFaces_dict[tuple(sorted(ELEM.Te[nodes]))].add((ELEM.index,iedge))
-                    GhostFaces_dict[tuple(sorted(ELEM.Te[nodes]))].add((neighbour,neighbour_edge))
+                    if tuple(sorted(ELEMENT.Te[nodes])) not in GhostFaces_dict:
+                        GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))] = set()
+                    GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))].add((ELEMENT.index,iedge))
+                    GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))].add((neighbour,neighbour_edge))
+                    
+        XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
+        GhostFaces = list()
+        GhostElems = set()
+
+        for elems in GhostFaces_dict.values():
+            # ISOLATE ADJACENT ELEMENTS
+            (ielem1, iedge1), (ielem2,iedge2) = elems
+            ELEM1 = self.Elements[ielem1]
+            ELEM2 = self.Elements[ielem2]
+            # DECLARE NEW GHOST FACES ELEMENTAL ATTRIBUTE
+            if type(ELEM1.GhostFaces) == type(None):  
+                ELEM1.GhostFaces = list()
+            if type(ELEM2.GhostFaces) == type(None):  
+                ELEM2.GhostFaces = list()
+                
+            # ADD GHOST FACE TO ELEMENT 1
+            nodes1 = np.zeros([ELEM1.nedge],dtype=int)
+            nodes1[0] = iedge1
+            nodes1[1] = (iedge1+1)%ELEM1.numedges
+            for knode in range(ELEM1.ElOrder-1):
+                nodes1[2+knode] = ELEM1.numedges + iedge1*(ELEM1.ElOrder-1)+knode
+            ELEM1.GhostFaces.append(Segment(index = iedge1,
+                                            ElOrder = ELEM1.ElOrder,
+                                            Tseg = nodes1,
+                                            Xseg = ELEM1.Xe[nodes1,:],
+                                            XIseg = XIe[nodes1,:]))
+            
+            # ADD GHOST FACE TO ELEMENT 2
+            nodes2 = np.zeros([ELEM2.nedge],dtype=int)
+            nodes2[0] = iedge2
+            nodes2[1] = (iedge2+1)%ELEM2.numedges
+            for knode in range(ELEM2.ElOrder-1):
+                nodes2[2+knode] = ELEM2.numedges + iedge2*(ELEM2.ElOrder-1)+knode
+            ELEM2.GhostFaces.append(Segment(index = iedge2,
+                                            ElOrder = ELEM2.ElOrder,
+                                            Tseg = nodes2,
+                                            Xseg = ELEM2.Xe[nodes2,:],
+                                            XIseg = XIe[nodes2,:]))
+            
+            # CORRECT SECOND ADJACENT ELEMENT GHOST FACE TO MATCH NODES -> PERMUTATION
+            permutation = [list(ELEM2.Te[nodes2]).index(x) for x in ELEM1.Te[nodes1]]
+            ELEM2.GhostFaces[-1].Xseg = ELEM2.GhostFaces[-1].Xseg[permutation,:]
+            ELEM2.GhostFaces[-1].XIseg = ELEM2.GhostFaces[-1].XIseg[permutation,:]
+
+            GhostFaces.append((list(ELEM1.Te[nodes1]),(ielem1,iedge1,len(ELEM1.GhostFaces)-1),(ielem2,iedge2,len(ELEM2.GhostFaces)-1), permutation))
+            GhostElems.add(ielem1)
+            GhostElems.add(ielem2)
+            
+        return GhostFaces, list(GhostElems)
+    
+    
+    def IdentifyPlasmaBoundaryGhostFaces2(self):
+        """
+        Identifies the elemental ghost faces on which the ghost penalty term needs to be integrated, for elements containing the plasma
+        boundary.
+        """
+        
+        # RESET ELEMENTAL GHOST FACES
+        for ielem in np.concatenate((self.PlasmaBoundElems,self.PlasmaElems),axis=0):
+            self.Elements[ielem].GhostFaces = None
+            
+        GhostFaces_dict = dict()    # [(CUT_EDGE_NODAL_GLOBAL_INDEXES): {(ELEMENT_INDEX_1, EDGE_INDEX_1), (ELEMENT_INDEX_2, EDGE_INDEX_2)}]
+        
+        for ielem in self.PlasmaBoundElems:
+            ELEMENT = self.Elements[ielem]
+            for iedge, neighbour in enumerate(ELEMENT.neighbours):
+                # IDENTIFY THE CORRESPONDING FACE IN THE NEIGHBOUR ELEMENT
+                NEIGHBOUR = self.Elements[neighbour]
+                neighbour_edge = list(NEIGHBOUR.neighbours).index(ELEMENT.index)
+                # OBTAIN GLOBAL INDICES OF GHOST FACE NODES
+                nodes = np.zeros([ELEMENT.nedge],dtype=int)
+                nodes[0] = iedge
+                nodes[1] = (iedge+1)%ELEMENT.numedges
+                for knode in range(self.ElOrder-1):
+                    nodes[2+knode] = self.numedges + iedge*(self.ElOrder-1)+knode
+                if tuple(sorted(ELEMENT.Te[nodes])) not in GhostFaces_dict:
+                    GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))] = set()
+                GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))].add((ELEMENT.index,iedge))
+                GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))].add((neighbour,neighbour_edge))
                     
         XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
         GhostFaces = list()
@@ -1534,7 +1638,7 @@ class GradShafranovSolver:
         self.PSI_0 = self.Elements[int(self.Xcrit[1,0,-1])].ElementalInterpolationPHYSICAL(self.Xcrit[1,0,:-1],PSI[self.Elements[int(self.Xcrit[1,0,-1])].Te]) 
         print('LOCAL EXTREMUM AT ',self.Xcrit[1,0,:-1],' (ELEMENT ', int(self.Xcrit[1,0,-1]),') WITH VALUE PSI_0 = ',self.PSI_0)
             
-        if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+        if not self.FIXED_BOUNDARY:
             # 3. LOOK FOR SADDLE POINT
             sol = optimize.root(gradPSI, X0_saddle, args=(Rfine,Zfine,gradPSIfine))
             if sol.success == True:
@@ -1572,7 +1676,7 @@ class GradShafranovSolver:
         """
         Normalize the magnetic flux function (PSI) based on critical PSI values (PSI_0 and PSI_X).
         """
-        if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY or self.PLASMA_CURRENT == self.PROFILES_CURRENT:
+        if not self.FIXED_BOUNDARY or self.PLASMA_CURRENT == self.PROFILES_CURRENT:
             for i in range(self.Nn):
                 self.PSI_NORM[i,1] = (self.PSI[i]-self.PSI_X)/np.abs(self.PSI_0-self.PSI_X)
                 #self.PSI_NORM[i,1] = (self.PSI_X-self.PSI[i])/(self.PSI_X-self.PSI_0)
@@ -1594,12 +1698,12 @@ class GradShafranovSolver:
         if self.PLASMA_CURRENT == self.PROFILES_CURRENT:
             # COMPUTE TOTAL PLASMA CURRENT    
             Tcurrent = self.ComputeTotalPlasmaCurrent()
-            print('Total plasma current computed = ', Tcurrent)    
+            #print('Total plasma current computed = ', Tcurrent)    
             # COMPUTE TOTAL PLASMA CURRENT CORRECTION FACTOR            
             self.gamma = self.TOTAL_CURRENT/Tcurrent
-            print("Total plasma current normalization factor = ", self.gamma)
+            #print("Total plasma current normalization factor = ", self.gamma)
             # COMPUTED NORMALISED TOTAL PLASMA CURRENT
-            print("Normalised total plasma current = ", Tcurrent*self.gamma)
+            #print("Normalised total plasma current = ", Tcurrent*self.gamma)
         
         return
     
@@ -1622,7 +1726,7 @@ class GradShafranovSolver:
         """
         if VALUES == "PSI_NORM":
             # FOR THE LINEAR AND ZHENG MODELS (FIXED BOUNDARY) THE SOURCE TERM DOESN'T DEPEND ON PSI, THEREFORE A SINGLE INTERNAL ITERATION IS ENOUGH
-            if self.PLASMA_CURRENT == self.LINEAR_CURRENT or self.PLASMA_CURRENT == self.ZHENG_CURRENT:
+            if self.PLASMA_CURRENT == self.LINEAR_CURRENT or self.PLASMA_CURRENT == self.ZHENG_CURRENT or self.PLASMA_CURRENT == self.FAKE_CURRENT:
                 self.converg_INT = True  # STOP INTERNAL WHILE LOOP 
                 self.residu_INT = 0
             else:
@@ -1642,7 +1746,7 @@ class GradShafranovSolver:
             
         elif VALUES == "PSI_B":
             # FOR FIXED BOUNDARY PROBLEM, THE BOUNDARY VALUES ARE ALWAYS THE SAME, THEREFORE A SINGLE EXTERNAL ITERATION IS NEEDED
-            if self.PLASMA_BOUNDARY == self.FIXED_BOUNDARY:
+            if self.FIXED_BOUNDARY:
                 self.converg_EXT = True  # STOP EXTERNAL WHILE LOOP 
                 self.residu_EXT = 0
             else:
@@ -1694,19 +1798,18 @@ class GradShafranovSolver:
         """
         Updates the plasma boundary PSI values constraints (PSIgseg) on the interface approximation segments integration points.
         """
-        
         for ielem in self.PlasmaBoundElems:
-            for SEGMENT in self.Elements[ielem].InterfApprox.Segments:
-                # INITIALISE BOUNDARY VALUES
-                SEGMENT.PSIgseg = np.zeros([SEGMENT.ng])
-                # FOR EACH INTEGRATION POINT ON THE PLASMA/VACUUM INTERFACE APPROXIMATION SEGMENT
-                for ignode in range(SEGMENT.ng):
-                    # FIXED BOUNDARY PROBLEM -> ANALYTICAL SOLUTION PLASMA BOUNDARY VALUES 
-                    if self.PLASMA_BOUNDARY == self.FIXED_BOUNDARY:
-                        SEGMENT.PSIgseg[ignode] = self.PSIAnalyticalSolution(SEGMENT.Xg[ignode,:],self.PLASMA_CURRENT)
-                    # FREE BOUNDARY PROBLEM -> PLASMA BOUNDARY VALUES = SEPARATRIX VALUE
-                    else:
-                        SEGMENT.PSIgseg[ignode] = self.PSI_X
+            INTAPPROX = self.Elements[ielem].InterfApprox
+            # INITIALISE BOUNDARY VALUES
+            INTAPPROX.PSIg = np.zeros([INTAPPROX.ng])
+            # FOR EACH INTEGRATION POINT ON THE PLASMA/VACUUM INTERFACE APPROXIMATION SEGMENT
+            for ig in range(INTAPPROX.ng):
+                # FIXED BOUNDARY PROBLEM -> ANALYTICAL SOLUTION PLASMA BOUNDARY VALUES 
+                if self.FIXED_BOUNDARY:
+                    INTAPPROX.PSIg[ig] = self.PSIAnalyticalSolution(INTAPPROX.Xg[ig,:],self.PLASMA_CURRENT)
+                # FREE BOUNDARY PROBLEM -> PLASMA BOUNDARY VALUES = SEPARATRIX VALUE
+                else:
+                    INTAPPROX.PSIg[ig] = self.PSI_X
         return
     
     def UpdateVacuumVesselBoundaryValues(self):
@@ -1726,40 +1829,34 @@ class GradShafranovSolver:
     ############################### OPERATIONS OVER GROUPS ###########################################
     ##################################################################################################
     
-    def ComputeMeshElementMeanSize(self):
-        
-        def compute_triangle_area(Xe):
-            x1, y1 = Xe[0,:]
-            x2, y2 = Xe[1,:]
-            x3, y3 = Xe[2,:]
-            # Calculate the area using the determinant formula
-            area = 0.5 * np.abs(x1*(y2 - y3) + x2*(y3 - y1) + x3*(y1 - y2))
-            return area
+    @staticmethod
+    def compute_triangle_area(Xe):
+        x1, y1 = Xe[0,:]
+        x2, y2 = Xe[1,:]
+        x3, y3 = Xe[2,:]
+        # Calculate the area using the determinant formula
+        area = 0.5 * np.abs(x1*(y2 - y3) + x2*(y3 - y1) + x3*(y1 - y2))
+        return area
 
-        def compute_quadrilateral_area(Xe):
-            # Split the quadrilateral into two triangles
-            triangle1 = Xe[:3,:]
-            triangle2 = np.concatenate((Xe[2:,:], np.reshape(Xe[0,:],(1,2))), axis=0)
-            # Compute the area of the two triangles and sum them
-            area = compute_triangle_area(triangle1) + compute_triangle_area(triangle2)
-            return area     
+    @staticmethod
+    def compute_quadrilateral_area(Xe):
+        # Split the quadrilateral into two triangles
+        triangle1 = Xe[:3,:]
+        triangle2 = np.concatenate((Xe[2:,:], np.reshape(Xe[0,:],(1,2))), axis=0)
+        # Compute the area of the two triangles and sum them
+        area = compute_triangle_area(triangle1) + compute_triangle_area(triangle2)
+        return area     
+    
+    def ComputeMeshElementsMeanSize(self):
         
         # COMPUTE MEAN AREA OF ELEMENT
         meanArea = 0
         meanLength = 0
-        if self.numedges == 3:  # TRIANGULAR MESH ELEMENTS
-            for ielem in range(self.Ne):
-                meanArea += compute_triangle_area(self.X[self.T[ielem,:self.numedges],:])
-            meanArea /= self.Ne
-            # WE COMPUTE THE MEAN ELEMENTAL SIDE LENGTH ASSUMING THE IDEAL ELEMENT IS A EQUILATERAL TRIANGLE
-            meanLength = np.sqrt(4*meanArea/np.sqrt(3))  
-            
-        elif self.numedges == 4:  # QUADRILATERAL MESH ELEMENTS
-            for ielem in range(self.Ne):
-                meanArea += compute_quadrilateral_area(self.X[self.T[ielem,:self.numedges],:])
-            meanArea /= self.Ne
-            # WE COMPUTE THE MEAN ELEMENTAL SIDE LENGTH ASSUMING THE IDEAL ELEMENT IS A SQUARE
-            meanLength = np.sqrt(meanArea)  
+        for ELEMENT in self.Elements:
+            meanArea += ELEMENT.area
+            meanLength += ELEMENT.length
+        meanArea /= self.Ne
+        meanLength /= self.Ne
         
         return meanArea, meanLength
     
@@ -1806,7 +1903,7 @@ class GradShafranovSolver:
     def InitialiseParameters(self):
         
         # OVERRIDE CRITICAL POINT OPTIMIZATION OUTPUT WHEN FIXED-BOUNDARY PROBLEM
-        if self.PLASMA_BOUNDARY == self.FIXED_BOUNDARY:
+        if self.FIXED_BOUNDARY:
             self.out_PSIcrit = False
         else:
             self.out_PSIcrit = True
@@ -1815,27 +1912,16 @@ class GradShafranovSolver:
         if not self.GhostStabilization:
             self.out_ghostfaces = False
             
-        # DETERMINE IF THE PLASMA CURRENT MODEL DEPENDS ON SOLUTION PSI
-        match self.PLASMA_CURRENT:
-            case self.LINEAR_CURRENT:
-                self.PSI_INDEPENDENT_CURRENT = True
-            case self.NONLINEAR_CURRENT:
-                self.PSI_INDEPENDENT_CURRENT = False
-            case self.ZHENG_CURRENT:
-                self.PSI_INDEPENDENT_CURRENT = True
-            case self.PROFILES_CURRENT:
-                self.PSI_INDEPENDENT_CURRENT = False
-            
-        # DETERMINE BETWEEN SINGLE AND MULTIPLE ITERATION SIMULATION
-        if self.PLASMA_BOUNDARY == self.FIXED_BOUNDARY and self.PSI_INDEPENDENT_CURRENT:
-            self.SINGLE_ITERATION = True
-        else:
-            self.SINGLE_ITERATION = False
+        # COMPUTE 1D NUMERICAL QUADRATURE ORDER
+        self.QuadratureOrder1D = ceil(0.5*(self.QuadratureOrder2D+1))
         
         # TOKAMAK'S 1rst WALL GEOMETRY COEFFICIENTS, USED ALSO FOR LINEAR PLASMA MODEL ANALYTICAL SOLUTION (INITIAL GUESS)
         self.coeffsLINEAR = self.ComputeLinearSolutionCoefficients()
         # ZHENG ANALYTICAL SOLUTION COEFFICIENTS
         self.coeffsZHENG = self.ComputeZhengSolutionCoefficients()
+        # F4E INITIAL LEVEL-SET COEFFICIENTS
+        if not self.FIXED_BOUNDARY:
+            self.coeffsF4E = self.ComputeF4EPlasmaLScoeffs()
         
         if self.PLASMA_CURRENT == self.PROFILES_CURRENT:
             # COMPUTE PRESSURE PROFILE FACTOR
@@ -1862,6 +1948,8 @@ class GradShafranovSolver:
             
         # INITIALISE CRITICAL POINTS ARRAY
         self.Xcrit = np.zeros([2,2,3])  # [(iterations n, n+1), (extremum, saddle point), (R_crit,Z_crit,elem_crit)]
+        if not self.FIXED_BOUNDARY:
+            self.Xcrit[0,1,:-1] = np.array([self.R_SADDLE,self.Z_SADDLE])
         return
     
     
@@ -1880,7 +1968,7 @@ class GradShafranovSolver:
             self.PSI_B_sim = list()
             self.Residu_sim = list()
             self.PSIIt_sim = list()
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.PSIcrit_sim = list()
         return
     
@@ -1888,24 +1976,11 @@ class GradShafranovSolver:
     def InitialisePlasmaLevelSet(self):
         """
         Computes the initial level-set function values describing the plasma boundary. Negative values represent inside the plasma region.
-        """
-            
-        # FOR THE FIXED BOUNDARY CASE, WE AIM AT VALIDATING THE CORRECT INTEGRATION OF THE GRAD-SHAFRANOV'S EQUATION USING CUTFEM BY INTEGRATING 
-        # A VERSION OF THE EQUATION FOR WHICH WE POSSES AN ANALYTICAL SOLUTION. IN ORDER TO DO SO, WE WANT TO DEFINE A FIXED PLASMA BOUNDARY 
-        # SMALLER THAN THE VACUUM VESSEL (COMPUTATIONAL DOMAIN), SO THAT BOUNDARY CONDITIONS (ANALYTICAL SOLUTION) CAN WEAKLY BE IMPOSED ON THE 
-        # BOUNDARY AND THUS CHECK IF THE CUTFEM INTEGRATION SCHEME WORKS CORRECTLY.  
+        """ 
         
-        if self.PLASMA_BOUNDARY == self.FIXED_BOUNDARY:  
-            #self.PlasmaLS = (-1)*np.ones([self.Nn],dtype=float)
-            
-            self.PlasmaLS = np.zeros([self.Nn],dtype=float)
-            for inode in range(self.Nn):
-                self.PlasmaLS[inode] = (-1)*self.PSIAnalyticalSolution(self.X[inode,:],self.ZHENG_CURRENT)
-                
-        # FOR THE FREE BOUNDARY CASE, THE INITIAL PLASMA REGION SHAPE IS DESCRIBED USING THE F4E SHAPE CONTROL POINTS
-        elif self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:    
-            self.PlasmaLS = self.F4E_PlasmaLS()
-            self.Xcrit[0,1,:-1] = np.array([self.R_SADDLE,self.Z_SADDLE])
+        self.PlasmaLS = np.zeros([self.Nn],dtype=float)
+        for inode in range(self.Nn):
+            self.PlasmaLS[inode] = self.InitialPlasmaLevelSetFunction(self.X[inode,:])
         return 
     
     def InitialiseElements(self):
@@ -1918,6 +1993,12 @@ class GradShafranovSolver:
                                  Xe = self.X[self.T[e,:],:],
                                  Te = self.T[e,:],
                                  PlasmaLSe = self.PlasmaLS[self.T[e,:]]) for e in range(self.Ne)]
+        
+        # COMPUTE MESH MEAN SIZE
+        self.meanArea, self.meanLength = self.ComputeMeshElementsMeanSize()
+        print("         · MESH ELEMENTS MEAN AREA = " + str(self.meanArea) + " m^2")
+        print("         · MESH ELEMENTS MEAN LENGTH = " + str(self.meanLength) + " m")
+        print("         · RECOMMENDED NITSCHE'S PENALTY PARAMETER VALUE    beta ~ C·" + str(self.ElOrder**2/self.meanLength))
         return
     
     
@@ -1977,6 +2058,7 @@ class GradShafranovSolver:
         # COMPUTE INITIAL TOTAL PLASMA CURRENT CORRECTION FACTOR
         self.ComputeTotalPlasmaCurrentNormalization()
         self.PSI_B[:,0] = self.ComputeBoundaryPSI()
+        self.PSI_B[:,1] = self.PSI_B[:,0]
         print('Done!')
         
         ####### ASSIGN CONSTRAINT VALUES ON PLASMA BOUNDARY
@@ -2001,15 +2083,13 @@ class GradShafranovSolver:
             - Writes the initial PSI, normalized PSI, and vacuum vessel boundary PSI values.
         """
         
-        self.InitialiseParameters()
-        
         # INITIALISE LEVEL-SET FUNCTION
         print("     -> INITIALISE LEVEL-SET...", end="")
         self.InitialisePlasmaLevelSet()
         print('Done!')
         
         # INITIALISE ELEMENTS 
-        print("     -> INITIALISE ELEMENTS...", end="")
+        print("     -> INITIALISE ELEMENTS...")
         self.InitialiseElements()
         print('Done!')
         
@@ -2061,10 +2141,27 @@ class GradShafranovSolver:
         for inter, ielem in enumerate(self.PlasmaBoundElems):
             # APPROXIMATE PLASMA/VACUUM INTERACE GEOMETRY CUTTING ELEMENT 
             self.Elements[ielem].InterfaceApproximation(inter)
-            # COMPUTE OUTWARDS NORMAL VECTOR
-            self.Elements[ielem].InterfaceNormal()
-        # CHECK NORMAL VECTORS
-        self.CheckNormalVectors(self.INTERFAPPROX)
+        return
+    
+    def CheckPlasmaBoundaryApproximationNormalVectors(self):
+        """
+        This function verifies if the normal vectors at the plasma boundary approximation are unitary and orthogonal to 
+        the corresponding interface. It checks the dot product between the segment direction vector and the 
+        normal vector, raising an exception if the dot product is not close to zero (indicating non-orthogonality).
+        """
+
+        for ielem in self.PlasmaBoundElems:
+            for ig, vec in enumerate(self.Elements[ielem].InterfApprox.NormalVec):
+                # CHECK UNIT LENGTH
+                if np.abs(np.linalg.norm(vec)-1) > 1e-6:
+                    raise Exception('Normal vector norm equals',np.linalg.norm(vec), 'for mesh element', ielem, ": Normal vector not unitary")
+                # CHECK ORTHOGONALITY
+                Ngrad = self.Elements[ielem].InterfApprox.invJg[ig,:,:]@np.array([self.Elements[ielem].InterfApprox.dNdxig[ig,:],self.Elements[ielem].InterfApprox.dNdetag[ig,:]])
+                dphidr, dphidz = Ngrad@self.Elements[ielem].LSe
+                tangvec = np.array([-dphidz, dphidr]) 
+                scalarprod = np.dot(tangvec,vec)
+                if scalarprod > 1e-10: 
+                    raise Exception('Dot product equals',scalarprod, 'for mesh element', ielem, ": Normal vector not perpendicular")
         return
     
     def ComputePlasmaBoundaryGhostFaces(self):
@@ -2074,27 +2171,24 @@ class GradShafranovSolver:
         for ielem in self.PlasmaBoundGhostElems:
             self.Elements[ielem].GhostFacesNormals()
         # CHECK NORMAL VECTORS
-        self.CheckNormalVectors(self.GHOSTFACES)
+        self.CheckGhostFacesNormalVectors()
         return
     
-    def CheckNormalVectors(self,SET):
+    def CheckGhostFacesNormalVectors(self):
         """
-        Checks the orthogonality of the normal vectors to the segments constituting the set SET.
-
-        This function verifies if the normal vectors at the boundaries (either plasma or vacuum vessel) are orthogonal to 
-        the corresponding interface segments. It checks the dot product between the segment direction vector and the 
+        This function verifies if the normal vectors at the plasma boundary ghost faces are unitary and orthogonal to 
+        the corresponding interface segments. It checks the dot product between the segment tangent vector and the 
         normal vector, raising an exception if the dot product is not close to zero (indicating non-orthogonality).
         """
-            
-        for ielem in self.PlasmaBoundElems:
-            if SET == self.INTERFAPPROX:
-                SEGMENTS = self.Elements[ielem].InterfApprox.Segments
-            elif SET == self.GHOSTFACES:
-                SEGMENTS = self.Elements[ielem].GhostFaces
-                
-            for SEGMENT in SEGMENTS:
-                dir = np.array([SEGMENT.Xseg[1,0]-SEGMENT.Xseg[0,0], SEGMENT.Xseg[1,1]-SEGMENT.Xseg[0,1]]) 
-                scalarprod = np.dot(dir,SEGMENT.NormalVec)
+        
+        for ielem in self.PlasmaBoundGhostElems:
+            for SEGMENT in self.Elements[ielem].GhostFaces:
+                # CHECK UNIT LENGTH
+                if np.abs(np.linalg.norm(SEGMENT.NormalVec)-1) > 1e-6:
+                    raise Exception('Normal vector norm equals',np.linalg.norm(SEGMENT.NormalVec), 'for mesh element', ielem, ": Normal vector not unitary")
+                # CHECK ORTHOGONALITY
+                tangvec = np.array([SEGMENT.Xseg[1,0]-SEGMENT.Xseg[0,0], SEGMENT.Xseg[1,1]-SEGMENT.Xseg[0,1]]) 
+                scalarprod = np.dot(tangvec,SEGMENT.NormalVec)
                 if scalarprod > 1e-10: 
                     raise Exception('Dot product equals',scalarprod, 'for mesh element', ielem, ": Normal vector not perpendicular")
         return
@@ -2115,18 +2209,46 @@ class GradShafranovSolver:
         
         # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR NON-CUT ELEMENTS 
         for ielem in self.NonCutElems:
-            self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder)
+            self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
+            
+        # DEFINE STANDARD SURFACE QUADRATURE NUMBER OF INTEGRATION NODES
+        self.nge = self.Elements[self.NonCutElems[0]].ng
             
         # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
         for ielem in self.PlasmaBoundElems:
-            self.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder)
+            self.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
+        # CHECK NORMAL VECTORS
+        self.CheckPlasmaBoundaryApproximationNormalVectors()
             
         # COMPUTE QUADRATURES FOR GHOST FACES ON PLASMA BOUNDARY ELEMENTS
         if self.GhostStabilization:
             for ielem in self.PlasmaBoundGhostElems:
-                self.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder)
-                
+                self.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
         return
+    
+    
+    def ComputePlasmaBoundStandardQuadratures(self):
+        if len(self.PlasmaBoundElems) == 0:
+            return
+        else:
+            if self.FIXED_BOUNDARY:
+                if type(self.Elements[self.PlasmaBoundElems[0]].Xg) == type(None):
+                    for ielem in self.PlasmaBoundElems:
+                        self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
+            else:
+                for ielem in self.PlasmaBoundElems:
+                    if type(self.Elements[ielem].Xg) == type(None):
+                        self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
+            return
+        
+    def IntegrationNodesMesh(self):
+        if type(self.Xg) == type(None):
+            self.ComputePlasmaBoundStandardQuadratures()
+            self.Xg = np.zeros([self.Ne*self.nge,self.dim])
+            for ielem, ELEMENT in enumerate(self.Elements):
+                self.Xg[ielem*self.nge:(ielem+1)*self.nge,:] = ELEMENT.Xg
+        return
+    
     
     #################### UPDATE EMBEDED METHOD ##############################
     
@@ -2143,7 +2265,7 @@ class GradShafranovSolver:
             5. Updates nodes on the plasma boundary approximation.
         """
                 
-        if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+        if not self.FIXED_BOUNDARY:
             # IN CASE WHERE THE NEW SADDLE POINT (N+1) CORRESPONDS (CLOSE TO) TO THE OLD SADDLE POINT, THEN THAT MEANS THAT THE PLASMA REGION
             # IS ALREADY WELL DEFINED BY THE OLD LEVEL-SET 
             
@@ -2173,14 +2295,16 @@ class GradShafranovSolver:
                 ###### RECOMPUTE NUMERICAL INTEGRATION QUADRATURES
                 # COMPUTE STANDARD QUADRATURE ENTITIES FOR NON-CUT ELEMENTS
                 for ielem in np.concatenate((self.PlasmaElems, self.VacuumElems), axis = 0):
-                    self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder)
+                    self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
                 # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
                 for ielem in self.PlasmaBoundElems:
-                    self.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder)
+                    self.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
+                # CHECK NORMAL VECTORS
+                self.CheckPlasmaBoundaryApproximationNormalVectors()
                 # COMPUTE PLASMA BOUNDARY GHOST FACES QUADRATURES
                 if self.GhostStabilization:
                     for ielem in self.PlasmaBoundGhostElems: 
-                        self.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder)
+                        self.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
                     
                 # RECOMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION 
                 self.NnPB = self.ComputePlasmaBoundaryNumberNodes()
@@ -2192,7 +2316,7 @@ class GradShafranovSolver:
             
     #################### L2 ERROR COMPUTATION ############################
     
-    def ComputeL2error(self):
+    def ComputeL2errorPlasma(self):
         """
         Computes the L2 error of the PSI field by integrating the squared difference between the analytical solution and the 
         computed solution over the plasma region.
@@ -2200,7 +2324,8 @@ class GradShafranovSolver:
         Output:
             L2error (float): The computed L2 error value, which measures the difference between the analytical and numerical PSI solutions.
         """
-        L2error = 0
+        ErrorL2norm = 0
+        PSIexactL2norm = 0
         # INTEGRATE OVER PLASMA ELEMENTS
         for elem in self.PlasmaElems:
             # ISOLATE ELEMENT
@@ -2209,9 +2334,8 @@ class GradShafranovSolver:
             PSIg = ELEMENT.Ng @ ELEMENT.PSIe
             # LOOP OVER GAUSS NODES
             for ig in range(ELEMENT.ng):
-                # LOOP OVER ELEMENTAL NODES
-                for i in range(ELEMENT.n):
-                    L2error += (PSIg[ig]-self.PSIAnalyticalSolution(ELEMENT.Xg[ig,:],self.PLASMA_CURRENT))**2*ELEMENT.Ng[ig,i]*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                ErrorL2norm += (PSIg[ig]-self.PSIAnalyticalSolution(ELEMENT.Xg[ig,:],self.PLASMA_CURRENT))**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                PSIexactL2norm += self.PSIAnalyticalSolution(ELEMENT.Xg[ig,:],self.PLASMA_CURRENT)**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                     
         # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
         for elem in self.PlasmaBoundElems:
@@ -2225,10 +2349,80 @@ class GradShafranovSolver:
                     PSIg = SUBELEM.Ng @ ELEMENT.PSIe
                     # LOOP OVER GAUSS NODES
                     for ig in range(SUBELEM.ng):
-                        # LOOP OVER ELEMENTAL NODES
-                        for i in range(SUBELEM.n):
-                            L2error += (PSIg[ig]-self.PSIAnalyticalSolution(SUBELEM.Xg[ig,:],self.PLASMA_CURRENT))**2*SUBELEM.Ng[ig,i]*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
-        return L2error
+                        ErrorL2norm += (PSIg[ig]-self.PSIAnalyticalSolution(SUBELEM.Xg[ig,:],self.PLASMA_CURRENT))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
+                        PSIexactL2norm += self.PSIAnalyticalSolution(SUBELEM.Xg[ig,:],self.PLASMA_CURRENT)**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
+        
+        return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm)
+    
+    
+    def ComputeL2error(self):
+        """
+        Computes the L2 error of the PSI field by integrating the squared difference between the analytical solution and the 
+        computed solution over the plasma region.
+
+        Output:
+            L2error (float): The computed L2 error value, which measures the difference between the analytical and numerical PSI solutions.
+        """
+        # COMPUTE STANDARD QUADRATURES FOR PLASMA BOUNDARY ELEMENTS IF NOT ALREADY DONE
+        self.ComputePlasmaBoundStandardQuadratures()
+        
+        ErrorL2norm = 0
+        PSIexactL2norm = 0
+        # INTEGRATE OVER ALL ELEMENTS
+        for ELEMENT in self.Elements:
+            # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
+            PSIg = ELEMENT.Ng @ ELEMENT.PSIe
+            # LOOP OVER GAUSS NODES
+            for ig in range(ELEMENT.ng):
+                ErrorL2norm += (PSIg[ig]-self.PSIAnalyticalSolution(ELEMENT.Xg[ig,:],self.PLASMA_CURRENT))**2 *ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                PSIexactL2norm += self.PSIAnalyticalSolution(ELEMENT.Xg[ig,:],self.PLASMA_CURRENT)**2 *ELEMENT.detJg[ig]*ELEMENT.Wg[ig]                  
+        
+        return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm)
+    
+    def ComputeL2errorInterfaceJump(self):
+        
+        JumpError = np.zeros([self.NnPB])
+        JumpRelError = np.zeros([self.NnPB])
+        ErrorL2norm = 0
+        dn = 1e-4
+        knode = 0
+        # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
+        for elem in self.PlasmaBoundElems:
+            ELEMENT = self.Elements[elem]
+            # ISOLATE ELEMENTAL INTERFACE APPROXIMATION
+            INTAPPROX = ELEMENT.InterfApprox
+            # MAP PSI VALUES
+            PSIg = INTAPPROX.Ng@ELEMENT.PSIe
+            # LOOP OVER GAUSS NODES
+            for ig in range(INTAPPROX.ng):
+                # OBTAIN GAUSS POINTS SHIFTED IN THE NORMAL DIRECTIONS LEFT AND RIGHT FROM THE ORIGINAL INTERFACE GAUSS NODE
+                XIgplus = INTAPPROX.XIg[ig,:] + dn*INTAPPROX.NormalVecREF[ig]
+                XIgminus = INTAPPROX.XIg[ig,:] - dn*INTAPPROX.NormalVecREF[ig]
+                # EVALUATE GRADIENTS
+                Ngplus, dNdxigplus, dNdetagplus = EvaluateReferenceShapeFunctions(XIgplus.reshape((1,2)), ELEMENT.ElType, ELEMENT.ElOrder)
+                Ngminus, dNdxigminus, dNdetagminus = EvaluateReferenceShapeFunctions(XIgminus.reshape((1,2)), ELEMENT.ElType, ELEMENT.ElOrder)
+                # EVALUATE JACOBIAN
+                invJgplus, detJgplus = Jacobian(ELEMENT.Xe,dNdxigplus[0],dNdetagplus[0])
+                invJgminus, detJgminus = Jacobian(ELEMENT.Xe,dNdxigminus[0],dNdetagminus[0])
+                # COMPUTE PSI VALUES
+                PSIgplus = Ngplus@ELEMENT.PSIe
+                PSIgminus = Ngminus@ELEMENT.PSIe
+                # COMPUTE PHYSICAL GRADIENT
+                Ngradplus = invJgplus@np.array([dNdxigplus[0],dNdetagplus[0]])
+                Ngradminus = invJgminus@np.array([dNdxigminus[0],dNdetagminus[0]])
+                # COMPUTE GRADIENT DIFFERENCE
+                diffgrad = 0
+                grad = 0
+                for inode in range(ELEMENT.n):
+                    diffgrad += (Ngradplus[:,inode]*PSIgplus - Ngradminus[:,inode]*PSIgminus)@INTAPPROX.NormalVec[ig]
+                    grad += INTAPPROX.NormalVec[ig]@np.array([INTAPPROX.dNdxig[ig,inode],INTAPPROX.dNdetag[ig,inode]])*PSIg[ig]
+                JumpError[knode] = diffgrad
+                JumpRelError[knode] = diffgrad/abs(grad)
+                knode += 1
+                # COMPUTE L2 ERROR
+                ErrorL2norm += diffgrad**2*INTAPPROX.detJg1D[ig]*INTAPPROX.Wg[ig]
+        
+        return np.sqrt(ErrorL2norm), JumpError, JumpRelError
     
     
     ##################################################################################################
@@ -2236,8 +2430,12 @@ class GradShafranovSolver:
     ##################################################################################################
     
     def IntegrateGhostStabilizationTerms(self):
+        
+        if self.out_elemsys:
+            self.file_elemsys.write('GHOST_FACES\n')
             
         for ghostface in self.PlasmaBoundGhostFaces:
+            """
             # ISOLATE COMMON CUT EDGE FROM ADJACENT ELEMENTS
             Tface = ghostface[0]
             FACE0 = self.Elements[ghostface[1][0]].GhostFaces[ghostface[1][2]]
@@ -2248,8 +2446,12 @@ class GradShafranovSolver:
             # LOOP OVER GAUSS INTEGRATION NODES
             for ig in range(FACE0.ng):  
                 # SHAPE FUNCTIONS GRADIENT IN PHYSICAL SPACE
-                n_dot_Ngrad0 = FACE0.NormalVec@np.array([FACE0.dNdxig[ig,:],FACE0.dNdetag[ig,:]])
-                n_dot_Ngrad1 = FACE1.NormalVec@np.array([FACE1.dNdxig[ig,:],FACE1.dNdetag[ig,:]])
+                Ngrad0 = FACE0.invJg[ig,:,:]@np.array([FACE0.dNdxig[ig,:],FACE0.dNdetag[ig,:]])
+                Ngrad1 = FACE1.invJg[ig,:,:]@np.array([FACE1.dNdxig[ig,:],FACE1.dNdetag[ig,:]])
+                # NORMAL VECTOR GRADIENTS
+                n_dot_Ngrad0 = FACE0.NormalVec@Ngrad0
+                n_dot_Ngrad1 = FACE1.NormalVec@Ngrad1
+                # R coordinate
                 R = FACE0.Xg[ig,0]
                 if self.PLASMA_CURRENT == self.LINEAR_CURRENT or self.PLASMA_CURRENT == self.NONLINEAR_CURRENT:   # DIMENSIONLESS SOLUTION CASE 
                     n_dot_Ngrad0 *= self.R0
@@ -2260,15 +2462,84 @@ class GradShafranovSolver:
                     for j in range(len(Tface)):  # COLUMNS ELEMENTAL MATRIX
                         # COMPUTE LHS MATRIX TERMS
                         ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ]  
-                        LHSe[i,j] += self.zeta*(n_dot_Ngrad1[i]+n_dot_Ngrad0[i])*(n_dot_Ngrad1[j]+n_dot_Ngrad0[j]) * FACE0.detJg[ig] * FACE0.Wg[ig]
+                        LHSe[i,j] += self.zeta*(n_dot_Ngrad1[i]+n_dot_Ngrad0[i])*(n_dot_Ngrad1[j]+n_dot_Ngrad0[j]) * FACE0.detJg1D[ig] * FACE0.Wg[ig]
                         ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
-                        #LHSe[i,j] += self.zeta*(FACE0.Ng[ig,i]-FACE1.Ng[ig,i])*(FACE0.Ng[ig,j]-FACE1.Ng[ig,j])    
-                               
-                                                 
+                        LHSe[i,j] += self.zeta*(FACE0.Ng[ig,i]-FACE1.Ng[ig,i])*(FACE0.Ng[ig,j]-FACE1.Ng[ig,j]) * FACE0.detJg1D[ig] * FACE0.Wg[ig]  
+                                                               
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
             for i in range(len(Tface)):   # ROWS ELEMENTAL MATRIX
                 for j in range(len(Tface)):   # COLUMNS ELEMENTAL MATRIX
-                    self.LHS[Tface[i],Tface[j]] += LHSe[i,j]                          
+                    self.LHS[Tface[i],Tface[j]] += LHSe[i,j]    
+            """
+                
+            # ISOLATE ADJACENT ELEMENTS
+            ELEMENT0 = self.Elements[ghostface[1][0]]
+            ELEMENT1 = self.Elements[ghostface[2][0]]
+            # ISOLATE COMMON EDGE 
+            FACE0 = ELEMENT0.GhostFaces[ghostface[1][2]]
+            FACE1 = ELEMENT1.GhostFaces[ghostface[2][2]]
+            # DEFINE ELEMENTAL MATRICES
+            LHSe = np.zeros([ELEMENT0.n+ELEMENT1.n,ELEMENT0.n+ELEMENT1.n])
+            
+            # COMPUTE ADEQUATE GHOST PENALTY TERM
+            penalty = self.zeta*max(ELEMENT0.length,ELEMENT1.length)  #**(1-2*self.ElOrder)
+            #penalty = self.zeta
+            
+            # LOOP OVER GAUSS INTEGRATION NODES
+            for ig in range(FACE0.ng):  
+                # SHAPE FUNCTIONS GRADIENT IN PHYSICAL SPACE
+                Ngrad0 = FACE0.invJg[ig,:,:]@np.array([FACE0.dNdxig[ig,:],FACE0.dNdetag[ig,:]])
+                Ngrad1 = FACE1.invJg[ig,:,:]@np.array([FACE1.dNdxig[ig,:],FACE1.dNdetag[ig,:]])
+                # NORMAL VECTOR GRADIENTS
+                n_dot_Ngrad0 = FACE0.NormalVec@Ngrad0
+                n_dot_Ngrad1 = FACE1.NormalVec@Ngrad1
+                # R coordinate
+                R = FACE0.Xg[ig,0]
+                if self.PLASMA_CURRENT == self.LINEAR_CURRENT or self.PLASMA_CURRENT == self.NONLINEAR_CURRENT:   # DIMENSIONLESS SOLUTION CASE 
+                    n_dot_Ngrad0 *= self.R0
+                    n_dot_Ngrad1 *= self.R0
+                    R /= self.R0
+                # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM    
+                for i in range(ELEMENT0.n):  # ROWS ELEMENTAL MATRIX
+                    for j in range(ELEMENT0.n):  # COLUMNS ELEMENTAL MATRIX
+                        # COMPUTE LHS MATRIX TERMS
+                        ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ]  
+                        LHSe[i,j] += penalty*n_dot_Ngrad0[i]*n_dot_Ngrad0[j] * FACE0.detJg1D[ig] * FACE0.Wg[ig]
+                        ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
+                        #LHSe[i,j] += penalty*FACE0.Ng[ig,i]*FACE0.Ng[ig,j] * FACE0.detJg1D[ig] * FACE0.Wg[ig] 
+                    for j in range(ELEMENT1.n):
+                        ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ] 
+                        LHSe[i,ELEMENT0.n+j] += penalty*n_dot_Ngrad0[i]*n_dot_Ngrad1[j] * FACE0.detJg1D[ig] * FACE0.Wg[ig]
+                        ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
+                        #LHSe[i,ELEMENT0.n+j] -= penalty*FACE0.Ng[ig,i]*FACE1.Ng[ig,j] * FACE0.detJg1D[ig] * FACE0.Wg[ig] 
+                        
+                for i in range(ELEMENT1.n):  # ROWS ELEMENTAL MATRIX
+                    for j in range(ELEMENT1.n):  # COLUMNS ELEMENTAL MATRIX
+                        # COMPUTE LHS MATRIX TERMS
+                        ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ]  
+                        LHSe[ELEMENT0.n+i,ELEMENT0.n+j] += penalty*n_dot_Ngrad1[i]*n_dot_Ngrad1[j] * FACE1.detJg1D[ig] * FACE1.Wg[ig]
+                        ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
+                        #LHSe[ELEMENT0.n+i,ELEMENT0.n+j] += penalty*FACE1.Ng[ig,i]*FACE1.Ng[ig,j] * FACE1.detJg1D[ig] * FACE1.Wg[ig]
+                    for j in range(ELEMENT0.n):
+                        ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ] 
+                        LHSe[ELEMENT0.n+i,j] += penalty*n_dot_Ngrad1[i]*n_dot_Ngrad0[j] * FACE1.detJg1D[ig] * FACE1.Wg[ig]
+                        ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
+                        #LHSe[ELEMENT0.n+i,j] -= penalty*FACE1.Ng[ig,i]*FACE0.Ng[ig,j] * FACE1.detJg1D[ig] * FACE1.Wg[ig]
+                                                     
+            # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
+            for i in range(ELEMENT0.n):   # ROWS ELEMENTAL MATRIX
+                for j in range(ELEMENT0.n):   # COLUMNS ELEMENTAL MATRIX
+                    self.LHS[ELEMENT0.Te[i],ELEMENT0.Te[j]] += LHSe[i,j]  
+                    
+            for i in range(ELEMENT1.n):   # ROWS ELEMENTAL MATRIX
+                for j in range(ELEMENT1.n):   # COLUMNS ELEMENTAL MATRIX
+                    self.LHS[ELEMENT1.Te[i],ELEMENT1.Te[j]] += LHSe[ELEMENT0.n+i,ELEMENT0.n+j]   
+                    
+            if self.out_elemsys:
+                self.file_elemsys.write("ghost face {:d} common to elements {:d} {:d}\n".format(0,ELEMENT0.index,ELEMENT1.Dom))
+                self.file_elemsys.write('elmat\n')
+                np.savetxt(self.file_elemsys,LHSe,delimiter=',',fmt='%e')
+                                   
         return
     
     
@@ -2411,7 +2682,7 @@ class GradShafranovSolver:
         
         print("Done!")   
         return
-    
+
     
     def ImposeStrongBC(self):
         """
@@ -2443,7 +2714,6 @@ class GradShafranovSolver:
         """
         Solves the reduced linear system of equations to obtain the solution PSI at iteration N+1.
         """
-        
         # SOLVE REDUCED SYSTEM 
         self.PSI = np.zeros([self.Nn,1])
         unknowns = spsolve(self.LHSred, self.RHSred)
@@ -2498,57 +2768,36 @@ class GradShafranovSolver:
         return
     
     
-    def Br_field(self):
+    def ComputeBrField(self):
         """
         Total radial magnetic field such that    Br = (-1/R) dpsi/dZ
         """
-        Br = np.zeros([self.Nn])
-        counter = np.zeros([self.Nn])
-        for ELEM in self.Elements:
-            # COMPUTE ELEMENTAL CONTRIBUTIONS 
-            Bre = ELEM.Bre()
-            # ASSEMBLE ELEMENTAL CONTRIBUTIONS TO TOTAL FIELD
-            for inode in range(ELEM.n):
-                Br[ELEM.Te[inode]] += Bre[inode]
-                counter[ELEM.Te[inode]] += 1
-        # COMPUTE MEAN VALUE 
-        Br /= counter
+        self.ComputePlasmaBoundStandardQuadratures()
+        Br = np.zeros([self.Ne*self.nge])
+        for ielem, ELEMENT in enumerate(self.Elements):
+            Br[ielem*self.nge:(ielem+1)*self.nge] = ELEMENT.Brg()
         return Br
     
-    def Bz_field(self):
+    def ComputeBzField(self):
         """
         Total vertical magnetic field such that    Bz = (1/R) dpsi/dR
         """
-        Bz = np.zeros([self.Nn])
-        counter = np.zeros([self.Nn])
-        for ELEM in self.Elements:
-            # COMPUTE ELEMENTAL CONTRIBUTIONS 
-            Bze = ELEM.Bze()
-            # ASSEMBLE ELEMENTAL CONTRIBUTIONS TO TOTAL FIELD
-            for inode in range(ELEM.n):
-                Bz[ELEM.Te[inode]] += Bze[inode]
-                counter[ELEM.Te[inode]] += 1
-        # COMPUTE MEAN VALUE 
-        Bz /= counter
+        self.ComputePlasmaBoundStandardQuadratures()
+        Bz = np.zeros([self.Ne*self.nge])
+        for ielem, ELEMENT in enumerate(self.Elements):
+            Bz[ielem*self.nge:(ielem+1)*self.nge] = ELEMENT.Bzg()
         return Bz
     
-    def Brz_field(self):
+    def ComputeBrzField(self):
         """
         Magnetic vector field such that    (Br, Bz) = ((-1/R) dpsi/dZ, (1/R) dpsi/dR)
         """
-        Brz = np.zeros([self.Nn,2])
-        counter = np.zeros([self.Nn])
-        for ELEM in self.Elements:
-            # COMPUTE ELEMENTAL CONTRIBUTIONS 
-            Brze = ELEM.Brze()
-            # ASSEMBLE ELEMENTAL CONTRIBUTIONS TO TOTAL FIELD
-            for inode in range(ELEM.n):
-                Brz[ELEM.Te[inode],:] += Brze[inode,:]
-                counter[ELEM.Te[inode]] += 1
-        # COMPUTE MEAN VALUE 
-        for i in range(2):
-            Brz[:,i] /= counter
-        return Brz
+        self.ComputePlasmaBoundStandardQuadratures()
+        self.Brzfield = np.zeros([self.Ne*self.nge,self.dim])
+        for ielem, ELEMENT in enumerate(self.Elements):
+            self.Brzfield[ielem*self.nge:(ielem+1)*self.nge,:] = ELEMENT.Brzg()
+        return 
+    
     
     def ComputeMagnetsBfield(self,regular_grid=False,**kwargs):
         if regular_grid:
@@ -2582,28 +2831,7 @@ class GradShafranovSolver:
                     Br[inode] += SOLENOID.Br(self.X[inode,:])
                     Br[inode] += SOLENOID.Br(self.X[inode,:])
             return Br, Bz
-    
-    
-    def ComputGradientPSIfield(self):
         
-        PSIgrad = np.zeros([3*self.Ne,self.dim])
-        Xgrad = np.zeros([3*self.Ne,self.dim])
-        XIgrad = np.array([[1/3,1/3],
-                        [1/3,2/3],
-                        [2/3,1/3]])
-        k = 0
-        for ELEM in self.Elements:
-            for XI in XIgrad:
-                # COMPUTE ELEMENTAL PHYSICAL POINTS WHERE GRADIENT IS EVALUATED
-                X = ELEM.Mapping(XI.reshape([1,2]))
-                Xgrad[k,:] = X
-                # INTERPOLATE PSI GRADIENT
-                PSIgrad[k,:] += ELEM.GRADElementalInterpolationREFERENCE(XI,self.PSI[ELEM.Te])
-                k += 1
-
-        # COMPUTE NORM
-        modPSIgrad = np.sqrt(PSIgrad[:,0]**2+PSIgrad[:,1]**2)
-        return PSIgrad, modPSIgrad
     
     ##################################################################################################
     ############################################# OUTPUT #############################################
@@ -2739,14 +2967,17 @@ class GradShafranovSolver:
             self.file_proparams.write('MESH_PARAMETERS\n')
             self.file_proparams.write("    NPOIN = {:d}\n".format(self.Nn))
             self.file_proparams.write("    NELEM = {:d}\n".format(self.Ne))
-            self.file_proparams.write("    ELEM = {:d}\n".format(self.ElTypeALYA))
+            self.file_proparams.write("    ELEMENT = {:d}\n".format(self.ElTypeALYA))
             self.file_proparams.write("    NBOUN = {:d}\n".format(self.Nbound))
             self.file_proparams.write("    DIM = {:d}\n".format(self.dim))
             self.file_proparams.write('END_MESH_PARAMETERS\n')
             self.file_proparams.write('\n')
             
             self.file_proparams.write('PROBLEM_TYPE_PARAMETERS\n')
-            self.file_proparams.write("    PLASMA_BOUNDARY = {:d}\n".format(self.PLASMA_BOUNDARY))
+            if self.FIXED_BOUNDARY:
+                self.file_proparams.write("    PLASMA_BOUNDARY = FIXED")
+            else:
+                self.file_proparams.write("    PLASMA_BOUNDARY = FREE")
             self.file_proparams.write("    PLASMA_CURRENT = {:d}\n".format(self.PLASMA_CURRENT))
             self.file_proparams.write("    TOTAL_PLASMA_CURRENT = {:f}\n".format(self.TOTAL_CURRENT))
             self.file_proparams.write('END_PROBLEM_TYPE_PARAMETERS\n')
@@ -2760,7 +2991,7 @@ class GradShafranovSolver:
             self.file_proparams.write('END_VACUUM_VESSEL_GEOMETRY_PARAMETERS\n')
             self.file_proparams.write('\n')
             
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.file_proparams.write('PLASMA_REGION_GEOMETRY_PARAMETERS\n')
                 self.file_proparams.write("    CONTROL_POINTS = {:d}\n".format(self.CONTROL_POINTS))
                 self.file_proparams.write("    R_SADDLE = {:f}\n".format(self.R_SADDLE))
@@ -2784,7 +3015,7 @@ class GradShafranovSolver:
                 self.file_proparams.write('END_PLASMA_CURRENT_MODEL_PARAMETERS\n')
                 self.file_proparams.write('\n')
             
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.file_proparams.write('EXTERNAL_COILS_PARAMETERS\n')
                 self.file_proparams.write("    N_COILS = {:d}\n".format(self.Ncoils))
                 for COIL in self.COILS:
@@ -2809,7 +3040,7 @@ class GradShafranovSolver:
             
             self.file_proparams.write('NUMERICAL_TREATMENT_PARAMETERS\n')
             self.file_proparams.write("    GHOST_STABILIZATION = {0}\n".format(self.GhostStabilization))
-            self.file_proparams.write("    QUADRATURE_ORDER = {:d}\n".format(self.QuadratureOrder))
+            self.file_proparams.write("    QUADRATURE_ORDER = {:d}\n".format(self.QuadratureOrder2D))
             self.file_proparams.write("    MAX_EXT_IT = {:d}\n".format(self.EXT_ITER))
             self.file_proparams.write("    EXT_TOL = {:e}\n".format(self.EXT_TOL))
             self.file_proparams.write("    MAX_INT_IT = {:d}\n".format(self.INT_ITER))
@@ -2860,11 +3091,11 @@ class GradShafranovSolver:
         return
     
     def writePSI_B(self):
-        if not self.SINGLE_ITERATION:
+        if not self.FIXED_BOUNDARY:
             self.file_PSI_B.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
         for inode in range(self.Nnbound):
             self.file_PSI_B.write("{:d} {:e}\n".format(inode+1,self.PSI_B[inode,0]))
-        if not self.SINGLE_ITERATION:
+        if not self.FIXED_BOUNDARY:
             self.file_PSI_B.write('END_ITERATION\n')
             
         if self.out_pickle:
@@ -2888,7 +3119,6 @@ class GradShafranovSolver:
             
             if self.out_pickle:
                 self.Residu_sim.append(self.residu_EXT)
-        
         return
     
     def writePSIcrit(self):
@@ -2899,18 +3129,18 @@ class GradShafranovSolver:
             self.file_PSIcrit.write('END_ITERATION\n')
             
             if self.out_pickle:
-                PSIcrit = np.concatenate((self.Xcrit[1,:,:],np.array([self.PSI_0[0],self.PSI_X[0]])),axis=0)
+                PSIcrit = np.concatenate((self.Xcrit[1,:,:],np.array([[self.PSI_0[0]],[self.PSI_X[0]]])),axis=1)
                 self.PSIcrit_sim.append(PSIcrit)
         return
     
     def writeElementsClassification(self):
         MeshClassi = self.ObtainClassification()
         if self.out_elemsClas:
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.file_elemsClas.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
             for ielem in range(self.Ne):
                 self.file_elemsClas.write("{:d} {:d}\n".format(ielem+1,MeshClassi[ielem]))
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.file_elemsClas.write('END_ITERATION\n')
                 
         if self.out_pickle:
@@ -2919,11 +3149,11 @@ class GradShafranovSolver:
     
     def writePlasmaLS(self):
         if self.out_plasmaLS:
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.file_plasmaLS.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
             for inode in range(self.Nn):
                 self.file_plasmaLS.write("{:d} {:e}\n".format(inode+1,self.PlasmaLS[inode]))
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.file_plasmaLS.write('END_ITERATION\n')
                 
         if self.out_pickle:
@@ -2933,50 +3163,49 @@ class GradShafranovSolver:
     
     def writePlasmaBC(self):
         if self.out_plasmaBC:
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.file_plasmaBC.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
             for ielem in self.PlasmaBoundElems:
-                for SEGMENT in self.Elements[ielem].InterfApprox.Segments:
-                    for inode in range(SEGMENT.ng):
-                        self.file_plasmaBC.write("{:d} {:d} {:d} {:f} {:f} {:f}\n".format(self.Elements[ielem].index,SEGMENT.index,inode,SEGMENT.Xg[inode,0],SEGMENT.Xg[inode,1],SEGMENT.PSIgseg[inode]))
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+                INTAPPROX = self.Elements[ielem].InterfApprox
+                for ig in range(INTAPPROX.ng):
+                    self.file_plasmaBC.write("{:d} {:d} {:d} {:f} {:f} {:f}\n".format(self.Elements[ielem].index,INTAPPROX.index,ig,INTAPPROX.Xg[ig,0],INTAPPROX.Xg[ig,1],INTAPPROX.PSIg[ig]))
+            if not self.FIXED_BOUNDARY:
                 self.file_plasmaBC.write("END_ITERATION\n")
         return
     
     def writePlasmaapprox(self):
         if self.out_plasmaapprox:
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.file_plasmaapprox.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
             for ielem in self.PlasmaBoundElems:
-                for SEGMENT in self.Elements[ielem].InterfApprox.Segments:
-                    for inode in range(SEGMENT.n):
-                        self.file_plasmaapprox.write("{:d} {:d} {:d} {:f} {:f}\n".format(self.Elements[ielem].index,SEGMENT.index,inode,SEGMENT.Xseg[inode,0],SEGMENT.Xseg[inode,1]))
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+                INTAPPROX = self.Elements[ielem].InterfApprox
+                for inode in range(INTAPPROX.n):
+                    self.file_plasmaapprox.write("{:d} {:d} {:d} {:f} {:f}\n".format(self.Elements[ielem].index,INTAPPROX.index,inode,INTAPPROX.Xint[inode,0],INTAPPROX.Xint[inode,1]))
+            if not self.FIXED_BOUNDARY:
                 self.file_plasmaapprox.write("END_ITERATION\n")
                 
         if self.out_pickle:
-            approx = self.Elements[self.PlasmaBoundElems[0]].InterfApprox
-            plasmaapprox = np.zeros([len(self.PlasmaBoundElems)*approx.Nsegments*approx.Segments[0].n, 5])
+            plasmaapprox = np.zeros([len(self.PlasmaBoundElems)*self.Elements[self.PlasmaBoundElems[0]].InterfApprox.n, 5])
             counter = 0
             for ielem in self.PlasmaBoundElems:
-                for SEGMENT in self.Elements[ielem].InterfApprox.Segments:
-                    for inode in range(SEGMENT.n):
-                        plasmaapprox[counter,0] = self.Elements[ielem].index
-                        plasmaapprox[counter,1] = SEGMENT.index
-                        plasmaapprox[counter,1] = inode
-                        plasmaapprox[counter,1] = SEGMENT.Xseg[inode,0]
-                        plasmaapprox[counter,1] = SEGMENT.Xseg[inode,1]
-                        counter += 1
+                INTAPPROX = self.Elements[ielem].InterfApprox
+                for inode in range(INTAPPROX.n):
+                    plasmaapprox[counter,0] = self.Elements[ielem].index
+                    plasmaapprox[counter,1] = INTAPPROX.index
+                    plasmaapprox[counter,1] = inode
+                    plasmaapprox[counter,1] = INTAPPROX.Xint[inode,0]
+                    plasmaapprox[counter,1] = INTAPPROX.Xint[inode,1]
+                    counter += 1
             self.PlasmaBoundApprox_sim.append(plasmaapprox)
         return
     
     def writeGhostFaces(self):
         if self.out_ghostfaces:
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.file_ghostfaces.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
             for FACE in self.PlasmaBoundGhostFaces:
                 self.file_ghostfaces.write("{:d} {:d} {:d} {:d}\n".format(FACE[1][0],FACE[1][1],FACE[2][0],FACE[2][1]))
-            if self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+            if not self.FIXED_BOUNDARY:
                 self.file_ghostfaces.write("END_ITERATION\n")
                 
         if self.GhostStabilization and self.out_pickle:
@@ -2984,10 +3213,11 @@ class GradShafranovSolver:
         return
     
     def writePlasmaBoundaryData(self):
-        self.writePlasmaLS()
-        self.writeElementsClassification()
-        self.writePlasmaapprox()
-        self.writeGhostFaces()
+        if self.PlasmaBoundElems.size > 0:
+            self.writePlasmaLS()
+            self.writeElementsClassification()
+            self.writePlasmaapprox()
+            self.writeGhostFaces()
         return
     
     
@@ -2996,18 +3226,21 @@ class GradShafranovSolver:
         
         AnaliticalNorm = np.zeros([self.Nn])
         self.PSIerror = np.zeros([self.Nn])
+        self.PSIrelerror = np.zeros([self.Nn])
         for inode in range(self.Nn):
             AnaliticalNorm[inode] = self.PSIAnalyticalSolution(self.X[inode,:],self.PLASMA_CURRENT)
             self.PSIerror[inode] = abs(AnaliticalNorm[inode]-self.PSI_CONV[inode])
-            if self.PSIerror[inode] == 0:
-                self.PSIerror[inode] = 1e-15
+            self.PSIrelerror[inode] = self.PSIerror[inode]/abs(AnaliticalNorm[inode])
+            if self.PSIerror[inode] < 1e-16:
+                self.PSIerror[inode] = 1e-16
+                self.PSIrelerror[inode] = 1e-16
                 
         self.file_L2error.write('PSI_ERROR_FIELD\n')
         for inode in range(self.Nn):
             self.file_L2error.write("{:d} {:e}\n".format(inode+1,self.PSIerror[inode])) 
         self.file_L2error.write('END_PSI_ERROR_FIELD\n')
         
-        self.file_L2error.write("L2ERROR = {:e}".format(self.L2error))
+        self.file_L2error.write("L2ERROR = {:e}".format(self.ErrorL2norm))
 
         self.file_L2error.close()
         return
@@ -3070,6 +3303,8 @@ class GradShafranovSolver:
         self.ReadEQUILIdata()
         print('Done!')
         
+        self.InitialiseParameters()
+        
         # OUTPUT RESULTS FOLDER
         print("PREPARE OUTPUT DIRECTORY...",end='')
         # Check if the directory exists
@@ -3116,9 +3351,6 @@ class GradShafranovSolver:
                 self.it += 1
                 print('OUTER ITERATION = '+str(self.it_EXT)+' , INNER ITERATION = '+str(self.it_INT))
                 
-                # WRITE ITERATION CONFIGURATION
-
-                
                 if self.plotelemsClas:
                     self.PlotClassifiedElements(GHOSTFACES=self.GhostStabilization)
                     
@@ -3126,8 +3358,9 @@ class GradShafranovSolver:
                 self.AssembleGlobalSystem()                 # 0. ASSEMBLE CUTFEM SYSTEM
                 self.ImposeStrongBC()
                 self.SolveSystem()                          # 1. SOLVE CutFEM SYSTEM  ->> PSI
-                self.ComputeCriticalPSI(self.PSI)           # 2. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
-                self.writePSIcrit()                         #    WRITE CRITICAL POINTS
+                if not self.FIXED_BOUNDARY:
+                    self.ComputeCriticalPSI(self.PSI)           # 2. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
+                    self.writePSIcrit()                         #    WRITE CRITICAL POINTS
                 self.NormalisePSI()                         # 3. NORMALISE PSI RESPECT TO CRITICAL VALUES  ->> PSI_NORM 
                 self.writePSI()                             #    WRITE SOLUTION             
                 if self.plotPSI:
@@ -3146,12 +3379,12 @@ class GradShafranovSolver:
             self.ComputeTotalPlasmaCurrentNormalization()
             print('COMPUTE VACUUM VESSEL FIRST WALL VALUES PSI_B...', end="")
             self.PSI_B[:,1] = self.ComputeBoundaryPSI()     # COMPUTE VACUUM VESSEL FIRST WALL VALUES PSI_B WITH INTERNALLY CONVERGED PSI_NORM
+            self.writePSI_B()
             print('Done!')
             
             self.CheckConvergence('PSI_B')            # CHECK CONVERGENCE OF VACUUM VESSEL FIEST WALL PSI VALUES  (PSI_B)
             self.writeresidu("EXTERNAL")              # WRITE EXTERNAL LOOP RESIDU 
-            self.UpdatePSI('PSI_B')                   # UPDATE PSI_NORM AND PSI_B VALUES
-            #self.UpdateElementalPSIg(self.VACVESbound)   # UPDATE ELEMENTAL CONSTRAINT VALUES PSIgseg FOR VACUUM VESSEL FIRST WALL INTERFACE 
+            self.UpdatePSI('PSI_B')                   # UPDATE PSI_NORM AND PSI_B VALUES 
             
             #######################################################
             ################ END EXTERNAL LOOP ####################
@@ -3160,8 +3393,9 @@ class GradShafranovSolver:
         print('SOLUTION CONVERGED')
         self.PlotSolutionPSI()
         
-        if self.PLASMA_BOUNDARY == self.FIXED_BOUNDARY and self.PLASMA_CURRENT != self.PROFILES_CURRENT:
-            self.L2error = self.ComputeL2error()
+        if self.FIXED_BOUNDARY and self.PLASMA_CURRENT != self.PROFILES_CURRENT:
+            self.ErrorL2norm, self.RelErrorL2norm = self.ComputeL2errorPlasma()
+            self.InterfGradJumpErrorL2norm, self.JumpError, self.JumpRelError = self.ComputeL2errorInterfaceJump()
             self.writeerror()
         
         self.closeOUTPUTfiles()
@@ -3183,6 +3417,57 @@ class GradShafranovSolver:
         plt.colorbar(a, ax=axs)
         plt.show()
         
+        return
+
+    def PlotError(self,RelativeError = False):
+        
+        AnaliticalNorm = np.zeros([self.Nn])
+        for inode in range(self.Nn):
+            AnaliticalNorm[inode] = self.PSIAnalyticalSolution(self.X[inode,:],self.PLASMA_CURRENT)
+            
+        print('||PSIerror||_L2 = ', self.ErrorL2norm)
+        print('relative ||PSIerror||_L2 = ', self.RelErrorL2norm)
+        print('||PSIerror|| = ',np.linalg.norm(self.PSIerror))
+        print('||PSIerror||/node = ',np.linalg.norm(self.PSIerror)/self.Nn)
+        print('relative ||PSIerror|| = ',np.linalg.norm(self.PSIrelerror))
+        print('||jump(grad)||_L2 = ', self.InterfGradJumpErrorL2norm)
+            
+        # Compute global min and max across both datasets
+        vmin = min(AnaliticalNorm)
+        vmax = max(AnaliticalNorm)  
+            
+        fig, axs = plt.subplots(1, 4, figsize=(16,5),gridspec_kw={'width_ratios': [1,1,0.25,1]})
+        axs[0].set_xlim(self.Rmin,self.Rmax)
+        axs[0].set_ylim(self.Zmin,self.Zmax)
+        a1 = axs[0].tricontourf(self.X[:,0],self.X[:,1], AnaliticalNorm, levels=30, vmin=vmin, vmax=vmax)
+        axs[0].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
+        axs[0].tricontour(self.X[:,0],self.X[:,1], AnaliticalNorm, levels=[0], colors = 'black')
+
+        axs[1].set_xlim(self.Rmin,self.Rmax)
+        axs[1].set_ylim(self.Zmin,self.Zmax)
+        a2 = axs[1].tricontourf(self.X[:,0],self.X[:,1], self.PSI_CONV, levels=30, vmin=vmin, vmax=vmax)
+        axs[1].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
+        axs[1].tricontour(self.X[:,0],self.X[:,1], self.PSI_CONV, levels=[0], colors = 'black')
+
+        fig.colorbar(a1, ax=axs[2], orientation="vertical", fraction=0.8, pad=-0.7)
+        axs[2].axis('off')
+        
+        axs[3].set_xlim(self.Rmin,self.Rmax)
+        axs[3].set_ylim(self.Zmin,self.Zmax)
+        if RelativeError:
+            errorfield = self.PSIrelerror
+        else:
+            errorfield = self.PSIerror
+        vmax = max(np.log(errorfield))
+        a = axs[3].tricontourf(self.X[:,0],self.X[:,1], np.log(errorfield), levels=30 , vmax=vmax,vmin=-16)
+        plt.colorbar(a, ax=axs[3])
+
+        plt.show()
+        return
+    
+    
+    def PlotElementalInterfaceApproximation(self,interface_index):
+        self.Elements[self.PlasmaBoundElems[interface_index]].PlotInterfaceApproximation(self.InitialPlasmaLevelSetFunction)
         return
 
     
@@ -3247,8 +3532,22 @@ class GradShafranovSolver:
         return
     
     
-    def PlotMagneticField(self,streamplot=True):
+    def PlotMagneticField(self):
+        # COMPUTE MAGNETIC FIELD NORM
+        Bnorm = np.zeros([self.Ne*self.nge])
+        for inode in range(self.Ne*self.nge):
+            Bnorm[inode] = np.linalg.norm(self.Brzfield[inode,:])
+            
+        fig, ax = plt.subplots(1, 1, figsize=(5,5))
+        ax.set_xlim(self.Rmin,self.Rmax)
+        ax.set_ylim(self.Zmin,self.Zmax)
+        a = ax.tricontourf(self.Xg[:,0],self.Xg[:,1], Bnorm, levels=30)
+        ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
+        plt.colorbar(a, ax=ax)
+        plt.show()
         
+        
+        """
         if streamplot:
             R, Z, Br, Bz = self.ComputeMagnetsBfield(regular_grid=True)
             # Poloidal field magnitude
@@ -3256,18 +3555,18 @@ class GradShafranovSolver:
             plt.contourf(R, Z, np.log(Bp), 50)
             plt.streamplot(R, Z, Br, Bz)
             plt.show()
+        """
         
         return
     
     def InspectElement(self,element_index,BOUNDARY,PSI,TESSELLATION,GHOSTFACES,NORMALS,QUADRATURE):
-        
-        ELEM = self.Elements[element_index]
-        Xmin = np.min(ELEM.Xe[:,0])-0.1
-        Xmax = np.max(ELEM.Xe[:,0])+0.1
-        Ymin = np.min(ELEM.Xe[:,1])-0.1
-        Ymax = np.max(ELEM.Xe[:,1])+0.1
+        ELEMENT = self.Elements[element_index]
+        Xmin = np.min(ELEMENT.Xe[:,0])-self.meanLength/4
+        Xmax = np.max(ELEMENT.Xe[:,0])+self.meanLength/4
+        Ymin = np.min(ELEMENT.Xe[:,1])-self.meanLength/4
+        Ymax = np.max(ELEMENT.Xe[:,1])+self.meanLength/4
             
-        color = self.ElementColor(ELEM.Dom)
+        color = self.ElementColor(ELEMENT.Dom)
         colorlist = ['#009E73','#D55E00','#CC79A7','#56B4E9']
 
         fig, axs = plt.subplots(1, 2, figsize=(10,6))
@@ -3278,70 +3577,60 @@ class GradShafranovSolver:
             axs[0].tricontour(self.X[:,0],self.X[:,1], self.PSI_NORM[:,1], levels=[0], colors = 'black')
         axs[0].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
         # PLOT ELEMENT EDGES
-        for iedge in range(ELEM.numedges):
-            axs[0].plot([ELEM.Xe[iedge,0],ELEM.Xe[int((iedge+1)%ELEM.numedges),0]],[ELEM.Xe[iedge,1],ELEM.Xe[int((iedge+1)%ELEM.numedges),1]], color=color, linewidth=3)
+        for iedge in range(ELEMENT.numedges):
+            axs[0].plot([ELEMENT.Xe[iedge,0],ELEMENT.Xe[int((iedge+1)%ELEMENT.numedges),0]],[ELEMENT.Xe[iedge,1],ELEMENT.Xe[int((iedge+1)%ELEMENT.numedges),1]], color=color, linewidth=3)
 
         axs[1].set_xlim(Xmin,Xmax)
         axs[1].set_ylim(Ymin,Ymax)
         axs[1].set_aspect('equal')
         axs[1].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red',linewidths=2)
         # PLOT ELEMENT EDGES
-        for iedge in range(ELEM.numedges):
-            axs[1].plot([ELEM.Xe[iedge,0],ELEM.Xe[int((iedge+1)%ELEM.numedges),0]],[ELEM.Xe[iedge,1],ELEM.Xe[int((iedge+1)%ELEM.numedges),1]], color=color, linewidth=8)
-        for inode in range(ELEM.n):
-            if ELEM.LSe[inode] < 0:
+        for iedge in range(ELEMENT.numedges):
+            axs[1].plot([ELEMENT.Xe[iedge,0],ELEMENT.Xe[int((iedge+1)%ELEMENT.numedges),0]],[ELEMENT.Xe[iedge,1],ELEMENT.Xe[int((iedge+1)%ELEMENT.numedges),1]], color=color, linewidth=8)
+        for inode in range(ELEMENT.n):
+            if ELEMENT.LSe[inode] < 0:
                 cl = 'blue'
             else:
                 cl = 'red'
-            axs[1].scatter(ELEM.Xe[inode,0],ELEM.Xe[inode,1],s=120,color=cl,zorder=5)
-        if TESSELLATION and (ELEM.Dom == 0 or ELEM.Dom == 2):
-            for isub, SUBELEM in enumerate(ELEM.SubElements):
+            axs[1].scatter(ELEMENT.Xe[inode,0],ELEMENT.Xe[inode,1],s=120,color=cl,zorder=5)
+        if TESSELLATION and (ELEMENT.Dom == 0 or ELEMENT.Dom == 2):
+            for isub, SUBELEM in enumerate(ELEMENT.SubElements):
                 # PLOT SUBELEMENT EDGES
                 for i in range(SUBELEM.numedges):
                     axs[1].plot([SUBELEM.Xe[i,0], SUBELEM.Xe[(i+1)%SUBELEM.numedges,0]], [SUBELEM.Xe[i,1], SUBELEM.Xe[(i+1)%SUBELEM.numedges,1]], color=colorlist[isub], linewidth=3.5)
                 axs[1].scatter(SUBELEM.Xe[:,0],SUBELEM.Xe[:,1], marker='o', s=60, color=colorlist[isub], zorder=5)
         if BOUNDARY:
-            axs[1].scatter(ELEM.InterfApprox.Xint[:,0],ELEM.InterfApprox.Xint[:,1],marker='o',color='red',s=100, zorder=5)
-            for SEGMENT in ELEM.InterfApprox.Segments:
-                axs[1].scatter(SEGMENT.Xseg[:,0],SEGMENT.Xseg[:,1],marker='o',color='green',s=30, zorder=5)
+            axs[1].scatter(ELEMENT.InterfApprox.Xint[:,0],ELEMENT.InterfApprox.Xint[:,1],marker='o',color='red',s=100, zorder=5)
         if GHOSTFACES:
-            for FACE in ELEM.GhostFaces:
+            for FACE in ELEMENT.GhostFaces:
                 axs[1].plot(FACE.Xseg[:2,0],FACE.Xseg[:2,1],color=colorlist[-1],linestyle='dashed',linewidth=3)
         if NORMALS:
             if BOUNDARY:
-                for SEGMENT in ELEM.InterfApprox.Segments:
+                for ig, vec in enumerate(ELEMENT.InterfApprox.NormalVec):
                     # PLOT NORMAL VECTORS
-                    Xsegmean = np.mean(SEGMENT.Xseg, axis=0)
-                    dl = 10
-                    axs[1].arrow(Xsegmean[0],Xsegmean[1],SEGMENT.NormalVec[0]/dl,SEGMENT.NormalVec[1]/dl,width=0.01)
+                    dl = 20
+                    axs[1].arrow(ELEMENT.InterfApprox.Xg[ig,0],ELEMENT.InterfApprox.Xg[ig,1],vec[0]/dl,vec[1]/dl,width=0.005)
             if GHOSTFACES:
-                for FACE in ELEM.GhostFaces:
+                for FACE in ELEMENT.GhostFaces:
                     # PLOT NORMAL VECTORS
                     Xsegmean = np.mean(FACE.Xseg, axis=0)
-                    dl = 10
-                    axs[1].arrow(Xsegmean[0],Xsegmean[1],FACE.NormalVec[0]/dl,FACE.NormalVec[1]/dl,width=0.01)
+                    dl = 40
+                    axs[1].arrow(Xsegmean[0],Xsegmean[1],FACE.NormalVec[0]/dl,FACE.NormalVec[1]/dl,width=0.005)
         if QUADRATURE:
-            if ELEM.Dom == -1 or ELEM.Dom == 1 or ELEM.Dom == 3:
+            if ELEMENT.Dom == -1 or ELEMENT.Dom == 1 or ELEMENT.Dom == 2:
                 # PLOT STANDARD QUADRATURE INTEGRATION POINTS
-                axs[1].scatter(ELEM.Xg[:,0],ELEM.Xg[:,1],marker='x',c='black')
-            elif ELEM.Dom == 2:
-                # PLOT STANDARD QUADRATURE INTEGRATION POINTS 
-                axs[1].scatter(ELEM.Xg[:,0],ELEM.Xg[:,1],marker='x',c='black', zorder=5)
-                # PLOT VACUUM VESSEL INTEGRATION POINTS ON COMPUTATIONAL BOUNDARY EDGES
-                for SEGMENT in ELEM.InterfApprox.Segments:
-                    axs[1].scatter(SEGMENT.Xg[:,0],SEGMENT.Xg[:,1],marker='x',color='grey',s=50, zorder = 5)
+                axs[1].scatter(ELEMENT.Xg[:,0],ELEMENT.Xg[:,1],marker='x',c='black')
             else:
                 if TESSELLATION:
-                    for isub, SUBELEM in enumerate(ELEM.SubElements):
+                    for isub, SUBELEM in enumerate(ELEMENT.SubElements):
                         # PLOT QUADRATURE SUBELEMENTAL INTEGRATION POINTS
                         axs[1].scatter(SUBELEM.Xg[:,0],SUBELEM.Xg[:,1],marker='x',c=colorlist[isub], zorder=3)
                 if BOUNDARY:
                     # PLOT PLASMA BOUNDARY INTEGRATION POINTS
-                    for SEGMENT in ELEM.InterfApprox.Segments:
-                        axs[1].scatter(SEGMENT.Xg[:,0],SEGMENT.Xg[:,1],marker='x',color='grey',s=50, zorder=5)
+                    axs[1].scatter(ELEMENT.InterfApprox.Xg[:,0],ELEMENT.InterfApprox.Xg[:,1],marker='x',color='grey',s=50, zorder=5)
                 if GHOSTFACES:
                     # PLOT CUT EDGES QUADRATURES 
-                    for FACE in ELEM.GhostFaces:
+                    for FACE in ELEMENT.GhostFaces:
                         axs[1].scatter(FACE.Xg[:,0],FACE.Xg[:,1],marker='x',color='k',s=50, zorder=6)
         return
     
@@ -3368,15 +3657,15 @@ class GradShafranovSolver:
         axs.set_xlim(Rmin,Rmax)
         axs.set_ylim(Zmin,Zmax)
         # PLOT ELEMENTAL EDGES:
-        for ELEM in ELEMS:
-            for iedge in range(ELEM.numedges):
-                axs[1].plot([ELEM.Xe[iedge,0],ELEM.Xe[int((iedge+1)%ELEM.numedges),0]],[ELEM.Xe[iedge,1],ELEM.Xe[int((iedge+1)%ELEM.numedges),1]], color=color, linewidth=8)
-            for inode in range(ELEM.n):
-                if ELEM.LSe[inode] < 0:
+        for ELEMENT in ELEMS:
+            for iedge in range(ELEMENT.numedges):
+                axs[1].plot([ELEMENT.Xe[iedge,0],ELEMENT.Xe[int((iedge+1)%ELEMENT.numedges),0]],[ELEMENT.Xe[iedge,1],ELEMENT.Xe[int((iedge+1)%ELEMENT.numedges),1]], color=color, linewidth=8)
+            for inode in range(ELEMENT.n):
+                if ELEMENT.LSe[inode] < 0:
                     cl = 'blue'
                 else:
                     cl = 'red'
-                axs[1].scatter(ELEM.Xe[inode,0],ELEM.Xe[inode,1],s=120,color=cl,zorder=5)
+                axs[1].scatter(ELEMENT.Xe[inode,0],ELEMENT.Xe[inode,1],s=120,color=cl,zorder=5)
                 
         # PLOT CUT EDGES
         for iedge, FACE in enumerate(FACES):
@@ -3498,13 +3787,12 @@ class GradShafranovSolver:
     
     def PlotNormalVectors(self):
         fig, axs = plt.subplots(1, 2, figsize=(10,5))
-        
         axs[0].set_xlim(self.Rmin-0.5,self.Rmax+0.5)
         axs[0].set_ylim(self.Zmin-0.5,self.Zmax+0.5)
-        axs[1].set_xlim(6,6.4)
-        if self.PLASMA_BOUNDARY == self.FIXED_BOUNDARY:
-            axs[1].set_ylim(2.5,3.5)
-        elif self.PLASMA_BOUNDARY == self.FREE_BOUNDARY:
+        axs[1].set_xlim(6.5,7)
+        if self.FIXED_BOUNDARY:
+            axs[1].set_ylim(1.6,2)
+        else:
             axs[1].set_ylim(2.2,2.6)
 
         for i in range(2):
@@ -3520,13 +3808,14 @@ class GradShafranovSolver:
                 for j in range(ELEMENT.n):
                     plt.plot([ELEMENT.Xe[j,0], ELEMENT.Xe[int((j+1)%ELEMENT.n),0]], 
                             [ELEMENT.Xe[j,1], ELEMENT.Xe[int((j+1)%ELEMENT.n),1]], color='k', linewidth=1)
-                for SEGMENT in ELEMENT.InterfApprox.Segments:
-                    # PLOT INTERFACE APPROXIMATIONS
-                    axs[0].plot(SEGMENT.Xseg[:,0],SEGMENT.Xseg[:,1], linestyle='-', color = 'red', linewidth = 2)
-                    axs[1].plot(SEGMENT.Xseg[:,0],SEGMENT.Xseg[:,1], linestyle='-', marker='o',color = 'red', linewidth = 2)
-                    # PLOT NORMAL VECTORS
-                    Xsegmean = np.mean(SEGMENT.Xseg, axis=0)
-                    axs[i].arrow(Xsegmean[0],Xsegmean[1],SEGMENT.NormalVec[0]/dl,SEGMENT.NormalVec[1]/dl,width=0.01)
+                INTAPPROX = ELEMENT.InterfApprox
+                # PLOT INTERFACE APPROXIMATIONS
+                for inode in range(INTAPPROX.n-1):
+                    axs[0].plot(INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],0],INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],1], linestyle='-', color = 'red', linewidth = 2)
+                    axs[1].plot(INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],0],INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],1], linestyle='-', marker='o',color = 'red', linewidth = 2)
+                # PLOT NORMAL VECTORS
+                for ig, vec in enumerate(INTAPPROX.NormalVec):
+                    axs[i].arrow(INTAPPROX.Xg[ig,0],INTAPPROX.Xg[ig,1],vec[0]/dl,vec[1]/dl,width=0.005)
                 
         axs[1].set_aspect('equal')
         plt.show()
@@ -3547,13 +3836,12 @@ class GradShafranovSolver:
         PSI_D = np.zeros([self.NnPB])
         k = 0
         for ielem in self.PlasmaBoundElems:
-            ELEMENT = self.Elements[ielem]
-            for SEGMENT in ELEMENT.InterfApprox.Segments:
-                for inode in range(SEGMENT.ng):
-                    X_Dg[k,:] = SEGMENT.Xg[inode,:]
-                    PSI_Dg[k] = SEGMENT.PSIgseg[inode]
-                    PSI_D[k] = ELEMENT.ElementalInterpolationPHYSICAL(X_Dg[k,:],self.PSI[ELEMENT.Te])
-                    k += 1
+            INTAPPROX = self.Elements[ielem].InterfApprox
+            for inode in range(INTAPPROX.ng):
+                X_Dg[k,:] = INTAPPROX.Xg[inode,:]
+                PSI_Dg[k] = INTAPPROX.PSIg[inode]
+                PSI_D[k] = self.Elements[ielem].ElementalInterpolationPHYSICAL(X_Dg[k,:],self.PSI[self.Elements[ielem].Te])
+                k += 1
             
         fig, axs = plt.subplots(1, 2, figsize=(14,7))
         ### UPPER ROW SUBPLOTS 
@@ -3717,45 +4005,6 @@ class GradShafranovSolver:
         return
 
     
-    def PlotError(self,plotnodes):
-        
-        AnaliticalNorm = np.zeros([self.Nn])
-        for inode in range(self.Nn):
-            AnaliticalNorm[inode] = self.PSIAnalyticalSolution(self.X[inode,:],self.PLASMA_CURRENT)
-           
-        error = np.zeros([len(self.PlasmaNodes)])
-        for i, inode in enumerate(self.PlasmaNodes):
-            error[i] = abs(AnaliticalNorm[inode]-self.PSI_CONV[inode])
-            if error[i] == 0:
-                error[i] = 1e-15
-            
-        print(np.linalg.norm(error))
-            
-        fig, axs = plt.subplots(1, 3, figsize=(16,5))
-        axs[0].set_xlim(self.Rmin,self.Rmax)
-        axs[0].set_ylim(self.Zmin,self.Zmax)
-        a = axs[0].tricontourf(self.X[plotnodes,0],self.X[plotnodes,1], AnaliticalNorm[plotnodes], levels=30)
-        axs[0].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
-        axs[0].tricontour(self.X[plotnodes,0],self.X[plotnodes,1], AnaliticalNorm[plotnodes], levels=[0], colors = 'black')
-        plt.colorbar(a, ax=axs[0])
-
-        axs[1].set_xlim(self.Rmin,self.Rmax)
-        axs[1].set_ylim(self.Zmin,self.Zmax)
-        a = axs[1].tricontourf(self.X[plotnodes,0],self.X[plotnodes,1], self.PSI_CONV[plotnodes], levels=30)
-        axs[1].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
-        axs[1].tricontour(self.X[:,0],self.X[:,1], self.PSI_CONV, levels=[0], colors = 'black')
-        plt.colorbar(a, ax=axs[1])
-
-        axs[2].set_xlim(self.Rmin,self.Rmax)
-        axs[2].set_ylim(self.Zmin,self.Zmax)
-        a = axs[2].tricontourf(self.X[self.PlasmaNodes,0],self.X[self.PlasmaNodes,1], np.log(error), levels=30)
-        axs[2].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
-        plt.colorbar(a, ax=axs[2])
-
-        plt.show()
-        
-        return
-    
     @staticmethod
     def ElementColor(dom):
         if dom == -1:
@@ -3771,63 +4020,63 @@ class GradShafranovSolver:
         return color
     
     def PlotREFERENCE_PHYSICALelement(self,element_index,TESSELLATION,BOUNDARY,NORMALS,QUADRATURE):
-        ELEM = self.Elements[element_index]
-        Xmin = np.min(ELEM.Xe[:,0])-0.1
-        Xmax = np.max(ELEM.Xe[:,0])+0.1
-        Ymin = np.min(ELEM.Xe[:,1])-0.1
-        Ymax = np.max(ELEM.Xe[:,1])+0.1
-        if ELEM.ElType == 1:
+        ELEMENT = self.Elements[element_index]
+        Xmin = np.min(ELEMENT.Xe[:,0])-0.1
+        Xmax = np.max(ELEMENT.Xe[:,0])+0.1
+        Ymin = np.min(ELEMENT.Xe[:,1])-0.1
+        Ymax = np.max(ELEMENT.Xe[:,1])+0.1
+        if ELEMENT.ElType == 1:
             numedges = 3
-        elif ELEM.ElType == 2:
+        elif ELEMENT.ElType == 2:
             numedges = 4
             
-        color = self.ElementColor(ELEM.Dom)
+        color = self.ElementColor(ELEMENT.Dom)
         colorlist = ['#009E73','#D55E00','#CC79A7','#56B4E9']
 
         fig, axs = plt.subplots(1, 2, figsize=(10,5))
-        XIe = ReferenceElementCoordinates(ELEM.ElType,ELEM.ElOrder)
+        XIe = ReferenceElementCoordinates(ELEMENT.ElType,ELEMENT.ElOrder)
         XImin = np.min(XIe[:,0])-0.4
         XImax = np.max(XIe[:,0])+0.25
         ETAmin = np.min(XIe[:,1])-0.4
         ETAmax = np.max(XIe[:,1])+0.25
         axs[0].set_xlim(XImin,XImax)
         axs[0].set_ylim(ETAmin,ETAmax)
-        axs[0].tricontour(XIe[:,0],XIe[:,1], ELEM.LSe, levels=[0], colors = 'red',linewidths=2)
+        axs[0].tricontour(XIe[:,0],XIe[:,1], ELEMENT.LSe, levels=[0], colors = 'red',linewidths=2)
         # PLOT ELEMENT EDGES
-        for iedge in range(ELEM.numedges):
-            axs[0].plot([XIe[iedge,0],XIe[int((iedge+1)%ELEM.numedges),0]],[XIe[iedge,1],XIe[int((iedge+1)%ELEM.numedges),1]], color=color, linewidth=8)
-        for inode in range(ELEM.n):
-            if ELEM.LSe[inode] < 0:
+        for iedge in range(ELEMENT.numedges):
+            axs[0].plot([XIe[iedge,0],XIe[int((iedge+1)%ELEMENT.numedges),0]],[XIe[iedge,1],XIe[int((iedge+1)%ELEMENT.numedges),1]], color=color, linewidth=8)
+        for inode in range(ELEMENT.n):
+            if ELEMENT.LSe[inode] < 0:
                 cl = 'blue'
             else:
                 cl = 'red'
             axs[0].scatter(XIe[inode,0],XIe[inode,1],s=120,color=cl,zorder=5)
 
-        if TESSELLATION and (ELEM.Dom == 0 or ELEM.Dom == 2):
-            for isub, SUBELEM in enumerate(ELEM.SubElements):
+        if TESSELLATION and (ELEMENT.Dom == 0 or ELEMENT.Dom == 2):
+            for isub, SUBELEM in enumerate(ELEMENT.SubElements):
                 # PLOT SUBELEMENT EDGES
                 for i in range(SUBELEM.numedges):
                     axs[0].plot([SUBELEM.XIe[i,0], SUBELEM.XIe[(i+1)%SUBELEM.numedges,0]], [SUBELEM.XIe[i,1], SUBELEM.XIe[(i+1)%SUBELEM.numedges,1]], color=colorlist[isub], linewidth=3.5)
                 axs[0].scatter(SUBELEM.XIe[:,0],SUBELEM.XIe[:,1], marker='o', s=60, color=colorlist[isub], zorder=5)
         if BOUNDARY:
-            axs[0].scatter(ELEM.InterfApprox.XIint[:,0],ELEM.InterfApprox.XIint[:,1],marker='o',color='red',s=100, zorder=5)
-            for SEGMENT in ELEM.InterfApprox.Segments:
+            axs[0].scatter(ELEMENT.InterfApprox.XIint[:,0],ELEMENT.InterfApprox.XIint[:,1],marker='o',color='red',s=100, zorder=5)
+            for SEGMENT in ELEMENT.InterfApprox.Segments:
                 axs[0].scatter(SEGMENT.XIseg[:,0],SEGMENT.XIseg[:,1],marker='o',color='green',s=30, zorder=5)
         if NORMALS:
-            for SEGMENT in ELEM.InterfApprox.Segments:
+            for SEGMENT in ELEMENT.InterfApprox.Segments:
                 # PLOT NORMAL VECTORS
                 Xsegmean = np.mean(SEGMENT.Xseg, axis=0)
                 dl = 10
                 #axs[0].arrow(Xsegmean[0],Xsegmean[1],SEGMENT.NormalVec[0]/dl,SEGMENT.NormalVec[1]/dl,width=0.01)
         if QUADRATURE:
-            if ELEM.Dom == -1 or ELEM.Dom == 1 or ELEM.Dom == 3:
+            if ELEMENT.Dom == -1 or ELEMENT.Dom == 1 or ELEMENT.Dom == 3:
                 # PLOT QUADRATURE INTEGRATION POINTS
-                axs[0].scatter(ELEM.XIg[:,0],ELEM.XIg[:,1],marker='x',c='black')
-            elif ELEM.Dom == 2:
+                axs[0].scatter(ELEMENT.XIg[:,0],ELEMENT.XIg[:,1],marker='x',c='black')
+            elif ELEMENT.Dom == 2:
                 # PLOT QUADRATURE INTEGRATION POINTS
-                axs[0].scatter(ELEM.XIg[:,0],ELEM.XIg[:,1],marker='x',c='black', zorder=5)
+                axs[0].scatter(ELEMENT.XIg[:,0],ELEMENT.XIg[:,1],marker='x',c='black', zorder=5)
                 # PLOT INTERFACE INTEGRATION POINTS
-                for SEGMENT in ELEM.InterfApprox.Segments:
+                for SEGMENT in ELEMENT.InterfApprox.Segments:
                     axs[0].scatter(SEGMENT.XIg[:,0],SEGMENT.XIg[:,1],marker='x',color='grey',s=50, zorder = 5)
                         
                         
@@ -3835,40 +4084,107 @@ class GradShafranovSolver:
         axs[1].set_ylim(Ymin,Ymax)
         axs[1].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red',linewidths=2)
         # PLOT ELEMENT EDGES
-        for iedge in range(ELEM.numedges):
-            axs[1].plot([ELEM.Xe[iedge,0],ELEM.Xe[int((iedge+1)%ELEM.numedges),0]],[ELEM.Xe[iedge,1],ELEM.Xe[int((iedge+1)%ELEM.numedges),1]], color=color, linewidth=8)
-        for inode in range(ELEM.n):
-            if ELEM.LSe[inode] < 0:
+        for iedge in range(ELEMENT.numedges):
+            axs[1].plot([ELEMENT.Xe[iedge,0],ELEMENT.Xe[int((iedge+1)%ELEMENT.numedges),0]],[ELEMENT.Xe[iedge,1],ELEMENT.Xe[int((iedge+1)%ELEMENT.numedges),1]], color=color, linewidth=8)
+        for inode in range(ELEMENT.n):
+            if ELEMENT.LSe[inode] < 0:
                 cl = 'blue'
             else:
                 cl = 'red'
-            axs[1].scatter(ELEM.Xe[inode,0],ELEM.Xe[inode,1],s=120,color=cl,zorder=5)
-        if TESSELLATION and (ELEM.Dom == 0 or ELEM.Dom == 2):
-            for isub, SUBELEM in enumerate(ELEM.SubElements):
+            axs[1].scatter(ELEMENT.Xe[inode,0],ELEMENT.Xe[inode,1],s=120,color=cl,zorder=5)
+        if TESSELLATION and (ELEMENT.Dom == 0 or ELEMENT.Dom == 2):
+            for isub, SUBELEM in enumerate(ELEMENT.SubElements):
                 # PLOT SUBELEMENT EDGES
                 for i in range(SUBELEM.numedges):
                     axs[1].plot([SUBELEM.Xe[i,0], SUBELEM.Xe[(i+1)%SUBELEM.numedges,0]], [SUBELEM.Xe[i,1], SUBELEM.Xe[(i+1)%SUBELEM.numedges,1]], color=colorlist[isub], linewidth=3.5)
                 axs[1].scatter(SUBELEM.Xe[:,0],SUBELEM.Xe[:,1], marker='o', s=60, color=colorlist[isub], zorder=5)
         if BOUNDARY:
-            axs[1].scatter(ELEM.InterfApprox.Xint[:,0],ELEM.InterfApprox.Xint[:,1],marker='o',color='red',s=100, zorder=5)
-            for SEGMENT in ELEM.InterfApprox.Segments:
+            axs[1].scatter(ELEMENT.InterfApprox.Xint[:,0],ELEMENT.InterfApprox.Xint[:,1],marker='o',color='red',s=100, zorder=5)
+            for SEGMENT in ELEMENT.InterfApprox.Segments:
                 axs[1].scatter(SEGMENT.Xseg[:,0],SEGMENT.Xseg[:,1],marker='o',color='green',s=30, zorder=5)
         if NORMALS:
-            for SEGMENT in ELEM.InterfApprox.Segments:
+            for SEGMENT in ELEMENT.InterfApprox.Segments:
                 # PLOT NORMAL VECTORS
                 Xsegmean = np.mean(SEGMENT.Xseg, axis=0)
                 dl = 10
                 axs[1].arrow(Xsegmean[0],Xsegmean[1],SEGMENT.NormalVec[0]/dl,SEGMENT.NormalVec[1]/dl,width=0.01)
         if QUADRATURE:
-            if ELEM.Dom == -1 or ELEM.Dom == 1 or ELEM.Dom == 3:
+            if ELEMENT.Dom == -1 or ELEMENT.Dom == 1 or ELEMENT.Dom == 3:
                 # PLOT QUADRATURE INTEGRATION POINTS
-                axs[1].scatter(ELEM.Xg[:,0],ELEM.Xg[:,1],marker='x',c='black')
-            elif ELEM.Dom == 2:
+                axs[1].scatter(ELEMENT.Xg[:,0],ELEMENT.Xg[:,1],marker='x',c='black')
+            elif ELEMENT.Dom == 2:
                 # PLOT QUADRATURE INTEGRATION POINTS
-                axs[1].scatter(ELEM.Xg[:,0],ELEM.Xg[:,1],marker='x',c='black', zorder=5)
+                axs[1].scatter(ELEMENT.Xg[:,0],ELEMENT.Xg[:,1],marker='x',c='black', zorder=5)
                 # PLOT INTERFACE INTEGRATION POINTS
-                for SEGMENT in ELEM.InterfApprox.Segments:
+                for SEGMENT in ELEMENT.InterfApprox.Segments:
                     axs[1].scatter(SEGMENT.Xg[:,0],SEGMENT.Xg[:,1],marker='x',color='grey',s=50, zorder = 5)
                 
+        return
+    
+    
+    def InspectElement2(self):
+        
+        QUADRATURES = False
+
+        Nx = 40
+        Ny = 40
+        dx = 0.01
+        xgrid, ygrid = np.meshgrid(np.linspace(min(self.Xe[:,0])-dx,max(self.Xe[:,0])+dx,Nx),np.linspace(min(self.Xe[:,1])-dx,max(self.Xe[:,1])+dx,Ny),indexing='ij')
+        def parabolicLS(r,z):
+            return (r-6)**2+z**2-4
+        LS = parabolicLS(xgrid,ygrid)
+        LSint = np.zeros([Nx,Ny])
+        for i in range(Nx):
+            for j in range(Ny):
+                LSint[i,j] = self.ElementalInterpolationPHYSICAL([xgrid[i,j],ygrid[i,j]],self.LSe)
+
+        fig, axs = plt.subplots(1, 1, figsize=(6,6))
+        plt.xlim(min(self.Xe[:,0])-dx,max(self.Xe[:,0])+dx)
+        plt.ylim(min(self.Xe[:,1])-dx,max(self.Xe[:,1])+dx)
+        Xe = np.zeros([self.numedges+1,2])
+        Xe[:-1,:] = self.Xe[:self.numedges,:]
+        Xe[-1,:] = self.Xe[0,:]
+        plt.plot(Xe[:,0], Xe[:,1], color='black', linewidth=10)
+        for inode in range(self.n):
+            if self.LSe[inode] < 0:
+                cl = 'blue'
+            else:
+                cl = 'red'
+            plt.scatter(self.Xe[inode,0],self.Xe[inode,1],s=180,color=cl,zorder=5)
+        # PLOT PLASMA BOUNDARY
+        plt.contour(xgrid,ygrid,LS, levels=[0], colors='red',linewidths=6)
+        # PLOT TESSELLATION 
+        colorlist = ['#009E73','darkviolet','#D55E00','#CC79A7','#56B4E9']
+        #colorlist = ['orange','gold','grey','cyan']
+        for isub, SUBELEM in enumerate(self.SubElements):
+            # PLOT SUBELEMENT EDGES
+            for iedge in range(SUBELEM.numedges):
+                inode = iedge
+                jnode = int((iedge+1)%SUBELEM.numedges)
+                if iedge == self.interfedge[isub]:
+                    inodeHO = SUBELEM.numedges+(self.ElOrder-1)*inode
+                    xcoords = [SUBELEM.Xe[inode,0],SUBELEM.Xe[inodeHO:inodeHO+(self.ElOrder-1),0],SUBELEM.Xe[jnode,0]]
+                    xcoords = list(chain.from_iterable([x] if not isinstance(x, np.ndarray) else x for x in xcoords))
+                    ycoords = [SUBELEM.Xe[inode,1],SUBELEM.Xe[inodeHO:inodeHO+(self.ElOrder-1),1],SUBELEM.Xe[jnode,1]]
+                    ycoords = list(chain.from_iterable([y] if not isinstance(y, np.ndarray) else y for y in ycoords))
+                    plt.plot(xcoords,ycoords, color=colorlist[isub], linewidth=3)
+                else:
+                    plt.plot([SUBELEM.Xe[inode,0],SUBELEM.Xe[jnode,0]],[SUBELEM.Xe[inode,1],SUBELEM.Xe[jnode,1]], color=colorlist[isub], linewidth=3)
+            
+            plt.scatter(SUBELEM.Xe[:,0],SUBELEM.Xe[:,1], marker='o', s=60, color=colorlist[isub], zorder=5)
+            # PLOT SUBELEMENT QUADRATURE
+            if QUADRATURES:
+                plt.scatter(SUBELEM.Xg[:,0],SUBELEM.Xg[:,1], marker='x', s=60, color=colorlist[isub], zorder=5)
+        # PLOT LEVEL-SET INTERPOLATION
+        plt.contour(xgrid,ygrid,LSint,levels=[0],colors='lime')
+
+        # PLOT INTERFACE QUADRATURE
+        if QUADRATURES:
+            plt.scatter(self.InterfApprox.Xg[:,0],self.InterfApprox.Xg[:,1],s=80,marker='X',color='green',zorder=7)
+            dl = 100
+            for ig, vec in enumerate(self.InterfApprox.NormalVec):
+                plt.arrow(self.InterfApprox.Xg[ig,0],self.InterfApprox.Xg[ig,1],vec[0]/dl,vec[1]/dl,width=0.001)
+        plt.show()
+
         return
     

@@ -19,36 +19,32 @@
 # Research Group: Nuclear Fusion  
 
 
-# This script contains the definition for class SEGMENT
+# This script contains the definition for class InterfaceApprox, an object representing
+# the elemental approximation of an interface parametrised by a level-set function.
 
-class Segment:
+class InterfaceApprox:
     """
-    Class representing a segment element in a computational mesh, used for defining interface approximations
-    in a 1D space. Each segment has a set of properties and methods related to its geometry, integration
-    quadrature, and normal vector.
+    Class representing an interface approximation consisting of a collection of segments.
+    This class manages the properties and methods related to the interface, including its 
+    segmentation and nodal coordinates in both physical and reference space.
     """
     
-    def __init__(self,index,ElOrder,Tseg,Xseg,XIseg):
+    def __init__(self,index,n,Xint,XIint,Tint,ElIntNodes):
         """
-        Initializes the segment element with the given index, element order, and nodal coordinates.
-        
+        Initializes the interface approximation with the specified global index and number of segments.
+
         Input:
-        ------
-        index (int): Index of the segment element.
-        ElOrder (int): Element order (1 for linear, 2 for quadratic).
-        Xseg (numpy.ndarray): Matrix of nodal coordinates in physical space.
-        
+            - index (int): Global index of the element in the computational mesh.
+            - Nsegments (int): Number of segments conforming the interface approximation.
         """
         
-        self.index = index          # SEGMENT INDEX
-        self.ElType = 0             # ELEMENT TYPE = 0 ->> BAR ELEMENT
-        self.ElOrder = ElOrder      # ELEMENT ORDER -> 1: LINEAR ELEMENT  ;  2: QUADRATIC
-        self.dim = len(Xseg[0,:])   # SPATIAL DIMENSION
-        self.n = ElOrder+1          # NUMBER OF NODES ON SEGMENT (1D ELEMENT)
-        self.Tseg = Tseg            # CONECTIVITY MATRIX RESPECT TO ELEMENTAL LOCAL INDEXES
-        self.Xseg = Xseg            # ELEMENTAL NODAL COORDINATES MATRIX (PHYSICAL SPACE)
-        self.XIseg = XIseg          # ELEMENTAL NODAL COORDINATES MATRIX (REFERENCE SPACE) 
-        self.PSIgseg = None         # PSI VALUE ON SEGMENT GAUSS INTEGRATION NODES
+        self.index = index            # GLOBAL INDEX OF INTERFACE APPROXIMATION
+        self.n = n                    # NODES
+        self.Xint = Xint              # INTERFACE APPROXIMATION NODAL COORDINATES MATRIX (PHYSICAL SPACE)
+        self.XIint = XIint            # INTERFACE APPROXIMATION NODAL COORDINATES MATRIX (REFERENCE SPACE)
+        self.Tint = Tint              # INTERFACE APPROXIMATION SEGMENTS CONNECTIVITY 
+        self.ElIntNodes = ElIntNodes  # ELEMENTAL VERTICES INDEXES ON EDGES CUTING THE INTERFACE 
+        self.PSIg = None              # PSI VALUE ON SEGMENT GAUSS INTEGRATION NODES
         
         # QUADRATURE FOR INTEGRATION ALONG INTERFACE 
         self.ng = None              # NUMBER OF GAUSS INTEGRATION NODES 
@@ -59,10 +55,10 @@ class Segment:
         self.dNdxig = None          # REFERENCE SHAPE FUNCTIONS DERIVATIVES RESPECT TO XI EVALUATED AT GAUSS INTEGRATION NODES 
         self.dNdetag = None         # REFERENCE SHAPE FUNCTIONS DERIVATIVES RESPECT TO ETA EVALUATED AT GAUSS INTEGRATION NODES
         self.invJg = None
-        self.detJg = None
-        self.detJg1D = None           # MATRIX DETERMINANTS OF JACOBIAN OF TRANSFORMATION FROM 1D REFERENCE ELEMENT TO 2D PHYSICAL 
+        self.detJg = None           # MATRIX DETERMINANTS OF JACOBIAN OF TRANSFORMATION FROM 1D REFERENCE ELEMENT TO 2D PHYSICAL
+        self.detJg1D = None
         
         # NORMAL VECTOR (OUTWARDS RESPECT TO BOUNDARY)
-        self.NormalVec = None       # SEGMENT NORMAL VECTOR POINTING OUTWARDS (RESPECT TO INTERFACE)
+        self.NormalVec = None       # NORMAL VECTOR AT GAUSS INTEGRATION NODE (PHYSICAL SPACE)
+        self.NormalVec = None       # NORMAL VECTOR AT GAUSS INTEGRATION NODE (REFERENCE SPACE)
         return
-    
