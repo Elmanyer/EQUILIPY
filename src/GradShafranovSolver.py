@@ -954,6 +954,8 @@ class GradShafranovSolver:
         if self.FIXED_BOUNDARY:  
             if self.PLASMA_CURRENT == self.FAKE_CURRENT:
                 LS = self.ParabolicLS(X)
+            elif self.PLASMA_CURRENT == self.NONLINEAR_CURRENT:
+                LS = self.PSIAnalyticalSolution(X,self.LINEAR_CURRENT)
             else:
                 LS = (-1)*self.PSIAnalyticalSolution(X,self.ZHENG_CURRENT)
         else:    
@@ -2633,8 +2635,8 @@ class GradShafranovSolver:
                     np.savetxt(self.file_elemsys,RHSe,fmt='%e')
                 
                 # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
-                for i in range(len(SUBELEM.Te)):   # ROWS ELEMENTAL MATRIX
-                    for j in range(len(SUBELEM.Te)):   # COLUMNS ELEMENTAL MATRIX
+                for i in range(SUBELEM.n):   # ROWS ELEMENTAL MATRIX
+                    for j in range(SUBELEM.n):   # COLUMNS ELEMENTAL MATRIX
                         self.LHS[SUBELEM.Te[i],SUBELEM.Te[j]] += LHSe[i,j]
                     self.RHS[SUBELEM.Te[i]] += RHSe[i]
                 
@@ -3391,7 +3393,8 @@ class GradShafranovSolver:
             #######################################################
             
         print('SOLUTION CONVERGED')
-        self.PlotSolutionPSI()
+        if self.plotPSI:
+            self.PlotSolutionPSI()
         
         if self.FIXED_BOUNDARY and self.PLASMA_CURRENT != self.PROFILES_CURRENT:
             self.ErrorL2norm, self.RelErrorL2norm = self.ComputeL2errorPlasma()
@@ -3459,7 +3462,7 @@ class GradShafranovSolver:
         else:
             errorfield = self.PSIerror
         vmax = max(np.log(errorfield))
-        a = axs[3].tricontourf(self.X[:,0],self.X[:,1], np.log(errorfield), levels=30 , vmax=vmax,vmin=-16)
+        a = axs[3].tricontourf(self.X[:,0],self.X[:,1], np.log(errorfield), levels=30 , vmax=vmax,vmin=-20)
         plt.colorbar(a, ax=axs[3])
 
         plt.show()
