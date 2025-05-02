@@ -226,6 +226,10 @@ class GradShafranovSolver:
         
         self.ErrorL2norm = None
         self.RelErrorL2norm = None
+        self.ErrorL2normPlasmaBound = None
+        self.RelErrorL2normPlasmaBound = None 
+        self.ErrorL2normINT = None
+        self.RelErrorL2normINT = None
         return
     
     def print_all_attributes(self):
@@ -957,9 +961,11 @@ class GradShafranovSolver:
             elif self.PLASMA_CURRENT == self.NONLINEAR_CURRENT:
                 LS = self.PSIAnalyticalSolution(X,self.LINEAR_CURRENT)
             else:
-                LS = (-1)*self.PSIAnalyticalSolution(X,self.ZHENG_CURRENT)
+                LS = self.PSIAnalyticalSolution(X,self.LINEAR_CURRENT)
+                #LS = (-1)*self.PSIAnalyticalSolution(X,self.ZHENG_CURRENT)
         else:    
             LS = self.F4EPlasmaLS(X)
+            #LS = self.PSIAnalyticalSolution(X,self.ZHENG_CURRENT)
         return LS
     
     
@@ -1350,7 +1356,7 @@ class GradShafranovSolver:
         for ielem in self.PlasmaBoundElems:
             ELEMENT = self.Elements[ielem]
             for iedge, neighbour in enumerate(ELEMENT.neighbours):
-                if neighbour >= 0 and self.Elements[neighbour].Dom <= 0:
+                if neighbour >= 0:
                     # IDENTIFY THE CORRESPONDING FACE IN THE NEIGHBOUR ELEMENT
                     NEIGHBOUR = self.Elements[neighbour]
                     neighbour_edge = list(NEIGHBOUR.neighbours).index(ELEMENT.index)
@@ -1378,86 +1384,6 @@ class GradShafranovSolver:
             if type(ELEM1.GhostFaces) == type(None):  
                 ELEM1.GhostFaces = list()
             if type(ELEM2.GhostFaces) == type(None):  
-                ELEM2.GhostFaces = list()
-                
-            # ADD GHOST FACE TO ELEMENT 1
-            nodes1 = np.zeros([ELEM1.nedge],dtype=int)
-            nodes1[0] = iedge1
-            nodes1[1] = (iedge1+1)%ELEM1.numedges
-            for knode in range(ELEM1.ElOrder-1):
-                nodes1[2+knode] = ELEM1.numedges + iedge1*(ELEM1.ElOrder-1)+knode
-            ELEM1.GhostFaces.append(Segment(index = iedge1,
-                                            ElOrder = ELEM1.ElOrder,
-                                            Tseg = nodes1,
-                                            Xseg = ELEM1.Xe[nodes1,:],
-                                            XIseg = XIe[nodes1,:]))
-            
-            # ADD GHOST FACE TO ELEMENT 2
-            nodes2 = np.zeros([ELEM2.nedge],dtype=int)
-            nodes2[0] = iedge2
-            nodes2[1] = (iedge2+1)%ELEM2.numedges
-            for knode in range(ELEM2.ElOrder-1):
-                nodes2[2+knode] = ELEM2.numedges + iedge2*(ELEM2.ElOrder-1)+knode
-            ELEM2.GhostFaces.append(Segment(index = iedge2,
-                                            ElOrder = ELEM2.ElOrder,
-                                            Tseg = nodes2,
-                                            Xseg = ELEM2.Xe[nodes2,:],
-                                            XIseg = XIe[nodes2,:]))
-            
-            # CORRECT SECOND ADJACENT ELEMENT GHOST FACE TO MATCH NODES -> PERMUTATION
-            permutation = [list(ELEM2.Te[nodes2]).index(x) for x in ELEM1.Te[nodes1]]
-            ELEM2.GhostFaces[-1].Xseg = ELEM2.GhostFaces[-1].Xseg[permutation,:]
-            ELEM2.GhostFaces[-1].XIseg = ELEM2.GhostFaces[-1].XIseg[permutation,:]
-
-            GhostFaces.append((list(ELEM1.Te[nodes1]),(ielem1,iedge1,len(ELEM1.GhostFaces)-1),(ielem2,iedge2,len(ELEM2.GhostFaces)-1), permutation))
-            GhostElems.add(ielem1)
-            GhostElems.add(ielem2)
-            
-        return GhostFaces, list(GhostElems)
-    
-    
-    def IdentifyPlasmaBoundaryGhostFaces2(self):
-        """
-        Identifies the elemental ghost faces on which the ghost penalty term needs to be integrated, for elements containing the plasma
-        boundary.
-        """
-        
-        # RESET ELEMENTAL GHOST FACES
-        for ielem in np.concatenate((self.PlasmaBoundElems,self.PlasmaElems),axis=0):
-            self.Elements[ielem].GhostFaces = None
-            
-        GhostFaces_dict = dict()    # [(CUT_EDGE_NODAL_GLOBAL_INDEXES): {(ELEMENT_INDEX_1, EDGE_INDEX_1), (ELEMENT_INDEX_2, EDGE_INDEX_2)}]
-        
-        for ielem in self.PlasmaBoundElems:
-            ELEMENT = self.Elements[ielem]
-            for iedge, neighbour in enumerate(ELEMENT.neighbours):
-                # IDENTIFY THE CORRESPONDING FACE IN THE NEIGHBOUR ELEMENT
-                NEIGHBOUR = self.Elements[neighbour]
-                neighbour_edge = list(NEIGHBOUR.neighbours).index(ELEMENT.index)
-                # OBTAIN GLOBAL INDICES OF GHOST FACE NODES
-                nodes = np.zeros([ELEMENT.nedge],dtype=int)
-                nodes[0] = iedge
-                nodes[1] = (iedge+1)%ELEMENT.numedges
-                for knode in range(self.ElOrder-1):
-                    nodes[2+knode] = self.numedges + iedge*(self.ElOrder-1)+knode
-                if tuple(sorted(ELEMENT.Te[nodes])) not in GhostFaces_dict:
-                    GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))] = set()
-                GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))].add((ELEMENT.index,iedge))
-                GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))].add((neighbour,neighbour_edge))
-                    
-        XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
-        GhostFaces = list()
-        GhostElems = set()
-
-        for elems in GhostFaces_dict.values():
-            # ISOLATE ADJACENT ELEMENTS
-            (ielem1, iedge1), (ielem2,iedge2) = elems
-            ELEM1 = self.Elements[ielem1]
-            ELEM2 = self.Elements[ielem2]
-            # DECLARE NEW GHOST FACES ELEMENTAL ATTRIBUTE
-            if ELEM1.GhostFaces == None:  
-                ELEM1.GhostFaces = list()
-            if ELEM2.GhostFaces == None:  
                 ELEM2.GhostFaces = list()
                 
             # ADD GHOST FACE TO ELEMENT 1
@@ -2014,8 +1940,8 @@ class GradShafranovSolver:
         PSI0 = np.zeros([self.Nn])
         if self.PLASMA_CURRENT == self.PROFILES_CURRENT: 
             for i in range(self.Nn):
-                PSI0[i] = self.PSIAnalyticalSolution(self.X[i,:],self.LINEAR_CURRENT)*(-0.5)
-                #PSI0[i] = self.PSIAnalyticalSolution(self.X[i,:],self.ZHENG_CURRENT)*0.5
+                PSI0[i] = self.PSIAnalyticalSolution(self.X[i,:],self.LINEAR_CURRENT)*(-1)
+                #PSI0[i] = self.PSIAnalyticalSolution(self.X[i,:],self.ZHENG_CURRENT)
         else:     
             for i in range(self.Nn):
                 PSI0[i] = self.PSIAnalyticalSolution(self.X[i,:],self.PLASMA_CURRENT)*2*random()
@@ -2339,6 +2265,8 @@ class GradShafranovSolver:
                 ErrorL2norm += (PSIg[ig]-self.PSIAnalyticalSolution(ELEMENT.Xg[ig,:],self.PLASMA_CURRENT))**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                 PSIexactL2norm += self.PSIAnalyticalSolution(ELEMENT.Xg[ig,:],self.PLASMA_CURRENT)**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                     
+        ErrorL2normPlasmaBound = 0
+        PSIexactL2normPlasmaBound = 0
         # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
         for elem in self.PlasmaBoundElems:
             # ISOLATE ELEMENT
@@ -2353,8 +2281,10 @@ class GradShafranovSolver:
                     for ig in range(SUBELEM.ng):
                         ErrorL2norm += (PSIg[ig]-self.PSIAnalyticalSolution(SUBELEM.Xg[ig,:],self.PLASMA_CURRENT))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
                         PSIexactL2norm += self.PSIAnalyticalSolution(SUBELEM.Xg[ig,:],self.PLASMA_CURRENT)**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
+                        ErrorL2normPlasmaBound += (PSIg[ig]-self.PSIAnalyticalSolution(SUBELEM.Xg[ig,:],self.PLASMA_CURRENT))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
+                        PSIexactL2normPlasmaBound += self.PSIAnalyticalSolution(SUBELEM.Xg[ig,:],self.PLASMA_CURRENT)**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
         
-        return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm)
+        return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm), np.sqrt(ErrorL2normPlasmaBound), np.sqrt(ErrorL2normPlasmaBound/PSIexactL2normPlasmaBound)
     
     
     def ComputeL2error(self):
@@ -2380,6 +2310,26 @@ class GradShafranovSolver:
                 PSIexactL2norm += self.PSIAnalyticalSolution(ELEMENT.Xg[ig,:],self.PLASMA_CURRENT)**2 *ELEMENT.detJg[ig]*ELEMENT.Wg[ig]                  
         
         return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm)
+    
+    
+    def ComputeL2errorInterface(self):
+        
+        ErrorL2norm = 0
+        PSIexactL2norm = 0
+        # INTEGRATE OVER CUT ELEMENTS' INTERFACE 
+        for elem in self.PlasmaBoundElems:
+            # ISOLATE ELEMENTAL INTERFACE APPROXIMATION
+            INTAPPROX = self.Elements[elem].InterfApprox
+            # COMPUTE SOLUTION PSI VALUES ON INTERFACE
+            PSIg = INTAPPROX.Ng@self.Elements[elem].PSIe
+            # LOOP OVER GAUSS NODES
+            for ig in range(INTAPPROX.ng):
+                # COMPUTE L2 ERROR
+                ErrorL2norm += (PSIg[ig]-self.PSIAnalyticalSolution(INTAPPROX.Xg[ig,:],self.PLASMA_CURRENT))**2 *INTAPPROX.detJg1D[ig]*INTAPPROX.Wg[ig]
+                PSIexactL2norm += self.PSIAnalyticalSolution(INTAPPROX.Xg[ig,:],self.PLASMA_CURRENT)**2 *INTAPPROX.detJg1D[ig]*INTAPPROX.Wg[ig]
+                
+        return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm)
+    
     
     def ComputeL2errorInterfaceJump(self):
         
@@ -3397,7 +3347,8 @@ class GradShafranovSolver:
             self.PlotSolutionPSI()
         
         if self.FIXED_BOUNDARY and self.PLASMA_CURRENT != self.PROFILES_CURRENT:
-            self.ErrorL2norm, self.RelErrorL2norm = self.ComputeL2errorPlasma()
+            self.ErrorL2norm, self.RelErrorL2norm, self.ErrorL2normPlasmaBound, self.RelErrorL2normPlasmaBound = self.ComputeL2errorPlasma()
+            self.ErrorL2normINT, self.RelErrorL2normINT = self.ComputeL2errorInterface()
             self.InterfGradJumpErrorL2norm, self.JumpError, self.JumpRelError = self.ComputeL2errorInterfaceJump()
             self.writeerror()
         
@@ -3430,6 +3381,10 @@ class GradShafranovSolver:
             
         print('||PSIerror||_L2 = ', self.ErrorL2norm)
         print('relative ||PSIerror||_L2 = ', self.RelErrorL2norm)
+        print('plasma boundary subelements ||PSIerror||_L2 = ', self.ErrorL2normPlasmaBound)
+        print('plasma boundary subelements relative ||PSIerror||_L2 = ', self.RelErrorL2normPlasmaBound)
+        print('interface ||PSIerror||_L2 = ', self.ErrorL2normINT)
+        print('interface relative ||PSIerror||_L2 = ', self.RelErrorL2normINT)
         print('||PSIerror|| = ',np.linalg.norm(self.PSIerror))
         print('||PSIerror||/node = ',np.linalg.norm(self.PSIerror)/self.Nn)
         print('relative ||PSIerror|| = ',np.linalg.norm(self.PSIrelerror))
