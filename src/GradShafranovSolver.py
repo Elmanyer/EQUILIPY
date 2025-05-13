@@ -1337,7 +1337,7 @@ class GradShafranovSolver:
         """  
         nnodes = 0
         for ielem in self.PlasmaBoundElems:
-                nnodes += self.Elements[ielem].InterfApprox.ng
+            nnodes += self.Elements[ielem].InterfApprox.ng
         return nnodes
     
     
@@ -2284,7 +2284,10 @@ class GradShafranovSolver:
                         ErrorL2normPlasmaBound += (PSIg[ig]-self.PSIAnalyticalSolution(SUBELEM.Xg[ig,:],self.PLASMA_CURRENT))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
                         PSIexactL2normPlasmaBound += self.PSIAnalyticalSolution(SUBELEM.Xg[ig,:],self.PLASMA_CURRENT)**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
         
-        return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm), np.sqrt(ErrorL2normPlasmaBound), np.sqrt(ErrorL2normPlasmaBound/PSIexactL2normPlasmaBound)
+        if ErrorL2normPlasmaBound == 0:
+            return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm), 0,0
+        else:
+            return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm), np.sqrt(ErrorL2normPlasmaBound), np.sqrt(ErrorL2normPlasmaBound/PSIexactL2normPlasmaBound)
     
     
     def ComputeL2error(self):
@@ -2327,8 +2330,11 @@ class GradShafranovSolver:
                 # COMPUTE L2 ERROR
                 ErrorL2norm += (PSIg[ig]-self.PSIAnalyticalSolution(INTAPPROX.Xg[ig,:],self.PLASMA_CURRENT))**2 *INTAPPROX.detJg1D[ig]*INTAPPROX.Wg[ig]
                 PSIexactL2norm += self.PSIAnalyticalSolution(INTAPPROX.Xg[ig,:],self.PLASMA_CURRENT)**2 *INTAPPROX.detJg1D[ig]*INTAPPROX.Wg[ig]
-                
-        return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm)
+        
+        if ErrorL2norm == 0:        
+            return 0, 0
+        else:
+            return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm)
     
     
     def ComputeL2errorInterfaceJump(self):
@@ -2387,50 +2393,13 @@ class GradShafranovSolver:
             self.file_elemsys.write('GHOST_FACES\n')
             
         for ghostface in self.PlasmaBoundGhostFaces:
-            """
-            # ISOLATE COMMON CUT EDGE FROM ADJACENT ELEMENTS
-            Tface = ghostface[0]
-            FACE0 = self.Elements[ghostface[1][0]].GhostFaces[ghostface[1][2]]
-            FACE1 = self.Elements[ghostface[2][0]].GhostFaces[ghostface[2][2]]
-            # DEFINE ELEMENTAL MATRICES
-            LHSe = np.zeros([len(Tface),len(Tface)])
-            
-            # LOOP OVER GAUSS INTEGRATION NODES
-            for ig in range(FACE0.ng):  
-                # SHAPE FUNCTIONS GRADIENT IN PHYSICAL SPACE
-                Ngrad0 = FACE0.invJg[ig,:,:]@np.array([FACE0.dNdxig[ig,:],FACE0.dNdetag[ig,:]])
-                Ngrad1 = FACE1.invJg[ig,:,:]@np.array([FACE1.dNdxig[ig,:],FACE1.dNdetag[ig,:]])
-                # NORMAL VECTOR GRADIENTS
-                n_dot_Ngrad0 = FACE0.NormalVec@Ngrad0
-                n_dot_Ngrad1 = FACE1.NormalVec@Ngrad1
-                # R coordinate
-                R = FACE0.Xg[ig,0]
-                if self.PLASMA_CURRENT == self.LINEAR_CURRENT or self.PLASMA_CURRENT == self.NONLINEAR_CURRENT:   # DIMENSIONLESS SOLUTION CASE 
-                    n_dot_Ngrad0 *= self.R0
-                    n_dot_Ngrad1 *= self.R0
-                    R /= self.R0
-                # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM
-                for i in range(len(Tface)):  # ROWS ELEMENTAL MATRIX
-                    for j in range(len(Tface)):  # COLUMNS ELEMENTAL MATRIX
-                        # COMPUTE LHS MATRIX TERMS
-                        ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ]  
-                        LHSe[i,j] += self.zeta*(n_dot_Ngrad1[i]+n_dot_Ngrad0[i])*(n_dot_Ngrad1[j]+n_dot_Ngrad0[j]) * FACE0.detJg1D[ig] * FACE0.Wg[ig]
-                        ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
-                        LHSe[i,j] += self.zeta*(FACE0.Ng[ig,i]-FACE1.Ng[ig,i])*(FACE0.Ng[ig,j]-FACE1.Ng[ig,j]) * FACE0.detJg1D[ig] * FACE0.Wg[ig]  
-                                                               
-            # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
-            for i in range(len(Tface)):   # ROWS ELEMENTAL MATRIX
-                for j in range(len(Tface)):   # COLUMNS ELEMENTAL MATRIX
-                    self.LHS[Tface[i],Tface[j]] += LHSe[i,j]    
-            """
-                
             # ISOLATE ADJACENT ELEMENTS
             ELEMENT0 = self.Elements[ghostface[1][0]]
             ELEMENT1 = self.Elements[ghostface[2][0]]
             # ISOLATE COMMON EDGE 
             FACE0 = ELEMENT0.GhostFaces[ghostface[1][2]]
             FACE1 = ELEMENT1.GhostFaces[ghostface[2][2]]
-            # DEFINE ELEMENTAL MATRICES
+            # DEFINE ELEMENTAL MATRIX
             LHSe = np.zeros([ELEMENT0.n+ELEMENT1.n,ELEMENT0.n+ELEMENT1.n])
             
             # COMPUTE ADEQUATE GHOST PENALTY TERM
@@ -2439,53 +2408,27 @@ class GradShafranovSolver:
             
             # LOOP OVER GAUSS INTEGRATION NODES
             for ig in range(FACE0.ng):  
-                # SHAPE FUNCTIONS GRADIENT IN PHYSICAL SPACE
-                Ngrad0 = FACE0.invJg[ig,:,:]@np.array([FACE0.dNdxig[ig,:],FACE0.dNdetag[ig,:]])
-                Ngrad1 = FACE1.invJg[ig,:,:]@np.array([FACE1.dNdxig[ig,:],FACE1.dNdetag[ig,:]])
-                # NORMAL VECTOR GRADIENTS
-                n_dot_Ngrad0 = FACE0.NormalVec@Ngrad0
-                n_dot_Ngrad1 = FACE1.NormalVec@Ngrad1
-                # R coordinate
-                R = FACE0.Xg[ig,0]
+                # SHAPE FUNCTIONS NORMAL GRADIENT IN PHYSICAL SPACE
+                n_dot_Ngrad0 = FACE0.NormalVec@FACE0.invJg[ig,:,:]@np.array([FACE0.dNdxig[ig,:],FACE0.dNdetag[ig,:]])
+                n_dot_Ngrad1 = FACE1.NormalVec@FACE1.invJg[ig,:,:]@np.array([FACE1.dNdxig[ig,:],FACE1.dNdetag[ig,:]])
+                n_dot_Ngrad = np.concatenate((n_dot_Ngrad0,n_dot_Ngrad1), axis=0)
+                # DIMENSIONLESS CASE
                 if self.PLASMA_CURRENT == self.LINEAR_CURRENT or self.PLASMA_CURRENT == self.NONLINEAR_CURRENT:   # DIMENSIONLESS SOLUTION CASE 
-                    n_dot_Ngrad0 *= self.R0
-                    n_dot_Ngrad1 *= self.R0
-                    R /= self.R0
+                    n_dot_Ngrad *= self.R0
+                    
                 # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM    
-                for i in range(ELEMENT0.n):  # ROWS ELEMENTAL MATRIX
-                    for j in range(ELEMENT0.n):  # COLUMNS ELEMENTAL MATRIX
-                        # COMPUTE LHS MATRIX TERMS
+                for i in range(ELEMENT0.n+ELEMENT1.n):  # ROWS ELEMENTAL MATRIX
+                    for j in range(ELEMENT0.n+ELEMENT1.n):  # COLUMNS ELEMENTAL MATRIX
                         ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ]  
-                        LHSe[i,j] += penalty*n_dot_Ngrad0[i]*n_dot_Ngrad0[j] * FACE0.detJg1D[ig] * FACE0.Wg[ig]
+                        LHSe[i,j] += penalty*n_dot_Ngrad[i]*n_dot_Ngrad[j] * FACE0.detJg1D[ig] * FACE0.Wg[ig]
                         ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
                         #LHSe[i,j] += penalty*FACE0.Ng[ig,i]*FACE0.Ng[ig,j] * FACE0.detJg1D[ig] * FACE0.Wg[ig] 
-                    for j in range(ELEMENT1.n):
-                        ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ] 
-                        LHSe[i,ELEMENT0.n+j] += penalty*n_dot_Ngrad0[i]*n_dot_Ngrad1[j] * FACE0.detJg1D[ig] * FACE0.Wg[ig]
-                        ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
-                        #LHSe[i,ELEMENT0.n+j] -= penalty*FACE0.Ng[ig,i]*FACE1.Ng[ig,j] * FACE0.detJg1D[ig] * FACE0.Wg[ig] 
-                        
-                for i in range(ELEMENT1.n):  # ROWS ELEMENTAL MATRIX
-                    for j in range(ELEMENT1.n):  # COLUMNS ELEMENTAL MATRIX
-                        # COMPUTE LHS MATRIX TERMS
-                        ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ]  
-                        LHSe[ELEMENT0.n+i,ELEMENT0.n+j] += penalty*n_dot_Ngrad1[i]*n_dot_Ngrad1[j] * FACE1.detJg1D[ig] * FACE1.Wg[ig]
-                        ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
-                        #LHSe[ELEMENT0.n+i,ELEMENT0.n+j] += penalty*FACE1.Ng[ig,i]*FACE1.Ng[ig,j] * FACE1.detJg1D[ig] * FACE1.Wg[ig]
-                    for j in range(ELEMENT0.n):
-                        ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ] 
-                        LHSe[ELEMENT0.n+i,j] += penalty*n_dot_Ngrad1[i]*n_dot_Ngrad0[j] * FACE1.detJg1D[ig] * FACE1.Wg[ig]
-                        ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
-                        #LHSe[ELEMENT0.n+i,j] -= penalty*FACE1.Ng[ig,i]*FACE0.Ng[ig,j] * FACE1.detJg1D[ig] * FACE1.Wg[ig]
                                                      
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
-            for i in range(ELEMENT0.n):   # ROWS ELEMENTAL MATRIX
-                for j in range(ELEMENT0.n):   # COLUMNS ELEMENTAL MATRIX
-                    self.LHS[ELEMENT0.Te[i],ELEMENT0.Te[j]] += LHSe[i,j]  
-                    
-            for i in range(ELEMENT1.n):   # ROWS ELEMENTAL MATRIX
-                for j in range(ELEMENT1.n):   # COLUMNS ELEMENTAL MATRIX
-                    self.LHS[ELEMENT1.Te[i],ELEMENT1.Te[j]] += LHSe[ELEMENT0.n+i,ELEMENT0.n+j]   
+            Tghost = np.concatenate((ELEMENT0.Te,ELEMENT1.Te), axis=0)
+            for i in range(ELEMENT0.n+ELEMENT1.n):   # ROWS ELEMENTAL MATRIX
+                for j in range(ELEMENT0.n+ELEMENT1.n):   # COLUMNS ELEMENTAL MATRIX
+                    self.LHS[Tghost[i],Tghost[j]] += LHSe[i,j]     
                     
             if self.out_elemsys:
                 self.file_elemsys.write("ghost face {:d} common to elements {:d} {:d}\n".format(0,ELEMENT0.index,ELEMENT1.Dom))

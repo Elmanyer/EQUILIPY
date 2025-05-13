@@ -1364,10 +1364,8 @@ class Element:
     
         # LOOP OVER GAUSS INTEGRATION NODES
         for ig in range(self.InterfApprox.ng):  
-            # SHAPE FUNCTIONS GRADIENT IN PHYSICAL SPACE
-            Ngrad = self.InterfApprox.invJg[ig,:,:]@np.array([self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:]])
-            # NORMAL VECTOR GRADIENT
-            n_dot_Ngrad = self.InterfApprox.NormalVec[ig]@Ngrad
+            # SHAPE FUNCTIONS NORMAL GRADIENT IN PHYSICAL SPACE
+            n_dot_Ngrad = self.InterfApprox.NormalVec[ig]@self.InterfApprox.invJg[ig,:,:]@np.array([self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:]])
             # R cordinate
             R = self.InterfApprox.Xg[ig,0]
             if args:   # DIMENSIONLESS SOLUTION CASE  -->> args[0] = R0

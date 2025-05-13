@@ -60,5 +60,5 @@ class InterfaceApprox:
         
         # NORMAL VECTOR (OUTWARDS RESPECT TO BOUNDARY)
         self.NormalVec = None       # NORMAL VECTOR AT GAUSS INTEGRATION NODE (PHYSICAL SPACE)
-        self.NormalVec = None       # NORMAL VECTOR AT GAUSS INTEGRATION NODE (REFERENCE SPACE)
+        self.NormalVecREF = None 
         return
