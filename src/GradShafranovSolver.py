@@ -1166,12 +1166,53 @@ class GradShafranovSolver:
                 self.Elements[elem2].neighbours[edge2] = elem1
         return
     
-    def IdentifyVacuumVesselElements(self):
+    def IdentifyBoundaries(self):
         """
         Identifies elements on the vacuum vessel first wall. 
         """
-        # GLOBAL INDEXES OF ELEMENTS CONTAINING THE VACUUM VESSEL FIRST WALL
-        self.VacVessWallElems = np.unique(self.Tbound[:,-1]) 
+        # OBTAIN BOUNDARY NODES
+        self.BoundaryNodes = set()     # GLOBAL INDEXES OF NODES ON THE COMPUTATIONAL DOMAIN'S BOUNDARY
+        for i in range(self.nedge):
+            for node in self.Tbound[:,i]:
+                self.BoundaryNodes.add(node)
+        # CONVERT BOUNDARY NODES SET INTO ARRAY
+        self.BoundaryNodes = list(sorted(self.BoundaryNodes))
+        self.Nnbound = len(self.BoundaryNodes)
+        
+        # OBTAIN DOF NODES
+        self.DOFNodes =  [x for x in list(range(self.Nn)) if x not in set(self.BoundaryNodes)]
+        self.NnDOF = len(self.DOFNodes)
+        
+        # OBTAIN BOUNDARY ELEMENTS
+        self.BoundaryElems = np.unique(self.Tbound[:,-1]) 
+        
+        #### ASSIGN BOUNDARY CONNECTIVITIES
+        # BOUNDARY ELEMENTS
+        for ielem in self.BoundaryElems:
+            self.Elements[ielem].Teboun = list()
+        # LOOP OVER BOUNDARIES
+        for iboun, ibounelem in enumerate(self.Tbound[:,-1]):
+            # OBTAIN LOCAL INDEXES
+            Teboun = [index for index, global_index in enumerate(self.Elements[ibounelem].Te) 
+                      for bound_index in self.Tbound[iboun,:-1] if global_index == bound_index]
+            self.Elements[ibounelem].Teboun.append(Teboun)
+            
+        # ELEMENTS WHICH ARE NOT BOUNDARY ELEMENTS (NONE OF THEIR EDGES IS A BOUNDARY EDGE) BUT POSSES BOUNDARY NODES
+        for bounnode in self.BoundaryNodes:
+            bounconnec = np.where(self.T == bounnode)
+            for iboun, bounelem in enumerate(bounconnec[0]):
+                if type(self.Elements[bounelem].Teboun) == type(None):
+                    self.Elements[bounelem].Teboun = list()
+                    self.Elements[bounelem].Teboun.append([bounconnec[1][iboun]])
+                    
+        # LIST ALL ELEMENTS WITH BOUNDARY NODES
+        self.DirichletElems = list()
+        for ELEM in self.Elements:
+            if type(ELEM.Teboun) != type(None):
+                self.DirichletElems.append(ELEM.index)
+            
+        # VACUUM VESSEL WALL ELEMENTS (BY DEFAULT)
+        self.VacVessWallElems = self.BoundaryElems.copy()
         # ASSIGN ELEMENTAL DOMAIN FLAG
         for ielem in self.VacVessWallElems:
             self.Elements[ielem].Dom = 2  
@@ -1742,7 +1783,12 @@ class GradShafranovSolver:
     
     def UpdateVacuumVesselBoundaryValues(self):
         
+        PSI_Bextend = np.zeros([self.Nn])
+        for inode in range(self.Nnbound):
+            PSI_Bextend[self.BoundaryNodes[inode]] = self.PSI_B[inode,1]
         
+        for ielem in self.DirichletElems:
+            self.Elements[ielem].PSI_Be = PSI_Bextend[self.Elements[ielem].Te]
         
         return
     
@@ -1854,19 +1900,6 @@ class GradShafranovSolver:
         if self.PLASMA_CURRENT == self.PROFILES_CURRENT:
             # COMPUTE PRESSURE PROFILE FACTOR
             self.P0=self.B0*((self.kappa**2)+1)/(self.mu0*(self.R0**2)*self.q0*self.kappa)
-            
-        # OBTAIN BOUNDARY NODES
-        self.BoundaryNodes = set()     # GLOBAL INDEXES OF NODES ON THE COMPUTATIONAL DOMAIN'S BOUNDARY
-        for i in range(self.nedge):
-            for node in self.Tbound[:,i]:
-                self.BoundaryNodes.add(node)
-        # CONVERT BOUNDARY NODES SET INTO ARRAY
-        self.BoundaryNodes = list(sorted(self.BoundaryNodes))
-        self.Nnbound = len(self.BoundaryNodes)
-        
-        # OBTAIN DOF NODES
-        self.DOFNodes =  [x for x in list(range(self.Nn)) if x not in set(self.BoundaryNodes)]
-        self.NnDOF = len(self.DOFNodes)
         
         # OBTAIN COMPUTATIONAL MESH LIMITS
         self.Rmax = np.max(self.X[:,0])
@@ -1994,6 +2027,7 @@ class GradShafranovSolver:
         # ASSIGN PLASMA BOUNDARY VALUES
         self.PSI_X = 0   # INITIAL CONSTRAINT VALUE ON SEPARATRIX
         self.UpdatePlasmaBoundaryValues()
+        self.UpdateVacuumVesselBoundaryValues()
         print('Done!')    
         return
     
@@ -2024,7 +2058,7 @@ class GradShafranovSolver:
         # CLASSIFY ELEMENTS   
         print("     -> CLASSIFY ELEMENTS...", end="")
         self.IdentifyNearestNeighbors()
-        self.IdentifyVacuumVesselElements()
+        self.IdentifyBoundaries()
         self.ClassifyElements()
         print("Done!")
 
@@ -2401,6 +2435,7 @@ class GradShafranovSolver:
             FACE1 = ELEMENT1.GhostFaces[ghostface[2][2]]
             # DEFINE ELEMENTAL MATRIX
             LHSe = np.zeros([ELEMENT0.n+ELEMENT1.n,ELEMENT0.n+ELEMENT1.n])
+            RHSe = np.zeros([ELEMENT0.n+ELEMENT1.n])
             
             # COMPUTE ADEQUATE GHOST PENALTY TERM
             penalty = self.zeta*max(ELEMENT0.length,ELEMENT1.length)  #**(1-2*self.ElOrder)
@@ -2423,12 +2458,41 @@ class GradShafranovSolver:
                         LHSe[i,j] += penalty*n_dot_Ngrad[i]*n_dot_Ngrad[j] * FACE0.detJg1D[ig] * FACE0.Wg[ig]
                         ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
                         #LHSe[i,j] += penalty*FACE0.Ng[ig,i]*FACE0.Ng[ig,j] * FACE0.detJg1D[ig] * FACE0.Wg[ig] 
+                        
+            # PRESCRIBE BC
+            if not type(ELEMENT0.Teboun) == type(None) or not type(ELEMENT1.Teboun) == type(None):
+                if not type(ELEMENT0.Teboun) == type(None) and type(ELEMENT1.Teboun) == type(None):
+                    Tbounghost = ELEMENT0.Teboun[0].copy()
+                    PSI_Bghost = ELEMENT0.PSI_Be.copy()
+                elif type(ELEMENT0.Teboun) == type(None) and not type(ELEMENT1.Teboun) == type(None):
+                    Tbounghost = ELEMENT1.Teboun[0].copy()
+                    PSI_Bghost = ELEMENT1.PSI_Be.copy()
+                elif not type(ELEMENT0.Teboun) == type(None) and not type(ELEMENT1.Teboun) == type(None):
+                    Tbounghost = np.concatenate((ELEMENT0.Teboun[0],[ELEMENT0.n+index for index in ELEMENT1.Teboun[0]]), axis=0)
+                    PSI_Bghost = np.concatenate((ELEMENT0.PSI_Be, ELEMENT1.PSI_Be), axis=0)
+                
+                for ibounode in Tbounghost:
+                    adiag = LHSe[ibounode,ibounode]
+                    # PASS MATRIX COLUMN TO RIGHT-HAND-SIDE
+                    RHSe -= LHSe[:,ibounode]*PSI_Bghost[ibounode]
+                    # NULLIFY BOUNDARY NODE ROW
+                    LHSe[ibounode,:] = 0
+                    # NULLIFY BOUNDARY NODE COLUMN
+                    LHSe[:,ibounode] = 0
+                    # PRESCRIBE BOUNDARY CONDITION ON BOUNDARY NODE
+                    if abs(adiag) > 0:
+                        LHSe[ibounode,ibounode] = adiag
+                        RHSe[ibounode] = adiag*PSI_Bghost[ibounode]
+                    else:
+                        LHSe[ibounode,ibounode] = 1
+                        RHSe[ibounode] = PSI_Bghost[ibounode]
                                                      
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
             Tghost = np.concatenate((ELEMENT0.Te,ELEMENT1.Te), axis=0)
             for i in range(ELEMENT0.n+ELEMENT1.n):   # ROWS ELEMENTAL MATRIX
                 for j in range(ELEMENT0.n+ELEMENT1.n):   # COLUMNS ELEMENTAL MATRIX
                     self.LHS[Tghost[i],Tghost[j]] += LHSe[i,j]     
+                self.RHS[Tghost[i]] += RHSe[i]
                     
             if self.out_elemsys:
                 self.file_elemsys.write("ghost face {:d} common to elements {:d} {:d}\n".format(0,ELEMENT0.index,ELEMENT1.Dom))
@@ -2475,6 +2539,10 @@ class GradShafranovSolver:
                 LHSe, RHSe = ELEMENT.IntegrateElementalDomainTerms(SourceTermg,self.R0)
             else:
                 LHSe, RHSe = ELEMENT.IntegrateElementalDomainTerms(SourceTermg)
+                
+            # PRESCRIBE BC:
+            if not type(ELEMENT.Teboun) == type(None):
+                LHSe, RHSe = ELEMENT.PrescribeDirichletBC(LHSe,RHSe)
             
             if self.out_elemsys:
                 self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index,ELEMENT.Dom))
@@ -2519,6 +2587,10 @@ class GradShafranovSolver:
                     LHSe, RHSe = SUBELEM.IntegrateElementalDomainTerms(SourceTermg,self.R0)
                 else:
                     LHSe, RHSe = SUBELEM.IntegrateElementalDomainTerms(SourceTermg)
+                    
+                # PRESCRIBE BC:
+                if not type(ELEMENT.Teboun) == type(None):
+                    LHSe, RHSe = ELEMENT.PrescribeDirichletBC(LHSe,RHSe)
                 
                 if self.out_elemsys:
                     self.file_elemsys.write("elem {:d} {:d} subelem {:d} {:d}\n".format(ELEMENT.index,ELEMENT.Dom,SUBELEM.index,SUBELEM.Dom))
@@ -2550,6 +2622,10 @@ class GradShafranovSolver:
                 LHSe,RHSe = ELEMENT.IntegrateElementalInterfaceTerms(self.beta,self.R0)
             else: 
                 LHSe,RHSe = ELEMENT.IntegrateElementalInterfaceTerms(self.beta)
+                
+            # PRESCRIBE BC:
+            if not type(ELEMENT.Teboun) == type(None):
+                LHSe, RHSe = ELEMENT.PrescribeDirichletBC(LHSe,RHSe)
                 
             if self.out_elemsys:
                 self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index,ELEMENT.Dom))
@@ -2605,7 +2681,19 @@ class GradShafranovSolver:
         return 
     
     
-    def SolveSystem(self):
+    def ImposeStrongBC_2(self):
+        
+        for inode, node in enumerate(self.BoundaryNodes):
+            self.RHS -= self.PSI_B[inode,0]*self.LHS[:,node]
+            self.LHS[:,node] = np.zeros([self.Nn])
+            self.LHS[node,:] = np.zeros([self.Nn])
+            self.LHS[node,node] = 1
+            self.RHS[node] = self.PSI_B[inode,0]
+        
+        return
+    
+    
+    def SolveSystemRed(self):
         """
         Solves the reduced linear system of equations to obtain the solution PSI at iteration N+1.
         """
@@ -2619,6 +2707,10 @@ class GradShafranovSolver:
         for inode, node in enumerate(self.BoundaryNodes):
             self.PSI[node] = self.PSI_B[inode,0]
         
+        return
+    
+    def SolveSystem(self):
+        self.PSI = spsolve(self.LHS.tocsr(), self.RHS).reshape([self.Nn,1])
         return
     
     
@@ -3251,11 +3343,13 @@ class GradShafranovSolver:
                     
                 # INNER LOOP ALGORITHM: SOLVING GRAD-SHAFRANOV BVP WITH CutFEM
                 self.AssembleGlobalSystem()                 # 0. ASSEMBLE CUTFEM SYSTEM
-                self.ImposeStrongBC()
-                self.SolveSystem()                          # 1. SOLVE CutFEM SYSTEM  ->> PSI
+                #self.ImposeStrongBC()
+                #self.ImposeStrongBC_2()
+                #self.SolveSystemRed()                      # 1. SOLVE CutFEM SYSTEM  ->> PSI
+                self.SolveSystem()
                 if not self.FIXED_BOUNDARY:
-                    self.ComputeCriticalPSI(self.PSI)           # 2. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
-                    self.writePSIcrit()                         #    WRITE CRITICAL POINTS
+                    self.ComputeCriticalPSI(self.PSI)       # 2. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
+                    self.writePSIcrit()                     #    WRITE CRITICAL POINTS
                 self.NormalisePSI()                         # 3. NORMALISE PSI RESPECT TO CRITICAL VALUES  ->> PSI_NORM 
                 self.writePSI()                             #    WRITE SOLUTION             
                 if self.plotPSI:
@@ -3274,6 +3368,7 @@ class GradShafranovSolver:
             self.ComputeTotalPlasmaCurrentNormalization()
             print('COMPUTE VACUUM VESSEL FIRST WALL VALUES PSI_B...', end="")
             self.PSI_B[:,1] = self.ComputeBoundaryPSI()     # COMPUTE VACUUM VESSEL FIRST WALL VALUES PSI_B WITH INTERNALLY CONVERGED PSI_NORM
+            self.UpdateVacuumVesselBoundaryValues()
             self.writePSI_B()
             print('Done!')
             

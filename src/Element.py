@@ -74,8 +74,10 @@ class Element:
         self.Te = Te                                                    # ELEMENTAL CONNECTIVITIES
         self.LSe = PlasmaLSe                                            # ELEMENTAL NODAL PLASMA REGION LEVEL-SET VALUES
         self.PSIe = np.zeros([self.n])                                  # ELEMENTAL NODAL PSI VALUES
+        self.PSI_Be = np.zeros([self.n]) 
         self.Dom = None                                                 # DOMAIN WHERE THE ELEMENT LIES (-1: "PLASMA"; 0: "PLASMA INTERFACE"; +1: "VACUUM" ; +2: FIRST WALL ; +3: "EXTERIOR")
         self.neighbours = None                                          # GLOBAL INDEXES OF NEAREST NEIGHBOURS ELEMENTS CORRESPONDING TO EACH ELEMENTAL FACE (LOCAL INDEX ORDERING FOR FACES)
+        self.Teboun = None
         
         # INTEGRATION QUADRATURES ENTITIES
         self.ng = None              # NUMBER OF GAUSS INTEGRATION NODES IN STANDARD 2D GAUSS QUADRATURE
@@ -1334,6 +1336,26 @@ class Element:
                 RHSe[i] += (1/R)*SourceTermg[ig] * self.Ng[ig,i] *self.detJg[ig]*self.Wg[ig]
                 
         return LHSe, RHSe
+    
+    
+    def PrescribeDirichletBC(self,elmat,elrhs):
+        for Teboun in self.Teboun:
+            for ibounode in Teboun:
+                adiag = elmat[ibounode,ibounode]
+                # PASS MATRIX COLUMN TO RIGHT-HAND-SIDE
+                elrhs -= elmat[:,ibounode]*self.PSI_Be[ibounode]
+                # NULLIFY BOUNDARY NODE ROW
+                elmat[ibounode,:] = 0
+                # NULLIFY BOUNDARY NODE COLUMN
+                elmat[:,ibounode] = 0
+                # PRESCRIBE BOUNDARY CONDITION ON BOUNDARY NODE
+                if abs(adiag) > 0:
+                    elmat[ibounode,ibounode] = adiag
+                    elrhs[ibounode] = adiag*self.PSI_Be[ibounode]
+                else:
+                    elmat[ibounode,ibounode] = 1
+                    elrhs[ibounode] = self.PSI_Be[ibounode]
+        return elmat, elrhs
     
     
     def IntegrateElementalInterfaceTerms(self,beta,*args):
