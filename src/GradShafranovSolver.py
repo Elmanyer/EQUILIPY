@@ -152,7 +152,8 @@ class GradShafranovSolver:
         self.Xcrit = None                   # COORDINATES MATRIX FOR CRITICAL PSI POINTS
         self.PSI_0 = None                   # PSI VALUE AT MAGNETIC AXIS MINIMA
         self.PSI_X = None                   # PSI VALUE AT SADDLE POINT (PLASMA SEPARATRIX)
-        self.PSI_NORM = None                # NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
+        self.PSI_NORMstar = None            # UNRELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
+        self.PSI_NORM = None                # RELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
         self.PSI_B = None                   # VACUUM VESSEL WALL PSI VALUES (EXTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
         self.PSI_CONV = None                # CONVERGED NORMALISED PSI SOLUTION FIELD 
         self.residu_INT = None              # INTERNAL LOOP RESIDU
@@ -1098,12 +1099,24 @@ class GradShafranovSolver:
         """
         if not self.FIXED_BOUNDARY or self.PlasmaCurrent.CURRENT_MODEL == self.PlasmaCurrent.PROFILES_CURRENT:
             for i in range(self.Nn):
-                self.PSI_NORM[i,1] = (self.PSI[i]-self.PSI_X)/np.abs(self.PSI_0-self.PSI_X)
+                self.PSI_NORMstar[i,1] = (self.PSI[i]-self.PSI_X)/np.abs(self.PSI_0-self.PSI_X)
                 #self.PSI_NORM[i,1] = (self.PSI_X-self.PSI[i])/(self.PSI_X-self.PSI_0)
         else: 
             for i in range(self.Nn):
-                self.PSI_NORM[i,1] = self.PSI[i]
+                self.PSI_NORMstar[i,1] = self.PSI[i]
         return 
+    
+    
+    def AitkenRelaxation(self):
+        
+        residual1 = self.PSI_NORMstar[:,1] - self.PSI_NORM[:,1]
+        
+        if self.it > 1: 
+            residual0 = self.PSI_NORMstar[:,0] - self.PSI_NORM[:,0]
+            self.alpha = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
+        
+        self.PSI_NORM[:,1] = self.PSI_NORM[:,0] + self.alpha*residual1
+        return
     
     
     def ComputeTotalPlasmaCurrent(self):
@@ -1221,6 +1234,7 @@ class GradShafranovSolver:
                 - 'PSI_B'    : Updates the boundary PSI values, or stores the converged values if external convergence is reached.
         """
         if VALUES == 'PSI_NORM':
+            self.PSI_NORMstar[:,0] = self.PSI_NORMstar[:,1]
             self.PSI_NORM[:,0] = self.PSI_NORM[:,1]
             self.Xcrit[0,:,:] = self.Xcrit[1,:,:]
         
@@ -1438,7 +1452,8 @@ class GradShafranovSolver:
         print('         -> INITIALISE PSI ARRAYS...', end="")
         # INITIALISE ITERATIVE UPDATED ARRAYS
         self.PSI = np.zeros([self.Nn],dtype=float)            # SOLUTION FROM SOLVING CutFEM SYSTEM OF EQUATIONS (INTERNAL LOOP)       
-        self.PSI_NORM = np.zeros([self.Nn,2],dtype=float)     # NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)
+        self.PSI_NORMstar = np.zeros([self.Nn,2],dtype=float) # UNRELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)
+        self.PSI_NORM = np.zeros([self.Nn,2],dtype=float)     # RELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)
         self.PSI_B = np.zeros([self.Nnbound,2],dtype=float)   # VACUUM VESSEL FIRST WALL PSI VALUES (EXTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)    
         self.PSI_CONV = np.zeros([self.Nn],dtype=float)       # CONVERGED SOLUTION FIELD
         print('Done!')
@@ -2739,14 +2754,12 @@ class GradShafranovSolver:
                     
                 # INNER LOOP ALGORITHM: SOLVING GRAD-SHAFRANOV BVP WITH CutFEM
                 self.AssembleGlobalSystem()                 # 0. ASSEMBLE CUTFEM SYSTEM
-                #self.ImposeStrongBC()
-                #self.ImposeStrongBC_2()
-                #self.SolveSystemRed()                      # 1. SOLVE CutFEM SYSTEM  ->> PSI
-                self.SolveSystem()
+                self.SolveSystem()                          # 1. SOLVE CutFEM SYSTEM  ->> PSI
                 if not self.FIXED_BOUNDARY:
                     self.ComputeCriticalPSI(self.PSI)       # 2. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
                     self.writePSIcrit()                     #    WRITE CRITICAL POINTS
                 self.NormalisePSI()                         # 3. NORMALISE PSI RESPECT TO CRITICAL VALUES  ->> PSI_NORM 
+                self.AitkenRelaxation()
                 self.writePSI()                             #    WRITE SOLUTION             
                 if self.plotPSI:
                     self.PlotSolutionPSI()                  #    PLOT SOLUTION AND NORMALISED SOLUTION
