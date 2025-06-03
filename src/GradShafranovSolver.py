@@ -42,6 +42,7 @@ from PlasmaCurrent import *
 class GradShafranovSolver:
     
     mu0 = 12.566370E-7           # H m-1    Magnetic permeability
+    dzoom = 0.1
 
     def __init__(self,MESH):
         # WORKING DIRECTORY
@@ -418,6 +419,20 @@ class GradShafranovSolver:
                     nextbounelem = bounnode[0][0]
                 self.BoundaryVertices[iboun+1] = self.Tbound[nextbounelem,np.where(self.Tbound[nextbounelem,:2] != self.BoundaryVertices[iboun])[0]]
         return
+    
+    
+    def ComputeMeshElementsMeanSize(self):
+        
+        # COMPUTE MEAN AREA OF ELEMENT
+        meanArea = 0
+        meanLength = 0
+        for ELEMENT in self.Elements:
+            meanArea += ELEMENT.area
+            meanLength += ELEMENT.length
+        meanArea /= self.Ne
+        meanLength /= self.Ne
+        
+        return meanArea, meanLength
     
     
     ##################################################################################################
@@ -1261,42 +1276,72 @@ class GradShafranovSolver:
         return
     
     
-    ##################################################################################################
-    ############################### OPERATIONS OVER GROUPS ###########################################
-    ##################################################################################################
-    
-    @staticmethod
-    def compute_triangle_area(Xe):
-        x1, y1 = Xe[0,:]
-        x2, y2 = Xe[1,:]
-        x3, y3 = Xe[2,:]
-        # Calculate the area using the determinant formula
-        area = 0.5 * np.abs(x1*(y2 - y3) + x2*(y3 - y1) + x3*(y1 - y2))
-        return area
-
-    @staticmethod
-    def compute_quadrilateral_area(Xe):
-        # Split the quadrilateral into two triangles
-        triangle1 = Xe[:3,:]
-        triangle2 = np.concatenate((Xe[2:,:], np.reshape(Xe[0,:],(1,2))), axis=0)
-        # Compute the area of the two triangles and sum them
-        area = compute_triangle_area(triangle1) + compute_triangle_area(triangle2)
-        return area     
-    
-    def ComputeMeshElementsMeanSize(self):
+    def UpdatePlasmaRegion(self):
+        """
+        If necessary, the level-set function is updated according to the new normalised solution's 0-level contour.
+        If the new saddle point is close enough to the old one, the function exits early, assuming the plasma region is already well-defined.
         
-        # COMPUTE MEAN AREA OF ELEMENT
-        meanArea = 0
-        meanLength = 0
-        for ELEMENT in self.Elements:
-            meanArea += ELEMENT.area
-            meanLength += ELEMENT.length
-        meanArea /= self.Ne
-        meanLength /= self.Ne
-        
-        return meanArea, meanLength
+        On the contrary, it updates the following:
+            1. Plasma boundary level-set function values.
+            2. Plasma region classification.
+            3. Plasma boundary approximation and normal vectors.
+            4. Numerical integration quadratures for the plasma and vacuum elements.
+            5. Updates nodes on the plasma boundary approximation.
+        """
+                
+        if not self.FIXED_BOUNDARY:
+            # IN CASE WHERE THE NEW SADDLE POINT (N+1) CORRESPONDS (CLOSE TO) TO THE OLD SADDLE POINT, THEN THAT MEANS THAT THE PLASMA REGION
+            # IS ALREADY WELL DEFINED BY THE OLD LEVEL-SET 
+            
+            if np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]) < 0.5:
+                return
+            
+            else:
+                ###### UPDATE PLASMA REGION LEVEL-SET FUNCTION VALUES ACCORDING TO SOLUTION OBTAINED
+                # . RECALL THAT PLASMA REGION IS DEFINED BY NEGATIVE VALUES OF LEVEL-SET -> NEED TO INVERT SIGN
+                # . CLOSED GEOMETRY DEFINED BY 0-LEVEL CONTOUR BENEATH ACTIVE SADDLE POINT (DIVERTOR REGION) NEEDS TO BE
+                #   DISCARTED BECAUSE THE LEVEL-SET DESCRIBES ONLY THE PLASMA REGION GEOMETRY -> NEED TO POST-PROCESS CUTFEM
+                #   SOLUTION IN ORDER TO TAKE ITS 0-LEVEL CONTOUR ENCLOSING ONLY THE PLASMA REGION.  
+                
+                self.PlasmaLS = self.ComputePSILevelSet(self.PSI_NORM[:,1])
+                
+                ###### RECOMPUTE ALL PLASMA BOUNDARY ELEMENTS ATTRIBUTES
+                # UPDATE PLASMA REGION LEVEL-SET ELEMENTAL VALUES     
+                self.UpdateElementalPlasmaLevSet()
+                # CLASSIFY ELEMENTS ACCORDING TO NEW LEVEL-SET
+                self.ClassifyElements()
+                # RECOMPUTE PLASMA BOUNDARY APPROXIMATION and NORMAL VECTORS
+                self.ComputePlasmaBoundaryApproximation()
+                # REIDENTIFY PLASMA BOUNDARY GHOST FACES
+                if self.GhostStabilization:
+                    self.ComputePlasmaBoundaryGhostFaces()
+                
+                ###### RECOMPUTE NUMERICAL INTEGRATION QUADRATURES
+                # COMPUTE STANDARD QUADRATURE ENTITIES FOR NON-CUT ELEMENTS
+                for ielem in np.concatenate((self.PlasmaElems, self.VacuumElems), axis = 0):
+                    self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
+                # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
+                for ielem in self.PlasmaBoundElems:
+                    self.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
+                # CHECK NORMAL VECTORS
+                self.CheckPlasmaBoundaryApproximationNormalVectors()
+                # COMPUTE PLASMA BOUNDARY GHOST FACES QUADRATURES
+                if self.GhostStabilization:
+                    for ielem in self.PlasmaBoundGhostElems: 
+                        self.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
+                    
+                # RECOMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION 
+                self.NnPB = self.ComputePlasmaBoundaryNumberNodes()
+                
+                # WRITE NEW PLASMA REGION DATA
+                self.writePlasmaBoundaryData()
+                    
+                return
     
-    ##################### INITIALISATION 
+    
+    ##################################################################################################
+    ####################################### INITIALISATION ###########################################
+    ##################################################################################################
     
     def InitialiseParameters(self):
         
@@ -1483,8 +1528,10 @@ class GradShafranovSolver:
         
         return  
         
-    
-    ##################### PLASMA BOUNDARY APPROXIMATION #########################
+        
+    ##################################################################################################
+    ############################### PLASMA BOUNDARY APPROXIMATION ####################################
+    ##################################################################################################
     
     def ComputePlasmaBoundaryApproximation(self):
         """ 
@@ -1549,7 +1596,9 @@ class GradShafranovSolver:
         return
 
     
-    ##################### COMPUTE NUMERICAL INTEGRATION QUADRATURES FOR EACH ELEMENT GROUP 
+    ##################################################################################################
+    ############################# NUMERICAL INTEGRATION QUADRATURES ##################################
+    ##################################################################################################
     
     def ComputeIntegrationQuadratures(self):
         """
@@ -1603,73 +1652,10 @@ class GradShafranovSolver:
             for ielem, ELEMENT in enumerate(self.Elements):
                 self.Xg[ielem*self.nge:(ielem+1)*self.nge,:] = ELEMENT.Xg
         return
-    
-    
-    #################### UPDATE EMBEDED METHOD ##############################
-    
-    def UpdatePlasmaRegion(self):
-        """
-        If necessary, the level-set function is updated according to the new normalised solution's 0-level contour.
-        If the new saddle point is close enough to the old one, the function exits early, assuming the plasma region is already well-defined.
-        
-        On the contrary, it updates the following:
-            1. Plasma boundary level-set function values.
-            2. Plasma region classification.
-            3. Plasma boundary approximation and normal vectors.
-            4. Numerical integration quadratures for the plasma and vacuum elements.
-            5. Updates nodes on the plasma boundary approximation.
-        """
-                
-        if not self.FIXED_BOUNDARY:
-            # IN CASE WHERE THE NEW SADDLE POINT (N+1) CORRESPONDS (CLOSE TO) TO THE OLD SADDLE POINT, THEN THAT MEANS THAT THE PLASMA REGION
-            # IS ALREADY WELL DEFINED BY THE OLD LEVEL-SET 
             
-            if np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]) < 0.5:
-                return
-            
-            else:
-                ###### UPDATE PLASMA REGION LEVEL-SET FUNCTION VALUES ACCORDING TO SOLUTION OBTAINED
-                # . RECALL THAT PLASMA REGION IS DEFINED BY NEGATIVE VALUES OF LEVEL-SET -> NEED TO INVERT SIGN
-                # . CLOSED GEOMETRY DEFINED BY 0-LEVEL CONTOUR BENEATH ACTIVE SADDLE POINT (DIVERTOR REGION) NEEDS TO BE
-                #   DISCARTED BECAUSE THE LEVEL-SET DESCRIBES ONLY THE PLASMA REGION GEOMETRY -> NEED TO POST-PROCESS CUTFEM
-                #   SOLUTION IN ORDER TO TAKE ITS 0-LEVEL CONTOUR ENCLOSING ONLY THE PLASMA REGION.  
-                
-                self.PlasmaLS = self.ComputePSILevelSet(self.PSI_NORM[:,1])
-                
-                ###### RECOMPUTE ALL PLASMA BOUNDARY ELEMENTS ATTRIBUTES
-                # UPDATE PLASMA REGION LEVEL-SET ELEMENTAL VALUES     
-                self.UpdateElementalPlasmaLevSet()
-                # CLASSIFY ELEMENTS ACCORDING TO NEW LEVEL-SET
-                self.ClassifyElements()
-                # RECOMPUTE PLASMA BOUNDARY APPROXIMATION and NORMAL VECTORS
-                self.ComputePlasmaBoundaryApproximation()
-                # REIDENTIFY PLASMA BOUNDARY GHOST FACES
-                if self.GhostStabilization:
-                    self.ComputePlasmaBoundaryGhostFaces()
-                
-                ###### RECOMPUTE NUMERICAL INTEGRATION QUADRATURES
-                # COMPUTE STANDARD QUADRATURE ENTITIES FOR NON-CUT ELEMENTS
-                for ielem in np.concatenate((self.PlasmaElems, self.VacuumElems), axis = 0):
-                    self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
-                # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
-                for ielem in self.PlasmaBoundElems:
-                    self.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
-                # CHECK NORMAL VECTORS
-                self.CheckPlasmaBoundaryApproximationNormalVectors()
-                # COMPUTE PLASMA BOUNDARY GHOST FACES QUADRATURES
-                if self.GhostStabilization:
-                    for ielem in self.PlasmaBoundGhostElems: 
-                        self.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
-                    
-                # RECOMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION 
-                self.NnPB = self.ComputePlasmaBoundaryNumberNodes()
-                
-                # WRITE NEW PLASMA REGION DATA
-                self.writePlasmaBoundaryData()
-                    
-                return
-            
-    #################### L2 ERROR COMPUTATION ############################
+    ##################################################################################################
+    ###################################### ERROR ASSESSEMENT #########################################
+    ##################################################################################################
     
     def ComputeL2errorPlasma(self):
         """
@@ -2804,19 +2790,53 @@ class GradShafranovSolver:
         self.writeSimulationPickle()
         return
     
+    
+    
+    
+    
+    
+    
     ##################################################################################################
     ############################### RENDERING AND REPRESENTATION #####################################
     ##################################################################################################
     
+    def PlotPSI(self):
+        fig, ax = plt.subplots(1, 1, figsize=(5,6))
+        ax.set_aspect('equal')
+        ax.set_xlim(self.Rmin-self.dzoom,self.Rmax+self.dzoom)
+        ax.set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
+        contourf = ax.tricontourf(self.X[:,0],self.X[:,1], self.PSI[:,0], levels=30)
+        contour1 = ax.tricontour(self.X[:,0],self.X[:,1], self.PSI[:,0], levels=[0], colors = 'black')
+        contour2 = ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
+        
+        # Mask solution outside computational domain's boundary 
+        compboundary = np.zeros([len(self.BoundaryVertices)+1,2])
+        compboundary[:-1,:] = self.X[self.BoundaryVertices,:]
+        # Close path
+        compboundary[-1,:] = compboundary[0,:]
+        clip_path = Path(compboundary)
+        patch = PathPatch(clip_path, transform=ax.transData)
+        for cont in [contourf,contour1,contour2]:
+            for coll in cont.collections:
+                coll.set_clip_path(patch)
+        # Plot computational domain's boundary
+        for iboun in range(self.Nbound):
+            ax.plot(self.X[self.Tbound[iboun,:2],0],self.X[self.Tbound[iboun,:2],1],linewidth = 3, color = 'grey')
+                
+        plt.colorbar(contourf, ax=ax)
+        plt.show()
+        return
+    
+    
     def PlotFIELD(self,FIELD,plotnodes):
         
-        fig, axs = plt.subplots(1, 1, figsize=(5,5))
-        axs.set_xlim(self.Rmin,self.Rmax)
-        axs.set_ylim(self.Zmin,self.Zmax)
-        a = axs.tricontourf(self.X[plotnodes,0],self.X[plotnodes,1], FIELD[plotnodes], levels=30)
-        axs.tricontour(self.X[plotnodes,0],self.X[plotnodes,1], FIELD[plotnodes], levels=[0], colors = 'black')
-        axs.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
-        plt.colorbar(a, ax=axs)
+        fig, ax = plt.subplots(1, 1, figsize=(5,5))
+        ax.set_xlim(self.Rmin-self.dzoom,self.Rmax+self.dzoom)
+        ax.set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
+        a = ax.tricontourf(self.X[plotnodes,0],self.X[plotnodes,1], FIELD[plotnodes], levels=30)
+        ax.tricontour(self.X[plotnodes,0],self.X[plotnodes,1], FIELD[plotnodes], levels=[0], colors = 'black')
+        ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
+        plt.colorbar(a, ax=ax)
         plt.show()
         
         return
@@ -2843,14 +2863,14 @@ class GradShafranovSolver:
         vmax = max(AnaliticalNorm)  
             
         fig, axs = plt.subplots(1, 4, figsize=(16,5),gridspec_kw={'width_ratios': [1,1,0.25,1]})
-        axs[0].set_xlim(self.Rmin,self.Rmax)
-        axs[0].set_ylim(self.Zmin,self.Zmax)
+        axs[0].set_xlim(self.Rmin-self.dzoom,self.Rmax+self.dzoom)
+        axs[0].set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
         a1 = axs[0].tricontourf(self.X[:,0],self.X[:,1], AnaliticalNorm, levels=30, vmin=vmin, vmax=vmax)
         axs[0].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
         axs[0].tricontour(self.X[:,0],self.X[:,1], AnaliticalNorm, levels=[0], colors = 'black')
 
-        axs[1].set_xlim(self.Rmin,self.Rmax)
-        axs[1].set_ylim(self.Zmin,self.Zmax)
+        axs[1].set_xlim(self.Rmin-self.dzoom,self.Rmax+self.dzoom)
+        axs[1].set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
         a2 = axs[1].tricontourf(self.X[:,0],self.X[:,1], self.PSI_CONV, levels=30, vmin=vmin, vmax=vmax)
         axs[1].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
         axs[1].tricontour(self.X[:,0],self.X[:,1], self.PSI_CONV, levels=[0], colors = 'black')
@@ -2858,8 +2878,8 @@ class GradShafranovSolver:
         fig.colorbar(a1, ax=axs[2], orientation="vertical", fraction=0.8, pad=-0.7)
         axs[2].axis('off')
         
-        axs[3].set_xlim(self.Rmin,self.Rmax)
-        axs[3].set_ylim(self.Zmin,self.Zmax)
+        axs[2].set_xlim(self.Rmin-self.dzoom,self.Rmax+self.dzoom)
+        axs[2].set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
         if RelativeError:
             errorfield = self.PSIrelerror
         else:
@@ -2898,8 +2918,8 @@ class GradShafranovSolver:
             # Plot computational domain's boundary
             for iboun in range(self.Nbound):
                 ax.plot(self.X[self.Tbound[iboun,:2],0],self.X[self.Tbound[iboun,:2],1],linewidth = 3, color = 'grey')
-            ax.set_xlim(self.Rmin, self.Rmax)
-            ax.set_ylim(self.Zmin, self.Zmax)
+            ax.set_xlim(self.Rmin-self.dzoom,self.Rmax+self.dzoom)
+            ax.set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
             plt.colorbar(contourf, ax=ax)
             return
         

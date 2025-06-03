@@ -19,7 +19,7 @@ class InitialGuess:
         self.NONLINEAR_SOLUTION = 2
         self.OTHER_GUESS = 3
         
-        # *kwargs['A']*random()
+        self.NOISE = NOISE
         
         match PSI_GUESS:
             case 'LINEAR':
@@ -31,7 +31,11 @@ class InitialGuess:
                 self.delta = kwargs['delta']              # TRIANGULARITY
                 self.coeffs = ComputeLinearSolutionCoefficients(self.R0,self.epsilon,self.kappa,self.delta)
                 # INITIAL GUESS
-                self.PSI0 = partial(PSIanalyticalLINEAR, R0=self.R0, coeffs=self.coeffs)
+                if NOISE:
+                    self.A = kwargs['A']
+                    self.PSI0 = self.PSIlinearNOISE
+                else:
+                    self.PSI0 = partial(PSIanalyticalLINEAR, R0=self.R0, coeffs=self.coeffs)
 
             case 'ZHENG':
                 # INITIAL GUESS PARAMETERS
@@ -42,7 +46,11 @@ class InitialGuess:
                 self.delta = kwargs['delta']               # TRIANGULARITY
                 self.coeffs = ComputeZhengSolutionCoefficients(self.R0,self.epsilon,self.kappa,self.delta)
                 # INITIAL GUESS
-                self.PSI0 = partial(PSIanalyticalZHENG, coeffs=self.coeffs)
+                if NOISE:
+                    self.A = kwargs['A']
+                    self.PSI0 = self.PSIzhengNOISE
+                else:
+                    self.PSI0 = partial(PSIanalyticalZHENG, coeffs=self.coeffs)
 
             case 'NONLINEAR':
                 # INITIAL GUESS PARAMETERS
@@ -52,7 +60,11 @@ class InitialGuess:
                                1.15,        #  Kz,
                                -0.5]        #  R0] 
                 # INITIAL GUESS
-                self.PSI0 = partial(PSIanalyticalNONLINEAR, R0=self.R0, coeffs=self.coeffs)
+                if NOISE:
+                    self.A = kwargs['A']
+                    self.PSI0 = self.PSInonlinearNOISE
+                else:
+                    self.PSI0 = partial(PSIanalyticalNONLINEAR, R0=self.R0, coeffs=self.coeffs)
 
             case 'OTHER':
                 self.INITIAL_GUESS = self.OTHER_GUESS
@@ -67,6 +79,28 @@ class InitialGuess:
         for inode in range(np.shape(X)[0]):
             PSI0[inode] = self.PSI0(X[inode,:])
         return PSI0
+    
+    
+##################################################################################################
+######################################## LINEAR MODEL ############################################
+##################################################################################################
+
+    def PSIlinearNOISE(self,X):
+        return PSIanalyticalLINEAR(X,self.R0,self.coeffs)*self.A*random()
+
+##################################################################################################
+######################################## ZHENG MODEL #############################################
+##################################################################################################
+
+    def PSIzhengNOISE(self,X):
+        return PSIanalyticalZHENG(X,self.coeffs)*self.A*random()
+
+##################################################################################################
+##################################### NONLINEAR MODEL ############################################
+##################################################################################################
+    
+    def PSInonlinearNOISE(self,X):
+        return PSIanalyticalNONLINEAR(X,self.R0,self.coeffs)*self.A*random()
     
 ##################################################################################################
 ###################################### REPRESENTATION ############################################
