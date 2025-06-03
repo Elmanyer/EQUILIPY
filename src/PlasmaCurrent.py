@@ -157,7 +157,7 @@ class CurrentModel:
         
         Jphifield = np.zeros([np.shape(X)[0]])
         for inode in range(np.shape(X)[0]):
-            Jphifield[inode] = self.Jphi(X[inode,:],PSI)
+            Jphifield[inode] = self.Jphi(X[inode,:],PSI[inode])
         return Jphifield
     
 ##################################################################################################

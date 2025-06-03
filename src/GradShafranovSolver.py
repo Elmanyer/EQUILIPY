@@ -570,9 +570,8 @@ class GradShafranovSolver:
                     PSIg = ELEMENT.Ng @ ELEMENT.PSIe
                     # LOOP OVER GAUSS NODES
                     for ig in range(ELEMENT.ng):
-                        for l in range(ELEMENT.n):
-                            PSI_B[inode] += self.mu0 * GreensFunction(Xbound, ELEMENT.Xg[ig,:])*self.Jphi(ELEMENT.Xg[ig,:],
-                                                        PSIg[ig])*ELEMENT.Ng[ig,l]*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]*self.gamma
+                        PSI_B[inode] += self.mu0 * GreensFunction(Xbound, ELEMENT.Xg[ig,:])*self.PlasmaCurrent.Jphi(ELEMENT.Xg[ig,:],
+                                            PSIg[ig])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]*self.gamma
                                     
                 #   2. INTEGRATE IN CUT ELEMENTS, OVER SUBELEMENT IN PLASMA REGION
                 for ielem in self.PlasmaBoundElems:
@@ -585,9 +584,8 @@ class GradShafranovSolver:
                             PSIg = SUBELEM.Ng @ ELEMENT.PSIe
                             # LOOP OVER GAUSS NODES
                             for ig in range(SUBELEM.ng):
-                                for l in range(SUBELEM.n):
-                                    PSI_B[inode] += self.mu0 * GreensFunction(Xbound, SUBELEM.Xg[ig,:])*self.Jphi(SUBELEM.Xg[ig,:],
-                                                        PSIg[ig])*SUBELEM.Ng[ig,l]*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]*self.gamma   
+                                PSI_B[inode] += self.mu0 * GreensFunction(Xbound, SUBELEM.Xg[ig,:])*self.PlasmaCurrent.Jphi(SUBELEM.Xg[ig,:],
+                                                    PSIg[ig])*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]*self.gamma   
         return PSI_B
     
     ##################################################################################################
@@ -1094,8 +1092,34 @@ class GradShafranovSolver:
     
     
     def ComputeTotalPlasmaCurrent(self):
-        """ Function that computes de total toroidal current carried by the plasma """  
-        return self.PlasmaDomainIntegral(self.Jphi)
+        """ Function that computes de total toroidal current carried by the plasma """ 
+        
+        totalcurrent = 0
+        # INTEGRATE OVER PLASMA ELEMENTS
+        for ielem in self.PlasmaElems:
+            # ISOLATE ELEMENT
+            ELEMENT = self.Elements[ielem]
+            # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
+            PSIg = ELEMENT.Ng @ ELEMENT.PSIe
+            # LOOP OVER GAUSS NODES
+            for ig in range(ELEMENT.ng):
+                totalcurrent += self.PlasmaCurrent.Jphi(ELEMENT.Xg[ig,:],PSIg[ig])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                    
+        # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
+        for ielem in self.PlasmaBoundElems:
+            # ISOLATE ELEMENT
+            ELEMENT = self.Elements[ielem]
+            # LOOP OVER SUBELEMENTS
+            for SUBELEM in ELEMENT.SubElements:
+                # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
+                if SUBELEM.Dom < 0:
+                    # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
+                    PSIg = SUBELEM.Ng @ ELEMENT.PSIe
+                    # LOOP OVER GAUSS NODES
+                    for ig in range(SUBELEM.ng):
+                        totalcurrent += self.PlasmaCurrent.Jphi(SUBELEM.Xg[ig,:],PSIg[ig])*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
+                             
+        return totalcurrent
     
     
     def ComputeTotalPlasmaCurrentNormalization(self):
@@ -1107,7 +1131,7 @@ class GradShafranovSolver:
             Tcurrent = self.ComputeTotalPlasmaCurrent()
             #print('Total plasma current computed = ', Tcurrent)    
             # COMPUTE TOTAL PLASMA CURRENT CORRECTION FACTOR            
-            self.gamma = self.TOTAL_CURRENT/Tcurrent
+            self.gamma = self.PlasmaCurrent.TOTAL_CURRENT/Tcurrent
             #print("Total plasma current normalization factor = ", self.gamma)
             # COMPUTED NORMALISED TOTAL PLASMA CURRENT
             #print("Normalised total plasma current = ", Tcurrent*self.gamma)
@@ -1272,44 +1296,6 @@ class GradShafranovSolver:
         
         return meanArea, meanLength
     
-    
-    def PlasmaDomainIntegral(self,fun):
-        """ 
-        Integrates function fun over plasma region surface, such that
-                fun = fun(X,PSI)        
-        """
-        
-        integral = 0
-        # INTEGRATE OVER PLASMA ELEMENTS
-        for ielem in self.PlasmaElems:
-            # ISOLATE ELEMENT
-            ELEMENT = self.Elements[ielem]
-            # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-            PSIg = ELEMENT.Ng @ ELEMENT.PSIe
-            # LOOP OVER ELEMENTAL NODES
-            for i in range(ELEMENT.n):
-                 # LOOP OVER GAUSS NODES
-                for ig in range(ELEMENT.ng):
-                    integral += fun(ELEMENT.Xg[ig,:],PSIg[ig])*ELEMENT.Ng[ig,i]*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
-                    
-        # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
-        for ielem in self.PlasmaBoundElems:
-            # ISOLATE ELEMENT
-            ELEMENT = self.Elements[ielem]
-            # LOOP OVER SUBELEMENTS
-            for SUBELEM in ELEMENT.SubElements:
-                # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
-                if SUBELEM.Dom < 0:
-                    # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-                    PSIg = SUBELEM.Ng @ ELEMENT.PSIe
-                    # LOOP OVER GAUSS NODES
-                    for ig in range(SUBELEM.ng):
-                        # LOOP OVER ELEMENTAL NODES
-                        for i in range(SUBELEM.n):
-                            integral += fun(SUBELEM.Xg[ig,:],PSIg[ig])*SUBELEM.Ng[ig,i]*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]            
-        return integral
-        
-    
     ##################### INITIALISATION 
     
     def InitialiseParameters(self):
@@ -1335,8 +1321,8 @@ class GradShafranovSolver:
             
         # INITIALISE CRITICAL POINTS ARRAY
         self.Xcrit = np.zeros([2,2,3])  # [(iterations n, n+1), (extremum, saddle point), (R_crit,Z_crit,elem_crit)]
-        if not self.FIXED_BOUNDARY:
-            self.Xcrit[0,1,:-1] = np.array([self.R_SADDLE,self.Z_SADDLE])
+        self.Xcrit[0,0,:-1] = np.array([self.EXTR_R0,self.EXTR_Z0])
+        self.Xcrit[0,1,:-1] = np.array([self.SADD_R0,self.SADD_Z0])
         return
     
     
