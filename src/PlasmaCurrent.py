@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
+from scipy.integrate import quad
 
 class CurrentModel:
     
@@ -34,7 +35,7 @@ class CurrentModel:
                 self.epsilon = kwargs['epsilon']          # INVERSE ASPECT RATIO
                 self.kappa = kwargs['kappa']              # ELONGATION
                 self.delta = kwargs['delta']              # TRIANGULARITY
-                self.coeffs = ComputeLinearSolutionCoefficients(self.R0,self.epsilon,self.kappa,self.delta)
+                self.coeffs = ComputeLinearSolutionCoefficients(self.epsilon,self.kappa,self.delta)
                 # MODEL PLASMA CURRENT
                 self.Jphi = self.JphiLINEAR
                 # MODEL ANALYTICAL SOLUTION
@@ -73,13 +74,47 @@ class CurrentModel:
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.PROFILES_CURRENT
                 self.PSIdependent = True
-                self.P0 = kwargs['P0']                      # PRESSURE PROFILE FACTOR
+                self.P0 = kwargs['P0']                      # PRESSURE VALUE ON MAGNETIC AXIS
                 self.n_p = kwargs['np']                     # EXPONENT FOR PRESSURE PROFILE p_hat FUNCTION
                 self.G0 = kwargs['G0']                      # TOROIDAL FIELD FACTOR
                 self.n_g = kwargs['ng']                     # EXPONENT FOR TOROIDAL FIELD PROFILE g_hat FUNCTION
                 self.TOTAL_CURRENT = kwargs['Tcurrent']     # TOTAL CURRENT IN PLASMA (NORMALISATION PARAMETER)
                 # MODEL PLASMA CURRENT 
                 self.Jphi = self.JphiPROFILES
+                
+            case 'PROFILES_PCONSTRAIN':
+                # MODEL PARAMETERS
+                self.CURRENT_MODEL = self.PCONSTRAIN_CURRENT
+                self.PSIdependent = True
+                self.P0 = kwargs['P0']                      # PRESSURE VALUE ON MAGNETIC AXIS
+                self.alpha_m = kwargs['alpha_m']
+                self.alpha_n = kwargs['alpha_n']
+                self.TOTAL_CURRENT = kwargs['Tcurrent']     # TOTAL CURRENT IN PLASMA (NORMALISATION PARAMETER)
+                if 'Raxis' in kwargs:
+                    self.Raxis = kwargs['Raxis']
+                else:
+                    self.Raxis = 1.0
+                self.Beta0 = None                           # BETA CONSTRAIN FACTOR
+                self.L = None                               # L CONSTRAIN FACTOR
+                # MODEL PLASMA CURRENT 
+                self.Jphi = self.JphiPCONSTRAIN
+                
+            case 'PROFILES_BetaCONSTRAIN':
+                # MODEL PARAMETERS
+                self.CURRENT_MODEL = self.BetaCONSTRAIN_CURRENT
+                self.PSIdependent = True
+                self.Betap = kwargs['Betap']                # POLOIDAL BETA
+                self.alpha_m = kwargs['alpha_m']
+                self.alpha_n = kwargs['alpha_n']
+                self.TOTAL_CURRENT = kwargs['Tcurrent']     # TOTAL CURRENT IN PLASMA (NORMALISATION PARAMETER)
+                if 'Raxis' in kwargs:
+                    self.Raxis = kwargs['Raxis']
+                else:
+                    self.Raxis = 1.0
+                self.Beta0 = None                           # BETA CONSTRAIN FACTOR
+                self.L = None                               # L CONSTRAIN FACTOR
+                # MODEL PLASMA CURRENT 
+                self.Jphi = self.JphiPCONSTRAIN
                 
             # USER DEFINED PLASMA CURRENT
             case 'OTHER':
@@ -91,19 +126,14 @@ class CurrentModel:
     
     
     def SourceTerm(self,X,PSI):
-        if self.CURRENT_MODEL in [self.LINEAR_CURRENT, self.NONLINEAR_CURRENT]:
-            R = X[0]/self.R0
-        else:
-            R = X[0]
-        return self.mu0*R*self.Jphi(X,PSI)
+        return self.mu0*X[0]*self.Jphi(X,PSI)
 
 ##################################################################################################
 ######################################## LINEAR MODEL ############################################
 ##################################################################################################
 
     def JphiLINEAR(self,X,PSI):
-        Xstar = X/self.R0
-        return Xstar[0]/self.mu0
+        return X[0]/self.mu0
     
 ##################################################################################################
 ######################################### ZHENG MODEL ############################################
@@ -150,8 +180,56 @@ class CurrentModel:
         dg = (self.G0**2)*self.n_g*(PSI**(self.n_g-1))
         return dg
     
+##################################################################################################
+#################################### PCONSTRAIN MODEL ############################################
+##################################################################################################   
     
+    def JphiPCONSTRAIN(self,X,PSI):
+        return self.L * (self.Beta0 * X[0] / self.Raxis + (1 - self.Beta0) * self.Raxis / X[0]) * (1.0 - PSI**self.alpha_m)**self.alpha_n
     
+        
+    def ComputeConstrains(self,problem):
+        
+        # Apply constraints to define constants L and Beta0
+
+        # Need integral of current shape function (1-psi**alpha_m)**alpha_n to calculate P0
+        # Note factor to convert from normalised psi integral
+        shapeintegral, _ = quad(
+            func = lambda x: (1.0 - x**self.alpha_m) ** self.alpha_n, 
+            a = 0.0, 
+            b = 1.0)
+        shapeintegral *= problem.PSI_X - problem.PSI_0
+
+        # Integrate current components
+        def funIR(X,PSI):
+            return (1.0 - PSI**self.alpha_m)**self.alpha_n * X[0] / self.Raxis
+        
+        def funI_R(X,PSI):
+            return (1.0 - PSI**self.alpha_m)**self.alpha_n * self.Raxis / X[0] 
+
+        IR = problem.IntegratePlasmaDomain(funIR)
+        I_R = problem.IntegratePlasmaDomain(funI_R)
+        
+        # Pressure on axis is
+        #
+        # P0 = - (L*Beta0/Raxis) * shapeintegral
+        #
+        # Toroidal plasma current Ip is
+        #
+        # TotalCurrent = L * (Beta0 * IR + (1-Beta0)*I_R)
+        #    = L*Beta0*(IR - I_R) + L*I_R
+
+        LBeta0 = -self.P0 * self.Raxis / shapeintegral
+
+        self.L = self.TOTAL_CURRENT / I_R - LBeta0 * (IR / I_R - 1)
+        self.Beta0 = LBeta0 / self.L
+        return
+
+
+
+##################################################################################################
+####################################### CURRENT FIELD ############################################
+##################################################################################################
     
     def ComputeField(self,X,PSI):
         

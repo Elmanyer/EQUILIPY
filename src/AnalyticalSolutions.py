@@ -5,7 +5,7 @@ import numpy as np
 ######################################## LINEAR MODEL ############################################
 ##################################################################################################
     
-def ComputeLinearSolutionCoefficients(R0,epsilon,kappa,delta):
+def ComputeLinearSolutionCoefficients(epsilon,kappa,delta):
     """ 
     Computes the coeffients for the magnetic flux in the linear source term case, that is for 
             GRAD-SHAFRANOV EQ:  DELTA*(PSI) = R^2   (plasma current is linear such that Jphi = R/mu0)
@@ -27,9 +27,11 @@ def ComputeLinearSolutionCoefficients(R0,epsilon,kappa,delta):
     coeffs = np.linalg.solve(A,b)
     return coeffs.T[0].tolist() 
 
-def PSIanalyticalLINEAR(X,R0,coeffs):
+def PSIanalyticalLINEAR(X,R0,coeffs,NORMALISED=False):
     # DIMENSIONLESS COORDINATES
-    Xstar = X/R0
+    Xstar = X
+    if not NORMALISED:
+        Xstar = X/R0
     # ANALYTICAL SOLUTION
     PSIexact = (Xstar[0]**4)/8 + coeffs[0] + coeffs[1]*Xstar[0]**2 + coeffs[2]*(Xstar[0]**4-4*Xstar[0]**2*Xstar[1]**2)
     return PSIexact
@@ -84,9 +86,11 @@ def PSIanalyticalZHENG(X,coeffs):
 ######################################## NONLINEAR MODEL #########################################
 ##################################################################################################
 
-def PSIanalyticalNONLINEAR(X,R0,coeffs):
-    # DIMENSIONALESS COORDINATES
-    Xstar = X/R0 
+def PSIanalyticalNONLINEAR(X,R0,coeffs,NORMALISED=False):
+    # DIMENSIONLESS COORDINATES
+    Xstar = X
+    if not NORMALISED:
+        Xstar = X/R0
     # ANALYTICAL SOLUTION
     PSIexact = np.sin(coeffs[0]*(Xstar[0]+coeffs[2]))*np.cos(coeffs[1]*Xstar[1])  
     return PSIexact

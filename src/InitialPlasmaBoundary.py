@@ -28,7 +28,7 @@ class InitialPlasmaBoundary:
                 self.epsilon = kwargs['epsilon']          # INVERSE ASPECT RATIO
                 self.kappa = kwargs['kappa']              # ELONGATION
                 self.delta = kwargs['delta']              # TRIANGULARITY
-                self.coeffs = ComputeLinearSolutionCoefficients(self.R0,self.epsilon,self.kappa,self.delta)
+                self.coeffs = ComputeLinearSolutionCoefficients(self.epsilon,self.kappa,self.delta)
                 # GEOMETRY LEVEL-SET FUNCTION
                 self.PHI0 = partial(PSIanalyticalLINEAR, R0=self.R0, coeffs=self.coeffs)
             
@@ -41,7 +41,7 @@ class InitialPlasmaBoundary:
                 self.delta = kwargs['delta']               # TRIANGULARITY
                 self.coeffs = ComputeZhengSolutionCoefficients(self.R0,self.epsilon,self.kappa,self.delta)
                 # GEOMETRY LEVEL-SET FUNCTION
-                self.PHI0 = self.ZHENG_LS
+                self.PHI0 = self.PHIzheng
                 
             case 'F4E':
                 # GEOMETRY PARAMETERS
@@ -61,10 +61,10 @@ class InitialPlasmaBoundary:
         return
     
 ##################################################################################################
-##################################### F4E PARAMETRISATION ########################################
+######################################## ZHENG MODEL LS ##########################################
 ##################################################################################################
 
-    def ZHENG_LS(self,X):
+    def PHIzheng(self,X):
         return -PSIanalyticalZHENG(X,self.coeffs)
         
 ##################################################################################################

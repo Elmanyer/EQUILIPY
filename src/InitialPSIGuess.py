@@ -29,7 +29,7 @@ class InitialGuess:
                 self.epsilon = kwargs['epsilon']          # INVERSE ASPECT RATIO
                 self.kappa = kwargs['kappa']              # ELONGATION
                 self.delta = kwargs['delta']              # TRIANGULARITY
-                self.coeffs = ComputeLinearSolutionCoefficients(self.R0,self.epsilon,self.kappa,self.delta)
+                self.coeffs = ComputeLinearSolutionCoefficients(self.epsilon,self.kappa,self.delta)
                 # INITIAL GUESS
                 if NOISE:
                     self.A = kwargs['A']

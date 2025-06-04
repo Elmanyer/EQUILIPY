@@ -1291,17 +1291,15 @@ class Element:
     ################################ ELEMENTAL INTEGRATION ###########################################
     ##################################################################################################
     
-    def IntegrateElementalDomainTerms(self,SourceTermg,*args):
+    def IntegrateElementalDomainTerms(self,SourceTermg):
         """ 
         This function computes the elemental contributions to the global system by integrating the source terms over 
         the elemental domain. It calculates the left-hand side (LHS) matrix and right-hand side (RHS) vector using 
         Gauss integration nodes.
 
         Input:
-            - SourceTermg (ndarray): The Grad-Shafranov equation source term evaluated at the physical Gauss integration nodes.
+            SourceTermg (ndarray): The Grad-Shafranov equation source term evaluated at the physical Gauss integration nodes.
         
-            - *args (tuple, optional): Additional arguments for specific cases, such as the dimensionless solution case where 
-                                `args[0]` might represent a scaling factor (R0).
 
         This function computes:
             1. The elemental contributions to the LHS matrix (stiffness term and gradient term).
@@ -1321,19 +1319,14 @@ class Element:
         for ig in range(self.ng):  
             # SHAPE FUNCTIONS GRADIENT IN PHYSICAL SPACE
             Ngrad = self.invJg[ig,:,:]@np.array([self.dNdxig[ig,:],self.dNdetag[ig,:]])
-            # R coordinate
-            R = self.Xg[ig,0]
-            if args:   # DIMENSIONLESS SOLUTION CASE  -->> args[0] = R0
-                Ngrad *= args[0]
-                R /= args[0]
             # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM 
             for i in range(self.n):   # ROWS ELEMENTAL MATRIX
                 for j in range(self.n):   # COLUMNS ELEMENTAL MATRIX
                     # COMPUTE LHS MATRIX TERMS
                     ### STIFFNESS TERM  [ nabla(N_i)*nabla(N_j) ]  
-                    LHSe[i,j] -= (1/R)*Ngrad[:,j]@Ngrad[:,i]*self.detJg[ig]*self.Wg[ig]
+                    LHSe[i,j] -= (1/self.Xg[ig,0])*Ngrad[:,j]@Ngrad[:,i]*self.detJg[ig]*self.Wg[ig]
                 # COMPUTE RHS VECTOR TERMS [ (source term)*N_i ]
-                RHSe[i] += (1/R)*SourceTermg[ig] * self.Ng[ig,i] *self.detJg[ig]*self.Wg[ig]
+                RHSe[i] += (1/self.Xg[ig,0])*SourceTermg[ig] * self.Ng[ig,i] *self.detJg[ig]*self.Wg[ig]
                 
         return LHSe, RHSe
     
@@ -1358,18 +1351,15 @@ class Element:
         return elmat, elrhs
     
     
-    def IntegrateElementalInterfaceTerms(self,beta,*args):
+    def IntegrateElementalInterfaceTerms(self,beta):
         """ 
         This function computes the elemental contributions to the global system from the interface terms, using 
         Nitsche's method. It integrates the interface conditions over the elemental interface approximation segments. 
         It calculates the left-hand side (LHS) matrix and right-hand side (RHS) vector using Gauss integration nodes.
 
         Input:
-            - beta (float): The penalty parameter for Nitsche's method, which controls the strength of the penalty term.
+            beta (float): The penalty parameter for Nitsche's method, which controls the strength of the penalty term.
         
-            - *args (tuple, optional): Additional arguments for specific cases, such as the dimensionless solution case where 
-                                `args[0]` might represent a scaling factor (R0).
-
         This function computes:
             1. The elemental contributions to the LHS matrix (including Dirichlet boundary term, symmetric Nitsche's term, and penalty term).
             2. The elemental contributions to the RHS vector (including symmetric Nitsche's term and penalty term).
@@ -1388,25 +1378,20 @@ class Element:
         for ig in range(self.InterfApprox.ng):  
             # SHAPE FUNCTIONS NORMAL GRADIENT IN PHYSICAL SPACE
             n_dot_Ngrad = self.InterfApprox.NormalVec[ig]@self.InterfApprox.invJg[ig,:,:]@np.array([self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:]])
-            # R cordinate
-            R = self.InterfApprox.Xg[ig,0]
-            if args:   # DIMENSIONLESS SOLUTION CASE  -->> args[0] = R0
-                n_dot_Ngrad *= args[0]
-                R /= args[0]
             # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM
             for i in range(self.n):  # ROWS ELEMENTAL MATRIX
                 for j in range(self.n):  # COLUMNS ELEMENTAL MATRIX
                     # COMPUTE LHS MATRIX TERMS
                     ### DIRICHLET BOUNDARY TERM  [ N_i*(n dot nabla(N_j)) ]  
-                    LHSe[i,j] += (1/R)*self.InterfApprox.Ng[ig,i] * n_dot_Ngrad[j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                    LHSe[i,j] += (1/self.InterfApprox.Xg[ig,0])*self.InterfApprox.Ng[ig,i] * n_dot_Ngrad[j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     ### SYMMETRIC NITSCHE'S METHOD TERM   [ N_j*(n dot nabla(N_i)) ]
-                    LHSe[i,j] += (1/R)*n_dot_Ngrad[i]*self.InterfApprox.Ng[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                    LHSe[i,j] += (1/self.InterfApprox.Xg[ig,0])*n_dot_Ngrad[i]*self.InterfApprox.Ng[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     ### PENALTY TERM   [ beta * (N_i*N_j) ]
                     LHSe[i,j] += beta * (1/self.length) * self.InterfApprox.Ng[ig,i] * self.InterfApprox.Ng[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     
                 # COMPUTE RHS VECTOR TERMS 
                 ### SYMMETRIC NITSCHE'S METHOD TERM  [ PSI_D * (n dot nabla(N_i)) ]
-                RHSe[i] +=  (1/R)*self.InterfApprox.PSIg[ig] * n_dot_Ngrad[i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                RHSe[i] +=  (1/self.InterfApprox.Xg[ig,0])*self.InterfApprox.PSIg[ig] * n_dot_Ngrad[i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                 ### PENALTY TERM   [ beta * N_i * PSI_D ]
                 RHSe[i] +=  beta * (1/self.length) * self.InterfApprox.PSIg[ig] * self.InterfApprox.Ng[ig,i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
         

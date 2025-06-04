@@ -437,6 +437,58 @@ class GradShafranovSolver:
         return meanArea, meanLength
     
     
+    def IntegratePlasmaDomain(self,fun,PSIdependent=True):
+        """ Function that integrates function fun over the plasma domain. """ 
+        
+        integral = 0
+        if PSIdependent:
+            # INTEGRATE OVER PLASMA ELEMENTS
+            for ielem in self.PlasmaElems:
+                # ISOLATE ELEMENT
+                ELEMENT = self.Elements[ielem]
+                # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
+                PSIg = ELEMENT.Ng @ ELEMENT.PSIe
+                # LOOP OVER GAUSS NODES
+                for ig in range(ELEMENT.ng):
+                    integral += fun(ELEMENT.Xg[ig,:],PSIg[ig])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                        
+            # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
+            for ielem in self.PlasmaBoundElems:
+                # ISOLATE ELEMENT
+                ELEMENT = self.Elements[ielem]
+                # LOOP OVER SUBELEMENTS
+                for SUBELEM in ELEMENT.SubElements:
+                    # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
+                    if SUBELEM.Dom < 0:
+                        # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
+                        PSIg = SUBELEM.Ng @ ELEMENT.PSIe
+                        # LOOP OVER GAUSS NODES
+                        for ig in range(SUBELEM.ng):
+                            integral += fun(SUBELEM.Xg[ig,:],PSIg[ig])*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
+        else:
+            # INTEGRATE OVER PLASMA ELEMENTS
+            for ielem in self.PlasmaElems:
+                # ISOLATE ELEMENT
+                ELEMENT = self.Elements[ielem]
+                # LOOP OVER GAUSS NODES
+                for ig in range(ELEMENT.ng):
+                    integral += fun(ELEMENT.Xg[ig,:])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                        
+            # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
+            for ielem in self.PlasmaBoundElems:
+                # ISOLATE ELEMENT
+                ELEMENT = self.Elements[ielem]
+                # LOOP OVER SUBELEMENTS
+                for SUBELEM in ELEMENT.SubElements:
+                    # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
+                    if SUBELEM.Dom < 0:
+                        # LOOP OVER GAUSS NODES
+                        for ig in range(SUBELEM.ng):
+                            integral += fun(SUBELEM.Xg[ig,:])*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
+                             
+        return integral
+    
+    
     ##################################################################################################
     #################################### PLASMA DOMAIN LEVEL-SET #####################################
     ##################################################################################################
@@ -1097,8 +1149,7 @@ class GradShafranovSolver:
         """
         if not self.FIXED_BOUNDARY or self.PlasmaCurrent.CURRENT_MODEL == self.PlasmaCurrent.PROFILES_CURRENT:
             for i in range(self.Nn):
-                self.PSI_NORMstar[i,1] = (self.PSI[i]-self.PSI_X)/np.abs(self.PSI_0-self.PSI_X)
-                #self.PSI_NORM[i,1] = (self.PSI_X-self.PSI[i])/(self.PSI_X-self.PSI_0)
+                self.PSI_NORMstar[i,1] = (self.PSI_X-self.PSI[i])/(self.PSI_X-self.PSI_0)
         else: 
             for i in range(self.Nn):
                 self.PSI_NORMstar[i,1] = self.PSI[i]
@@ -1117,44 +1168,13 @@ class GradShafranovSolver:
         return
     
     
-    def ComputeTotalPlasmaCurrent(self):
-        """ Function that computes de total toroidal current carried by the plasma """ 
-        
-        totalcurrent = 0
-        # INTEGRATE OVER PLASMA ELEMENTS
-        for ielem in self.PlasmaElems:
-            # ISOLATE ELEMENT
-            ELEMENT = self.Elements[ielem]
-            # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-            PSIg = ELEMENT.Ng @ ELEMENT.PSIe
-            # LOOP OVER GAUSS NODES
-            for ig in range(ELEMENT.ng):
-                totalcurrent += self.PlasmaCurrent.Jphi(ELEMENT.Xg[ig,:],PSIg[ig])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
-                    
-        # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
-        for ielem in self.PlasmaBoundElems:
-            # ISOLATE ELEMENT
-            ELEMENT = self.Elements[ielem]
-            # LOOP OVER SUBELEMENTS
-            for SUBELEM in ELEMENT.SubElements:
-                # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
-                if SUBELEM.Dom < 0:
-                    # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-                    PSIg = SUBELEM.Ng @ ELEMENT.PSIe
-                    # LOOP OVER GAUSS NODES
-                    for ig in range(SUBELEM.ng):
-                        totalcurrent += self.PlasmaCurrent.Jphi(SUBELEM.Xg[ig,:],PSIg[ig])*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
-                             
-        return totalcurrent
-    
-    
     def ComputeTotalPlasmaCurrentNormalization(self):
         """
         Compute and apply a correction factor to ensure the total plasma current in the computational domain matches the specified input parameter `TOTAL_CURRENT`.
         """
         if self.PlasmaCurrent.CURRENT_MODEL == self.PlasmaCurrent.PROFILES_CURRENT:
             # COMPUTE TOTAL PLASMA CURRENT    
-            Tcurrent = self.ComputeTotalPlasmaCurrent()
+            Tcurrent = self.IntegratePlasmaDomain(self.PlasmaCurrent.Jphi)
             #print('Total plasma current computed = ', Tcurrent)    
             # COMPUTE TOTAL PLASMA CURRENT CORRECTION FACTOR            
             self.gamma = self.PlasmaCurrent.TOTAL_CURRENT/Tcurrent
@@ -1264,7 +1284,7 @@ class GradShafranovSolver:
             for ig in range(INTAPPROX.ng):
                 # FIXED BOUNDARY PROBLEM -> ANALYTICAL SOLUTION PLASMA BOUNDARY VALUES 
                 if self.FIXED_BOUNDARY:
-                    INTAPPROX.PSIg[ig] = self.PlasmaCurrent.PSIanalytical(INTAPPROX.Xg[ig,:])
+                    INTAPPROX.PSIg[ig] = self.PlasmaCurrent.PSIanalytical(INTAPPROX.Xg[ig,:],NORMALISED=True)
                 # FREE BOUNDARY PROBLEM -> PLASMA BOUNDARY VALUES = SEPARATRIX VALUE
                 else:
                     INTAPPROX.PSIg[ig] = self.PSI_X
@@ -1415,12 +1435,20 @@ class GradShafranovSolver:
         """ 
         Function initialising attribute ELEMENTS which is a list of all elements in the mesh. 
         """
-        self.Elements = [Element(index = e,
-                                 ElType = self.ElType,
-                                 ElOrder = self.ElOrder,
-                                 Xe = self.X[self.T[e,:],:],
-                                 Te = self.T[e,:],
-                                 PlasmaLSe = self.PlasmaLS[self.T[e,:]]) for e in range(self.Ne)]
+        if self.PlasmaCurrent.CURRENT_MODEL in [self.PlasmaCurrent.LINEAR_CURRENT, self.PlasmaCurrent.NONLINEAR_CURRENT]:  # DIMENSIONLESS SOLUTION CASE 
+            self.Elements = [Element(index = e,
+                                        ElType = self.ElType,
+                                        ElOrder = self.ElOrder,
+                                        Xe = self.X[self.T[e,:],:]/self.PlasmaCurrent.R0,
+                                        Te = self.T[e,:],
+                                        PlasmaLSe = self.PlasmaLS[self.T[e,:]]) for e in range(self.Ne)]
+        else:
+            self.Elements = [Element(index = e,
+                                        ElType = self.ElType,
+                                        ElOrder = self.ElOrder,
+                                        Xe = self.X[self.T[e,:],:],
+                                        Te = self.T[e,:],
+                                        PlasmaLSe = self.PlasmaLS[self.T[e,:]]) for e in range(self.Ne)]
         
         # COMPUTE MESH MEAN SIZE
         self.meanArea, self.meanLength = self.ComputeMeshElementsMeanSize()
@@ -1687,8 +1715,8 @@ class GradShafranovSolver:
             PSIg = ELEMENT.Ng @ ELEMENT.PSIe
             # LOOP OVER GAUSS NODES
             for ig in range(ELEMENT.ng):
-                ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:]))**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
-                PSIexactL2norm += self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:])**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:],NORMALISED=True))**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                PSIexactL2norm += self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:],NORMALISED=True)**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                     
         ErrorL2normPlasmaBound = 0
         PSIexactL2normPlasmaBound = 0
@@ -1704,10 +1732,10 @@ class GradShafranovSolver:
                     PSIg = SUBELEM.Ng @ ELEMENT.PSIe
                     # LOOP OVER GAUSS NODES
                     for ig in range(SUBELEM.ng):
-                        ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:]))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
-                        PSIexactL2norm += self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:])**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
-                        ErrorL2normPlasmaBound += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:]))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
-                        PSIexactL2normPlasmaBound += self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:])**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
+                        ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
+                        PSIexactL2norm += self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True)**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
+                        ErrorL2normPlasmaBound += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
+                        PSIexactL2normPlasmaBound += self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True)**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
         
         if ErrorL2normPlasmaBound == 0:
             return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm), 0,0
@@ -1734,8 +1762,8 @@ class GradShafranovSolver:
             PSIg = ELEMENT.Ng @ ELEMENT.PSIe
             # LOOP OVER GAUSS NODES
             for ig in range(ELEMENT.ng):
-                ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:]))**2 *ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
-                PSIexactL2norm += self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:])**2 *ELEMENT.detJg[ig]*ELEMENT.Wg[ig]                  
+                ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:],NORMALISED=True))**2 *ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                PSIexactL2norm += self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:],NORMALISED=True)**2 *ELEMENT.detJg[ig]*ELEMENT.Wg[ig]                  
         
         return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm)
     
@@ -1838,9 +1866,6 @@ class GradShafranovSolver:
                 n_dot_Ngrad0 = FACE0.NormalVec@FACE0.invJg[ig,:,:]@np.array([FACE0.dNdxig[ig,:],FACE0.dNdetag[ig,:]])
                 n_dot_Ngrad1 = FACE1.NormalVec@FACE1.invJg[ig,:,:]@np.array([FACE1.dNdxig[ig,:],FACE1.dNdetag[ig,:]])
                 n_dot_Ngrad = np.concatenate((n_dot_Ngrad0,n_dot_Ngrad1), axis=0)
-                # DIMENSIONLESS CASE
-                if self.PlasmaCurrent.CURRENT_MODEL in [self.PlasmaCurrent.LINEAR_CURRENT, self.PlasmaCurrent.NONLINEAR_CURRENT]:   # DIMENSIONLESS SOLUTION CASE 
-                    n_dot_Ngrad *= self.PlasmaCurrent.R0
                     
                 # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM    
                 for i in range(ELEMENT0.n+ELEMENT1.n):  # ROWS ELEMENTAL MATRIX
@@ -1926,10 +1951,7 @@ class GradShafranovSolver:
                     SourceTermg[ig] = self.PlasmaCurrent.SourceTerm(ELEMENT.Xg[ig,:],PSIg[ig])
                     
             # COMPUTE ELEMENTAL MATRICES
-            if self.PlasmaCurrent.CURRENT_MODEL in [self.PlasmaCurrent.LINEAR_CURRENT, self.PlasmaCurrent.NONLINEAR_CURRENT]:  # DIMENSIONLESS SOLUTION CASE
-                LHSe, RHSe = ELEMENT.IntegrateElementalDomainTerms(SourceTermg,self.PlasmaCurrent.R0)
-            else:
-                LHSe, RHSe = ELEMENT.IntegrateElementalDomainTerms(SourceTermg)
+            LHSe, RHSe = ELEMENT.IntegrateElementalDomainTerms(SourceTermg)
                 
             # PRESCRIBE BC:
             if not type(ELEMENT.Teboun) == type(None):
@@ -1974,10 +1996,7 @@ class GradShafranovSolver:
                         SourceTermg[ig] = self.PlasmaCurrent.SourceTerm(SUBELEM.Xg[ig,:],PSIg[ig])
                         
                 # COMPUTE ELEMENTAL MATRICES
-                if self.PlasmaCurrent.CURRENT_MODEL in [self.PlasmaCurrent.LINEAR_CURRENT, self.PlasmaCurrent.NONLINEAR_CURRENT]:  # DIMENSIONLESS SOLUTION CASE
-                    LHSe, RHSe = SUBELEM.IntegrateElementalDomainTerms(SourceTermg,self.PlasmaCurrent.R0)
-                else:
-                    LHSe, RHSe = SUBELEM.IntegrateElementalDomainTerms(SourceTermg)
+                LHSe, RHSe = SUBELEM.IntegrateElementalDomainTerms(SourceTermg)
                     
                 # PRESCRIBE BC:
                 if not type(ELEMENT.Teboun) == type(None):
@@ -2009,10 +2028,7 @@ class GradShafranovSolver:
             # ISOLATE ELEMENT 
             ELEMENT = self.Elements[ielem]
             # COMPUTE ELEMENTAL MATRICES
-            if self.PlasmaCurrent.CURRENT_MODEL in [self.PlasmaCurrent.LINEAR_CURRENT, self.PlasmaCurrent.NONLINEAR_CURRENT]:  # DIMENSIONLESS SOLUTION CASE
-                LHSe,RHSe = ELEMENT.IntegrateElementalInterfaceTerms(self.beta,self.PlasmaCurrent.R0)
-            else: 
-                LHSe,RHSe = ELEMENT.IntegrateElementalInterfaceTerms(self.beta)
+            LHSe,RHSe = ELEMENT.IntegrateElementalInterfaceTerms(self.beta)
                 
             # PRESCRIBE BC:
             if not type(ELEMENT.Teboun) == type(None):
