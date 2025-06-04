@@ -132,11 +132,12 @@ class GradShafranovSolver:
         self.it_EXT = None                  # EXTERNAL LOOP STRUCTURE ITERATIONS NUMBER
         self.it_INT = None                  # INTERNAL LOOP STRUCTURE ITERATIONS NUMBER
         self.it = 0                         # TOTAL NUMBER OF ITERATIONS COUNTER
-        self.alpha = None                   # AIKTEN'S SCHEME RELAXATION CONSTANT
-        self.gamma = None                   # PLASMA TOTAL CURRENT CORRECTION FACTOR
+        self.PLASMA_IT = None               # ITERATION AFTER WHICH THE PLASMA REGION CAN BE UPDATED
         #### BOUNDARY CONSTRAINTS
         self.beta = None                    # NITSCHE'S METHOD PENALTY TERM
         #### STABILIZATION
+        self.gamma = None                   # PLASMA TOTAL CURRENT CORRECTION FACTOR
+        self.alpha = None                   # AIKTEN'S SCHEME RELAXATION CONSTANT
         self.zeta = None                    # GHOST PENALTY PARAMETER
         #### OPTIMIZATION OF CRITICAL POINTS
         self.EXTR_R0 = None                 # MAGNETIC AXIS OPTIMIZATION INITIAL GUESS R COORDINATE
@@ -523,15 +524,12 @@ class GradShafranovSolver:
         # Check if the mesh points are inside the new plasma domain
         inside = polygon_path.contains_points(self.X)
 
-        # 1. INVERT SIGN DEPENDING ON SOLUTION PLASMA REGION SIGN
-        if self.PSI_0 > 0: # WHEN THE OBTAINED SOLUTION IS POSITIVE INSIDE THE PLASMA
-            PSILevSet = -PSI.copy()
-        else: # WHEN THE OBTAINED SOLUTION IS NEGATIVE INSIDE THE PLASMA
-            PSILevSet = PSI.copy()
-
-        # 2. DISCARD POINTS OUTSIDE THE PLASMA REGION
+        # FORCE PLASMA LEVEL-SET SIGN DEPENDING ON REGION
+        PSILevSet = PSI.copy()
         for inode in range(self.Nn):
-            if not inside[inode]:
+            if inside[inode]:
+                PSILevSet[inode] = -np.abs(PSILevSet[inode])
+            else:
                 PSILevSet[inode] = np.abs(PSILevSet[inode])
     
         return PSILevSet
@@ -1111,7 +1109,7 @@ class GradShafranovSolver:
         
         residual1 = self.PSI_NORMstar[:,1] - self.PSI_NORM[:,1]
         
-        if self.it > 1: 
+        if self.it > 2: 
             residual0 = self.PSI_NORMstar[:,0] - self.PSI_NORM[:,0]
             self.alpha = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
         
@@ -1307,9 +1305,8 @@ class GradShafranovSolver:
             # IN CASE WHERE THE NEW SADDLE POINT (N+1) CORRESPONDS (CLOSE TO) TO THE OLD SADDLE POINT, THEN THAT MEANS THAT THE PLASMA REGION
             # IS ALREADY WELL DEFINED BY THE OLD LEVEL-SET 
             
-            if np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]) < 0.5:
+            if self.it <= self.PLASMA_IT or np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]) < 0.2:
                 return
-            
             else:
                 ###### UPDATE PLASMA REGION LEVEL-SET FUNCTION VALUES ACCORDING TO SOLUTION OBTAINED
                 # . RECALL THAT PLASMA REGION IS DEFINED BY NEGATIVE VALUES OF LEVEL-SET -> NEED TO INVERT SIGN
