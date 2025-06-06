@@ -9,7 +9,7 @@ from functools import partial
 
 class InitialGuess:
     
-    def __init__(self,PROBLEM,PSI_GUESS,NOISE=False,**kwargs):
+    def __init__(self,PROBLEM,PSI_GUESS,NORMALISE=False,NOISE=False,**kwargs):
         # IMPORT PROBLEM DATA
         self.problem = proxy(PROBLEM)
         # PSI INITIAL GUESS PREDEFINED MODELS
@@ -17,10 +17,21 @@ class InitialGuess:
         self.LINEAR_SOLUTION = 0
         self.ZHENG_SOLUTION = 1
         self.NONLINEAR_SOLUTION = 2
-        self.OTHER_GUESS = 3
+        self.F4E_HAMILTONIAN = 3
+        self.FOCUS_PSI = 4
+        self.OTHER_GUESS = 5
         
-        self.NOISE = NOISE
+        # GENERAL ATTRIBUTES
+        self.PSI0fun = None         # INITIAL GUESS FUNCTION
+        self.PSI0 = None            # INITIAL GUESS FIELD (COMPUTATIONAL DOMAIN)
+        self.Opoint0 = None         # INITIAL GUESS O-POINTS (LOCAL EXTREMA)
+        self.Xpoint0 = None         # INITIAL GUESS X-POINTS (SADDLE POINTS)
+        self.PSI0_0 = None          # INITIAL GUESS VALUE AT O-POINT
+        self.PSI0_X = None          # INITIAL GUESS VALUE AT X-POINT
+        self.NOISE = NOISE          # WHITE NOISE SWITCH
+        self.NORMALISE = NORMALISE  # NORMALISATION SWITCH
         
+        # DEFINE THE MODEL
         match PSI_GUESS:
             case 'LINEAR':
                 # INITIAL GUESS PARAMETERS
@@ -33,9 +44,9 @@ class InitialGuess:
                 # INITIAL GUESS
                 if NOISE:
                     self.A = kwargs['A']
-                    self.PSI0 = self.PSIlinearNOISE
+                    self.PSI0fun = self.PSIlinearNOISE
                 else:
-                    self.PSI0 = partial(PSIanalyticalLINEAR, R0=self.R0, coeffs=self.coeffs)
+                    self.PSI0fun = partial(PSIanalyticalLINEAR, R0=self.R0, coeffs=self.coeffs)
 
             case 'ZHENG':
                 # INITIAL GUESS PARAMETERS
@@ -48,9 +59,9 @@ class InitialGuess:
                 # INITIAL GUESS
                 if NOISE:
                     self.A = kwargs['A']
-                    self.PSI0 = self.PSIzhengNOISE
+                    self.PSI0fun = self.PSIzhengNOISE
                 else:
-                    self.PSI0 = partial(PSIanalyticalZHENG, coeffs=self.coeffs)
+                    self.PSI0fun = partial(PSIanalyticalZHENG, coeffs=self.coeffs)
 
             case 'NONLINEAR':
                 # INITIAL GUESS PARAMETERS
@@ -62,23 +73,61 @@ class InitialGuess:
                 # INITIAL GUESS
                 if NOISE:
                     self.A = kwargs['A']
-                    self.PSI0 = self.PSInonlinearNOISE
+                    self.PSI0fun = self.PSInonlinearNOISE
                 else:
-                    self.PSI0 = partial(PSIanalyticalNONLINEAR, R0=self.R0, coeffs=self.coeffs)
+                    self.PSI0fun = partial(PSIanalyticalNONLINEAR, R0=self.R0, coeffs=self.coeffs)
+                    
+            case 'F4E':
+                # GEOMETRY PARAMETERS
+                self.INITIAL_GUESS = self.F4E_HAMILTONIAN
+                self.X_SADDLE = kwargs['Xsaddle']          # ACTIVE SADDLE POINT
+                self.X_RIGHT = kwargs['Xright']            # POINT ON THE RIGHT
+                self.X_LEFT = kwargs['Xleft']              # POINT ON THE LEFT
+                self.X_TOP = kwargs['Xtop']                # POINT ON TOP
+                self.coeffs = ComputeF4EPlasmaLScoeffs(self.X_SADDLE, self.X_RIGHT, self.X_LEFT, self.X_TOP)
+                # GEOMETRY LEVEL-SET FUNCTION
+                self.PSI0fun = partial(F4EPlasmaLS, coeffs=self.coeffs, X_SADDLE=self.X_SADDLE, X_LEFT=self.X_LEFT)
+                
+            case 'FOCUS':
+                self.INITIAL_GUESS = self.FOCUS_PSI
+                self.R0 = kwargs['R0']
+                self.Z0 = kwargs['Z0']
+                self.radius = kwargs['radius']
+                self.PSI0fun = self.PSIfocus
 
             case 'OTHER':
                 self.INITIAL_GUESS = self.OTHER_GUESS
-                self.PSI0 = kwargs['PSI0']
+                self.PSI0fun = kwargs['PSI0fun']
                 
+        # COMPUTE INITIAL GUESS ON COMPUTATIONAL DOMAIN    
+        self.PSI0 = self.ComputeField(self.problem.X,NORMALISE)
         return
     
     
-    def ComputeField(self,X):
-        
+    def ComputeField(self,X,NORMALISE=False):
         PSI0 = np.zeros([np.shape(X)[0]])
         for inode in range(np.shape(X)[0]):
-            PSI0[inode] = self.PSI0(X[inode,:])
+            PSI0[inode] = self.PSI0fun(X[inode,:])
+        if NORMALISE:
+            PSI0 = self.NormalisePSI(PSI0)
         return PSI0
+    
+    def NormalisePSI(self,PSI):
+        self.Opoint, self.Xpoint = self.problem.FindCritical(PSI)
+        if not self.Opoint:
+            raise ValueError("No O-points found!")
+        else:
+            self.PSI0_0 = self.Opoint[0][1]
+        if not self.Xpoint:
+            self.PSI0_X = 0.0
+        else:
+            self.PSI0_X = self.Xpoint[0][1]
+
+        # Calculate normalised psi.
+        # 0 = magnetic axis
+        # 1 = plasma boundary
+        PSI = (PSI - self.PSI0_0) / (self.PSI0_X - self.PSI0_0)
+        return PSI
     
     
 ##################################################################################################
@@ -103,19 +152,30 @@ class InitialGuess:
         return PSIanalyticalNONLINEAR(X,self.R0,self.coeffs)*self.A*random()
     
 ##################################################################################################
+################################### EXPONENTIAL MODEL ############################################
+##################################################################################################
+    
+    def PSIfocus(self,X):
+        return np.exp(-((X[0] - self.R0) ** 2 + (X[1] - self.Z0) ** 2) / self.radius**2)
+    
+##################################################################################################
 ###################################### REPRESENTATION ############################################
 ################################################################################################## 
     
     def Plot(self):
-        
-        # COMPUTE INITIAL PSI GUESS FIELD
-        PSI0 = self.ComputeField(self.problem.X)
+        # DEFINE SEPARATRIX DEPENDING ON NORMALISATION
+        if self.NORMALISE:
+            klevel = 1
+        else:
+            klevel = 0
+
         #### FIGURE
         # PLOT INITIAL PSI GUESS BACKGROUND VALUES
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        contourf = ax.tricontourf(self.problem.X[:,0],self.problem.X[:,1],PSI0,levels=30)
-        contour = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1],PSI0,levels=30,colors='black', linewidths=1)
+        contourf = ax.tricontourf(self.problem.X[:,0],self.problem.X[:,1],self.PSI0,levels=30)
+        contour = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1],self.PSI0,levels=30,colors='black', linewidths=1)
+        contour0 = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1],self.PSI0,levels=[klevel],colors='black', linewidths=3)
         # Define computational domain's boundary path
         compboundary = np.zeros([len(self.problem.BoundaryVertices)+1,2])
         compboundary[:-1,:] = self.problem.X[self.problem.BoundaryVertices,:]
@@ -123,7 +183,7 @@ class InitialGuess:
         compboundary[-1,:] = compboundary[0,:]
         clip_path = Path(compboundary)
         patch = PathPatch(clip_path, transform=ax.transData)
-        for cont in [contourf,contour]:
+        for cont in [contourf,contour,contour0]:
             for coll in cont.collections:
                 coll.set_clip_path(patch)
             

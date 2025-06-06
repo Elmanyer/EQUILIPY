@@ -21,9 +21,12 @@ class CurrentModel:
         self.ZHENG_CURRENT = 1
         self.NONLINEAR_CURRENT = 2
         self.PROFILES_CURRENT = 3
-        self.OTHER_CURRENT = 4
+        self.PCONSTRAIN_CURRENT = 4
+        self.BetaCONSTRAIN_CURRENT = 5
+        self.OTHER_CURRENT = 6
         
         self.PSIdependent = False
+        self.DIMENSIONLESS = False
         
         ##### PRE-DEFINED PLASMA CURRENT MODELS
         match MODEL:
@@ -31,6 +34,7 @@ class CurrentModel:
             case 'LINEAR': 
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.LINEAR_CURRENT
+                self.DIMENSIONLESS = True
                 self.R0 = kwargs['R0']                    # MEAN RADIUS
                 self.epsilon = kwargs['epsilon']          # INVERSE ASPECT RATIO
                 self.kappa = kwargs['kappa']              # ELONGATION
@@ -59,6 +63,7 @@ class CurrentModel:
             case 'NONLINEAR':
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.NONLINEAR_CURRENT
+                self.DIMENSIONLESS = True
                 self.PSIdependent = True
                 self.R0 = kwargs['R0']
                 self.coeffs = [1.15*np.pi,  # [Kr, 
@@ -82,7 +87,7 @@ class CurrentModel:
                 # MODEL PLASMA CURRENT 
                 self.Jphi = self.JphiPROFILES
                 
-            case 'PROFILES_PCONSTRAIN':
+            case 'PCONSTRAIN':
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.PCONSTRAIN_CURRENT
                 self.PSIdependent = True
@@ -96,10 +101,11 @@ class CurrentModel:
                     self.Raxis = 1.0
                 self.Beta0 = None                           # BETA CONSTRAIN FACTOR
                 self.L = None                               # L CONSTRAIN FACTOR
+                self.L, self.Beta0 = self.ComputePConstrains()
                 # MODEL PLASMA CURRENT 
                 self.Jphi = self.JphiPCONSTRAIN
                 
-            case 'PROFILES_BetaCONSTRAIN':
+            case 'BetaCONSTRAIN':
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.BetaCONSTRAIN_CURRENT
                 self.PSIdependent = True
@@ -147,10 +153,9 @@ class CurrentModel:
 ##################################################################################################
     
     def JphiNONLINEAR(self,X,PSI):
-        Xstar = X/self.R0
         Kr, Kz, r0 = self.coeffs
-        Jphi = -((Kr**2+Kz**2)*PSI+(Kr/Xstar[0])*np.cos(Kr*(Xstar[0]+r0))*np.cos(Kz*Xstar[1])+Xstar[0]*(np.sin(Kr*(Xstar[0]+r0))**2*np.cos(Kz*Xstar[1])**2
-                    -PSI**2+np.exp(-np.sin(Kr*(Xstar[0]+r0))*np.cos(Kz*Xstar[1]))-np.exp(-PSI)))/(Xstar[0]*self.mu0)
+        Jphi = -((Kr**2+Kz**2)*PSI+(Kr/X[0])*np.cos(Kr*(X[0]+r0))*np.cos(Kz*X[1])+X[0]*(np.sin(Kr*(X[0]+r0))**2*np.cos(Kz*X[1])**2
+                    -PSI**2+np.exp(-np.sin(Kr*(X[0]+r0))*np.cos(Kz*X[1]))-np.exp(-PSI)))/(X[0]*self.mu0)
         return Jphi
     
 ##################################################################################################
@@ -188,7 +193,7 @@ class CurrentModel:
         return self.L * (self.Beta0 * X[0] / self.Raxis + (1 - self.Beta0) * self.Raxis / X[0]) * (1.0 - PSI**self.alpha_m)**self.alpha_n
     
         
-    def ComputeConstrains(self,problem):
+    def ComputePConstrains(self):
         
         # Apply constraints to define constants L and Beta0
 
@@ -198,7 +203,7 @@ class CurrentModel:
             func = lambda x: (1.0 - x**self.alpha_m) ** self.alpha_n, 
             a = 0.0, 
             b = 1.0)
-        shapeintegral *= problem.PSI_X - problem.PSI_0
+        #shapeintegral *= self.problem.PSI_X - self.problem.PSI_0
 
         # Integrate current components
         def funIR(X,PSI):
@@ -207,8 +212,8 @@ class CurrentModel:
         def funI_R(X,PSI):
             return (1.0 - PSI**self.alpha_m)**self.alpha_n * self.Raxis / X[0] 
 
-        IR = problem.IntegratePlasmaDomain(funIR)
-        I_R = problem.IntegratePlasmaDomain(funI_R)
+        IR = self.problem.IntegratePlasmaDomain(funIR)
+        I_R = self.problem.IntegratePlasmaDomain(funI_R)
         
         # Pressure on axis is
         #
@@ -220,12 +225,10 @@ class CurrentModel:
         #    = L*Beta0*(IR - I_R) + L*I_R
 
         LBeta0 = -self.P0 * self.Raxis / shapeintegral
-
-        self.L = self.TOTAL_CURRENT / I_R - LBeta0 * (IR / I_R - 1)
-        self.Beta0 = LBeta0 / self.L
-        return
-
-
+        L = self.TOTAL_CURRENT / I_R - LBeta0 * (IR / I_R - 1)
+        Beta0 = LBeta0 / L
+        return L, Beta0
+    
 
 ##################################################################################################
 ####################################### CURRENT FIELD ############################################
@@ -242,35 +245,21 @@ class CurrentModel:
 ###################################### REPRESENTATION ############################################
 ################################################################################################## 
     
-    def Plot(self):
-        # PREPARE RECTANGULAR REPRESENTATION DOMAIN
-        Rmax = np.max(self.problem.X[:,0])+0.1
-        Rmin = np.min(self.problem.X[:,0])-0.1
-        Zmax = np.max(self.problem.X[:,1])+0.1
-        Zmin = np.min(self.problem.X[:,1])-0.1
-        Nr = 50
-        Nz = 60
-        Xrec = np.zeros([Nr*Nz,2])
-        inode = 0
-        for r in np.linspace(Rmin,Rmax,Nr):
-            for z in np.linspace(Zmin,Zmax,Nz):
-                Xrec[inode,:] = [r,z]
-                inode += 1
+    def Plot(self):     
         # COMPUTE PLASMA CURRENT FIELD
-        PSI0 = self.problem.initialPSI.ComputeField(self.problem.X)
-        Jphi = self.ComputeField(self.problem.X,PSI0)
-        # COMPUTE PLASMA DOMAIN BOUNDARY
-        PHI0 = self.problem.initialPHI.ComputeField(Xrec)
+        Jphi = self.ComputeField(self.problem.X,self.problem.initialPSI.PSI0)
+        
         #### FIGURE
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        ax.set_xlim(Rmin,Rmax)
-        ax.set_ylim(Zmin,Zmax)
+        ax.set_xlim(self.problem.Rmin,self.problem.Rmax)
+        ax.set_ylim(self.problem.Zmin,self.problem.Zmax)
         # PLOT INITIAL PSI GUESS BACKGROUND VALUES
         contourf = ax.tricontourf(self.problem.X[:,0],self.problem.X[:,1],Jphi,levels=30)
         contour = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1],Jphi,levels=30,colors='black', linewidths=1)
+        contour0 = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1],Jphi,levels=[0],colors='black', linewidths=3)
         # PLOT INITIAL PLASMA BOUNDARY
-        cs = ax.tricontour(Xrec[:,0],Xrec[:,1],PHI0,levels=[0],colors='red', linewidths=3)
+        cs = ax.tricontour(self.problem.initialPHI.Xrec[:,0],self.problem.initialPHI.Xrec[:,1],self.problem.initialPHI.PHI0rec,levels=[0],colors='red', linewidths=3)
         # Loop over paths and extract vertices
         plasmabounpath = []
         for path in cs.collections[0].get_paths():
@@ -280,7 +269,7 @@ class CurrentModel:
         # APPLY MASK TO NOT PLOT OUTSIDE OF MESH
         clip_path = Path(plasmabounpath)
         patch = PathPatch(clip_path, transform=ax.transData)
-        for cont in [contourf, contour]:
+        for cont in [contourf, contour, contour0]:
             for coll in cont.collections:
                 coll.set_clip_path(patch)
             
@@ -309,6 +298,6 @@ class CurrentModel:
         plt.colorbar(contourf, ax=ax)
         ax.set_xlabel('R (in m)')
         ax.set_ylabel('Z (in m)')
-        ax.set_title('Initial poloidal magnetic flux guess')
+        ax.set_title('Plasma current')
         return
     

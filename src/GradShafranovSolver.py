@@ -350,6 +350,11 @@ class GradShafranovSolver:
         self.BoundaryAttributes()
         print('Done!')
         
+        # OBTAIN COMPUTATIONAL MESH LIMITS
+        self.Rmax = np.max(self.X[:,0])
+        self.Rmin = np.min(self.X[:,0])
+        self.Zmax = np.max(self.X[:,1])
+        self.Zmin = np.min(self.X[:,1])
         return
     
     
@@ -1018,7 +1023,7 @@ class GradShafranovSolver:
         return gradpsi
     
     
-    def ComputeCriticalPSI(self,PSI):
+    def ComputeCriticalPSI_2(self,PSI):
         """
         Compute the critical values of the magnetic flux function (PSI).
 
@@ -1039,7 +1044,7 @@ class GradShafranovSolver:
             GRAD = np.array([dPSIdr,dPSIdz])
             return GRAD
         
-        # EVALUATE HESSIAN MATRIX ENTRIES
+        # INTERPOLATION OF HESSIAN(PSI)
         def EvaluateHESSIAN(X,gradPSIfine,Rfine,Zfine,dr,dz):
             # compute second derivatives on fine mesh
             dgradPSIdrfine = np.gradient(gradPSIfine[0],dr,dz)
@@ -1048,7 +1053,8 @@ class GradShafranovSolver:
             dPSIdrdr = griddata((Rfine.flatten(),Zfine.flatten()), dgradPSIdrfine[0].flatten(), (X[0],X[1]), method='cubic')
             dPSIdzdr = griddata((Rfine.flatten(),Zfine.flatten()), dgradPSIdrfine[1].flatten(), (X[0],X[1]), method='cubic')
             dPSIdzdz = griddata((Rfine.flatten(),Zfine.flatten()), dgradPSIdzfine[1].flatten(), (X[0],X[1]), method='cubic')
-            if dPSIdrdr*dPSIdzdz-dPSIdzdr**2 > 0:
+            if dPSIdrdr*dPSIdzdz-dPSIdzdr**2 > 0.0:
+                # Found O-point
                 return "LOCAL EXTREMUM"
             else:
                 return "SADDLE POINT"
@@ -1141,6 +1147,151 @@ class GradShafranovSolver:
             self.PSI_X = 0
             
         return 
+    
+    
+    def FindCritical(self,PSI, nr=45, nz=65, tolbound=0.25):
+            
+        # INTERPOLATION OF GRAD(PSI)
+        def gradPSI(X,Rfine,Zfine,gradPSIfine):
+            dPSIdr = griddata((Rfine.flatten(),Zfine.flatten()), gradPSIfine[0].flatten(), (X[0],X[1]), method='cubic')
+            dPSIdz = griddata((Rfine.flatten(),Zfine.flatten()), gradPSIfine[1].flatten(), (X[0],X[1]), method='cubic')
+            GRAD = np.array([dPSIdr,dPSIdz])
+            return GRAD
+
+        # INTERPOLATION OF HESSIAN(PSI)
+        def hessianPSI(X,gradPSIfine,Rfine,Zfine,dr,dz):
+            # compute second derivatives on fine mesh
+            dgradPSIdrfine = np.gradient(gradPSIfine[0],dr,dz)
+            dgradPSIdzfine = np.gradient(gradPSIfine[1],dr,dz)
+            # interpolate HESSIAN components on point 
+            dPSIdrdr = griddata((Rfine.flatten(),Zfine.flatten()), dgradPSIdrfine[0].flatten(), (X[0],X[1]), method='cubic')
+            dPSIdzdr = griddata((Rfine.flatten(),Zfine.flatten()), dgradPSIdrfine[1].flatten(), (X[0],X[1]), method='cubic')
+            dPSIdzdz = griddata((Rfine.flatten(),Zfine.flatten()), dgradPSIdzfine[1].flatten(), (X[0],X[1]), method='cubic')
+            return dPSIdrdr, dPSIdzdr, dPSIdzdz
+            
+        # 1. INTERPOLATE PSI VALUES ON A FINER STRUCTURED MESH USING PSI ON NODES
+        # DEFINE FINER STRUCTURED MESH
+        rfine = np.linspace(self.Rmin, self.Rmax, nr)
+        zfine = np.linspace(self.Zmin, self.Zmax, nz)
+        # INTERPOLATE PSI VALUES
+        Rfine, Zfine = np.meshgrid(rfine,zfine, indexing='ij')
+        PSIfine = griddata((self.X[:,0],self.X[:,1]), PSI, (Rfine, Zfine), method='cubic')
+        # CORRECT VALUES AT INTERPOLATION POINTS OUTSIDE OF COMPUTATIONAL DOMAIN
+        for ir in range(nr):
+            for iz in range(nz):
+                if np.isnan(PSIfine[ir,iz]):
+                    PSIfine[ir,iz] = 0
+
+        # CREATE MASK FOR BACKGROUND MESH POINTS LYING OUTSIDE COMPUTATIONAL DOMAIN   
+        grid_points = np.vstack([Rfine.ravel(), Zfine.ravel()]).T
+        # Create polygon path and test containment
+        path = Path(self.X[self.BoundaryVertices,:])
+        mask = path.contains_points(grid_points)
+
+        # Reshape mask to the grid shape
+        mask_grid = mask.reshape(Rfine.shape)
+
+        # 2. DEFINE GRAD(PSI) WITH FINER MESH VALUES USING FINITE DIFFERENCES
+        dr = (self.Rmax-self.Rmin)/nr
+        dz = (self.Zmax-self.Zmin)/nz
+        gradPSIfine = np.gradient(PSIfine,dr,dz)
+
+        # 3. COMPUTE SQUARE MODUL OF POLOIDAL MAGNETIC FIELD Bp^2
+        Bp2 = (gradPSIfine[0]**2 + gradPSIfine[1]**2)/Rfine**2
+
+        # 4. FIND LOCAL MINIMA BY MINIMISING Bp^2
+        Xpoint = []
+        Opoint = []
+        for i in range(2, nr - 2):
+            for j in range(2, nz - 2):
+                if (
+                    (Bp2[i, j] < Bp2[i + 1, j + 1])
+                    and (Bp2[i, j] < Bp2[i + 1, j])
+                    and (Bp2[i, j] < Bp2[i + 1, j - 1])
+                    and (Bp2[i, j] < Bp2[i - 1, j + 1])
+                    and (Bp2[i, j] < Bp2[i - 1, j])
+                    and (Bp2[i, j] < Bp2[i - 1, j - 1])
+                    and (Bp2[i, j] < Bp2[i, j + 1])
+                    and (Bp2[i, j] < Bp2[i, j - 1])
+                ):
+                    # Found local minimum
+                    # 5. CHECK IF POINT OUTSIDE OF COMPUTATIONAL DOMAIN
+                    if mask_grid[i,j]:
+                        # 6. LAUNCH NONLINEAR SOLVER
+                        X0 = np.array([Rfine[i,j],Zfine[i,j]], dtype=float)
+                        sol = optimize.root(gradPSI, X0, args=(Rfine,Zfine,gradPSIfine))
+
+                        if sol.success == True:
+                            # 7. INTERPOLATE VALUE OF PSI AT LOCAL EXTREMUM
+                            elemcrit = self.SearchElement(sol.x,range(self.Ne))
+                            PSIcrit = self.Elements[elemcrit].ElementalInterpolationPHYSICAL(sol.x,PSI[self.Elements[elemcrit].Te])
+                            
+                            # 8. CHECK LOCAL EXTREMUM HESSIAN 
+                            dPSIdrdr, dPSIdzdr, dPSIdzdz = hessianPSI(sol.x, gradPSIfine, Rfine, Zfine, dr, dz)
+                            if dPSIdrdr*dPSIdzdz-dPSIdzdr**2 > 0.0:
+                                # Found O-point
+                                Opoint.append((sol.x,PSIcrit,elemcrit))
+                            else:
+                                # Found X-point
+                                Xpoint.append((sol.x,PSIcrit,elemcrit))
+        
+        # Remove duplicates
+        def remove_dup(points):
+            result = []
+            for p in points:
+                dup = False
+                for p2 in result:
+                    if (p[0][0] - p2[0][0]) ** 2 + (p[0][1] - p2[0][1]) ** 2 < 1e-5:
+                        dup = True  # Duplicate
+                        break
+                if not dup:
+                    result.append(p)  # Add to the list
+            return result
+
+        Xpoint = remove_dup(Xpoint)
+        Opoint = remove_dup(Opoint)  
+
+        # Check distance to computational boundary
+        def remove_closeboundary(points):
+            for boundarypoint in self.BoundaryNodes:
+                Xbound = self.X[boundarypoint,:]
+                for p in points:
+                    if np.linalg.norm(p[0][0]-Xbound) < tolbound:
+                        points.remove(p)
+            return points
+                    
+        Xpoint = remove_closeboundary(Xpoint)
+        Opoint = remove_closeboundary(Opoint)    
+                
+        if len(Opoint) == 0:
+            # Can't order primary O-point, X-point so return
+            print("Warning: No O points found")
+            return Opoint, Xpoint
+
+        # Find primary O-point by sorting by distance from middle of domain
+        Rmid = 0.5 * (self.Rmax-self.Rmin)
+        Zmid = 0.5 * (self.Zmax-self.Zmin)
+        Opoint.sort(key=lambda x: (x[0] - Rmid) ** 2 + (x[1] - Zmid) ** 2)
+            
+        return Opoint, Xpoint
+
+
+    def ComputeCriticalPSI(self):
+        
+        Opoint, Xpoint = self.FindCritical(self.PSI.T[0])   
+        # O-point
+        self.Xcrit[1,0,:-1] = Opoint[0][0] 
+        self.PSI_0 = Opoint[0][1]
+        self.Xcrit[1,0,-1] = Opoint[0][2] 
+        print('LOCAL EXTREMUM AT ',self.Xcrit[1,0,:-1],' (ELEMENT ', int(self.Xcrit[1,0,-1]),') WITH VALUE PSI_0 = ',self.PSI_0)
+        
+        # X-point
+        if not self.FIXED_BOUNDARY: 
+            self.Xcrit[1,1,:-1] = Xpoint[0][0] 
+            self.PSI_X = Xpoint[0][1]
+            self.Xcrit[1,1,-1] = Xpoint[0][2]
+            print('SADDLE POINT AT ',self.Xcrit[1,1,:-1],' (ELEMENT ', int(self.Xcrit[1,1,-1]),') WITH VALUE PSI_X = ',self.PSI_X)
+        return
 
     
     def NormalisePSI(self):
@@ -1172,6 +1323,7 @@ class GradShafranovSolver:
         """
         Compute and apply a correction factor to ensure the total plasma current in the computational domain matches the specified input parameter `TOTAL_CURRENT`.
         """
+        self.gamma = 1.0
         if self.PlasmaCurrent.CURRENT_MODEL == self.PlasmaCurrent.PROFILES_CURRENT:
             # COMPUTE TOTAL PLASMA CURRENT    
             Tcurrent = self.IntegratePlasmaDomain(self.PlasmaCurrent.Jphi)
@@ -1388,12 +1540,6 @@ class GradShafranovSolver:
             
         # COMPUTE 1D NUMERICAL QUADRATURE ORDER
         self.QuadratureOrder1D = ceil(0.5*(self.QuadratureOrder2D+1))
-        
-        # OBTAIN COMPUTATIONAL MESH LIMITS
-        self.Rmax = np.max(self.X[:,0])
-        self.Rmin = np.min(self.X[:,0])
-        self.Zmax = np.max(self.X[:,1])
-        self.Zmin = np.min(self.X[:,1])
             
         # INITIALISE CRITICAL POINTS ARRAY
         self.Xcrit = np.zeros([2,2,3])  # [(iterations n, n+1), (extremum, saddle point), (R_crit,Z_crit,elem_crit)]
@@ -1426,29 +1572,19 @@ class GradShafranovSolver:
         """
         Computes the initial level-set function values describing the plasma boundary. Negative values represent inside the plasma region.
         """ 
-        self.PlasmaLS = np.zeros([self.Nn],dtype=float)
-        for inode in range(self.Nn):
-            self.PlasmaLS[inode] = self.initialPHI.PHI0(self.X[inode,:])
+        self.PlasmaLS = self.initialPHI.PHI0
         return 
     
     def InitialiseElements(self):
         """ 
         Function initialising attribute ELEMENTS which is a list of all elements in the mesh. 
         """
-        if self.PlasmaCurrent.CURRENT_MODEL in [self.PlasmaCurrent.LINEAR_CURRENT, self.PlasmaCurrent.NONLINEAR_CURRENT]:  # DIMENSIONLESS SOLUTION CASE 
-            self.Elements = [Element(index = e,
-                                        ElType = self.ElType,
-                                        ElOrder = self.ElOrder,
-                                        Xe = self.X[self.T[e,:],:]/self.PlasmaCurrent.R0,
-                                        Te = self.T[e,:],
-                                        PlasmaLSe = self.PlasmaLS[self.T[e,:]]) for e in range(self.Ne)]
-        else:
-            self.Elements = [Element(index = e,
-                                        ElType = self.ElType,
-                                        ElOrder = self.ElOrder,
-                                        Xe = self.X[self.T[e,:],:],
-                                        Te = self.T[e,:],
-                                        PlasmaLSe = self.PlasmaLS[self.T[e,:]]) for e in range(self.Ne)]
+        self.Elements = [Element(index = e,
+                                    ElType = self.ElType,
+                                    ElOrder = self.ElOrder,
+                                    Xe = self.X[self.T[e,:],:],
+                                    Te = self.T[e,:],
+                                    PlasmaLSe = self.PlasmaLS[self.T[e,:]]) for e in range(self.Ne)]
         
         # COMPUTE MESH MEAN SIZE
         self.meanArea, self.meanLength = self.ComputeMeshElementsMeanSize()
@@ -1456,6 +1592,12 @@ class GradShafranovSolver:
         print("         · MESH ELEMENTS MEAN LENGTH = " + str(self.meanLength) + " m")
         print("         · RECOMMENDED NITSCHE'S PENALTY PARAMETER VALUE    beta ~ C·" + str(self.ElOrder**2/self.meanLength))
         return
+    
+    
+    def DimensionlessCoordinates(self): 
+        for ELEMENT in self.Elements:
+            ELEMENT.Xe /= self.PlasmaCurrent.R0
+        return 
     
     
     def InitialisePSI(self):  
@@ -1474,7 +1616,7 @@ class GradShafranovSolver:
         self.NnPB = self.ComputePlasmaBoundaryNumberNodes()
         
         ####### INITIALISE PSI VECTORS
-        print('         -> INITIALISE PSI ARRAYS...', end="")
+        print('     -> INITIALISE PSI ARRAYS...', end="")
         # INITIALISE ITERATIVE UPDATED ARRAYS
         self.PSI = np.zeros([self.Nn],dtype=float)            # SOLUTION FROM SOLVING CutFEM SYSTEM OF EQUATIONS (INTERNAL LOOP)       
         self.PSI_NORMstar = np.zeros([self.Nn,2],dtype=float) # UNRELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)
@@ -1485,7 +1627,7 @@ class GradShafranovSolver:
         
         ####### COMPUTE INITIAL GUESS AND STORE IT IN ARRAY FOR N=0
         # COMPUTE INITIAL GUESS
-        print('         -> COMPUTE INITIAL GUESS FOR PSI_NORM...', end="")
+        print('     -> COMPUTE INITIAL GUESS FOR PSI_NORM...', end="")
         self.PSI_NORM[:,0] = self.initialPSI.ComputeField(self.X)  
         self.PSI_NORM[:,1] = self.PSI_NORM[:,0]
         # ASSIGN VALUES TO EACH ELEMENT
@@ -1493,7 +1635,7 @@ class GradShafranovSolver:
         print('Done!')   
         
         ####### COMPUTE INITIAL VACUUM VESSEL BOUNDARY VALUES PSI_B AND STORE THEM IN ARRAY FOR N=0
-        print('         -> COMPUTE INITIAL VACUUM VESSEL BOUNDARY VALUES PSI_B...', end="")
+        print('     -> COMPUTE INITIAL VACUUM VESSEL BOUNDARY VALUES PSI_B...', end="")
         # COMPUTE INITIAL TOTAL PLASMA CURRENT CORRECTION FACTOR
         self.ComputeTotalPlasmaCurrentNormalization()
         self.PSI_B[:,0] = self.ComputeBoundaryPSI()
@@ -1501,7 +1643,7 @@ class GradShafranovSolver:
         print('Done!')
         
         ####### ASSIGN CONSTRAINT VALUES ON PLASMA BOUNDARY
-        print('         -> ASSIGN INITIAL BOUNDARY VALUES...', end="")
+        print('     -> ASSIGN INITIAL BOUNDARY VALUES...', end="")
         # ASSIGN PLASMA BOUNDARY VALUES
         self.PSI_X = 0   # INITIAL CONSTRAINT VALUE ON SEPARATRIX
         self.UpdatePlasmaBoundaryValues()
@@ -1510,18 +1652,25 @@ class GradShafranovSolver:
         return
     
     
-    def Initialization(self):
+    def InitialiseMESH(self):
         """
-        Initializes all necessary elements for the simulation:
+        Initializes all mesh related elements and preprocess mesh data for simulation:
+            - Initializes some simulation parameters.
+            - Initializes python pickle lists for direct output.
             - Initializes the level-set function for plasma and vacuum vessel boundaries.
             - Initializes the elements in the computational domain.
             - Classifies elements and writes their classification.
-            - Computes the active nodes in the system.
-            - Approximates the vacuum vessel first wall and plasma/vacuum interface.
-            - Computes numerical integration quadratures for the problem.
-            - Initializes PSI unknowns and computes initial guesses.
-            - Writes the initial PSI, normalized PSI, and vacuum vessel boundary PSI values.
+            - Approximates the plasma boundary interface.
+            - Finds ghost faces if necessary
+            - Computes elemental numerical integration quadratures.
         """
+        
+        print("PREPROCESS MESH AND INITIALISE MESH ITEMS...")
+        
+        print("     -> INITIALISE SIMULATION PARAMETERS...", end="")
+        self.InitialiseParameters()
+        self.InitialisePickleLists()
+        print('Done!')
         
         # INITIALISE LEVEL-SET FUNCTION
         print("     -> INITIALISE LEVEL-SET...", end="")
@@ -1531,7 +1680,9 @@ class GradShafranovSolver:
         # INITIALISE ELEMENTS 
         print("     -> INITIALISE ELEMENTS...")
         self.InitialiseElements()
-        print('Done!')
+        if type(self.PlasmaCurrent) != type(None) and self.PlasmaCurrent.DIMENSIONLESS:
+            self.DimensionlessCoordinates()
+        print('     Done!')
         
         # CLASSIFY ELEMENTS   
         print("     -> CLASSIFY ELEMENTS...", end="")
@@ -1550,22 +1701,13 @@ class GradShafranovSolver:
             print("     -> IDENTIFY GHOST FACES...", end="")
             self.ComputePlasmaBoundaryGhostFaces()
             print("Done!")
-            
-        self.writePlasmaBoundaryData()
         
         # COMPUTE NUMERICAL INTEGRATION QUADRATURES
         print('     -> COMPUTE NUMERICAL INTEGRATION QUADRATURES...', end="")
         self.ComputeIntegrationQuadratures()
         print('Done!')
         
-        # INITIALISE PSI UNKNOWNS
-        print("     -> COMPUTE INITIAL GUESS...")
-        self.InitialisePSI()
-        self.writePSI()
-        self.writePSI_B()
-        self.writePlasmaBC()
-        print('     Done!')
-        
+        print('Done!')
         return  
         
         
@@ -2711,12 +2853,11 @@ class GradShafranovSolver:
 
         The solution process continues until convergence criteria for both the internal and external loops are satisfied.
         """
+        
+        print("PREPARE OUTPUT DIRECTORY...",end='')
         # INITIALISE SIMULATION CASE NAME
         self.CASE = CASE
-        # INITIALISE SIMULATION PARAMETERS
-        self.InitialiseParameters()
         # OUTPUT RESULTS FOLDER
-        print("PREPARE OUTPUT DIRECTORY...",end='')
         # Check if the directory exists
         self.outputdir = self.pwd + '/../RESULTS/' + self.CASE + '-' + self.MESH
         if not os.path.exists(self.outputdir):
@@ -2727,17 +2868,22 @@ class GradShafranovSolver:
         # WRITE SIMULATION PARAMETERS FILE (IF ON)
         self.writeparams() 
         # OPEN OUTPUT FILES
-        self.openOUTPUTfiles()  
-        self.InitialisePickleLists()  
+        self.openOUTPUTfiles()   
         print('Done!')
         
-        # INITIALIZATION
-        print("INITIALIZATION...")
+        # INITIALISE PSI UNKNOWNS
+        print("INITIALISE SIMULATION ARRAYS ...")
         self.it = 0
         self.it_EXT = 0
         self.it_INT = 0
-        self.Initialization()
+        self.InitialisePSI()
         print('Done!')
+        
+        # WRITE INITIAL SIMULATION DATA
+        self.writePlasmaBoundaryData()
+        self.writePSI()
+        self.writePSI_B()
+        self.writePlasmaBC()
 
         if self.plotPSI:
             self.PlotSolutionPSI()  # PLOT INITIAL SOLUTION
@@ -2949,7 +3095,7 @@ class GradShafranovSolver:
             plt.colorbar(contourf, ax=ax)
             return
         
-        if self.PlasmaCurrent.CURRENT_MODEL == self.PlasmaCurrent.PROFILES_CURRENT:
+        if self.PlasmaCurrent.CURRENT_MODEL in [self.PlasmaCurrent.PROFILES_CURRENT, self.PlasmaCurrent.PCONSTRAIN_CURRENT]:
             psi_sol = " normalised solution PSI_NORM"
         else:
             psi_sol = " solution PSI"
@@ -2969,7 +3115,7 @@ class GradShafranovSolver:
             axs.set_title('Converged'+psi_sol)
             plt.show()
             
-        elif self.PlasmaCurrent.CURRENT_MODEL == self.PlasmaCurrent.PROFILES_CURRENT:  # ITERATION SOLUTION FOR PROFILES PLASMA CURRENT (PLOT PSI and PSI_NORM)
+        elif self.PlasmaCurrent.CURRENT_MODEL in [self.PlasmaCurrent.PROFILES_CURRENT, self.PlasmaCurrent.PCONSTRAIN_CURRENT]:  # ITERATION SOLUTION FOR PROFILES PLASMA CURRENT (PLOT PSI and PSI_NORM)
             fig, axs = plt.subplots(1, 2, figsize=(11,6))
             axs[0].set_aspect('equal')
             axs[1].set_aspect('equal')
