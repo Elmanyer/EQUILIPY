@@ -28,6 +28,7 @@ class InitialGuess:
         self.Xpoint0 = None         # INITIAL GUESS X-POINTS (SADDLE POINTS)
         self.PSI0_0 = None          # INITIAL GUESS VALUE AT O-POINT
         self.PSI0_X = None          # INITIAL GUESS VALUE AT X-POINT
+        self.X0 = None              # CRITICAL POINTS INITIAL GUESSES
         self.NOISE = NOISE          # WHITE NOISE SWITCH
         self.NORMALISE = NORMALISE  # NORMALISATION SWITCH
         
@@ -99,21 +100,24 @@ class InitialGuess:
                 self.INITIAL_GUESS = self.OTHER_GUESS
                 self.PSI0fun = kwargs['PSI0fun']
                 
+        if 'X0' in kwargs:
+            self.X0 = kwargs['X0']
+                
         # COMPUTE INITIAL GUESS ON COMPUTATIONAL DOMAIN    
-        self.PSI0 = self.ComputeField(self.problem.X,NORMALISE)
+        self.PSI0 = self.ComputeField(self.problem.X,NORMALISE,self.X0)
         return
     
     
-    def ComputeField(self,X,NORMALISE=False):
+    def ComputeField(self,X,NORMALISE=False,X0=None):
         PSI0 = np.zeros([np.shape(X)[0]])
         for inode in range(np.shape(X)[0]):
             PSI0[inode] = self.PSI0fun(X[inode,:])
         if NORMALISE:
-            PSI0 = self.NormalisePSI(PSI0)
+            PSI0 = self.NormalisePSI(PSI0,X0)
         return PSI0
     
-    def NormalisePSI(self,PSI):
-        self.Opoint, self.Xpoint = self.problem.FindCritical(PSI)
+    def NormalisePSI(self,PSI,X0=None):
+        self.Opoint, self.Xpoint = self.problem.FindCritical(PSI,X0)
         if not self.Opoint:
             raise ValueError("No O-points found!")
         else:

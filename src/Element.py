@@ -261,7 +261,7 @@ class Element:
     
     def Bzg(self):
         """
-        Total radial magnetic field at integration nodes such that    Br = -1/R dpsi/dZ
+        Total radial magnetic field at integration nodes such that     Bz = 1/R dpsi/dR
         """
         Bzg = np.zeros([self.ng])
         # LOOP OVER INTEGRATION NODES
@@ -269,7 +269,7 @@ class Element:
             # COMPUTE GRADIENT IN PHYSICAL SPACE
             Ngrad = self.invJg[ig,:,:]@np.array([self.dNdxig[ig,:],self.dNdetag[ig,:]])
             # COMPUTE VERTICAL MAGNETIC COMPONENT
-            Bzg[ig] += Ngrad[0,:]*self.PSIe/self.Xg[ig,0]
+            Bzg[ig] = Ngrad[0,:]@self.PSIe/self.Xg[ig,0]
         return Bzg
     
     def Brz(self,X):
@@ -299,7 +299,7 @@ class Element:
             # COMPUTE GRADIENT IN PHYSICAL SPACE
             Ngrad = self.invJg[ig,:,:]@np.array([self.dNdxig[ig,:],self.dNdetag[ig,:]])
             # COMPUTE MAGNETIC VECTOR
-            Brzg = Ngrad[[1,0],:]@self.PSIe/self.Xg[ig,0]
+            Brzg[ig,:] = Ngrad[[1,0],:]@self.PSIe/self.Xg[ig,0]
             Brzg[0] *= -1
         return Brzg
     

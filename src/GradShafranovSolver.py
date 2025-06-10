@@ -136,7 +136,6 @@ class GradShafranovSolver:
         #### BOUNDARY CONSTRAINTS
         self.beta = None                    # NITSCHE'S METHOD PENALTY TERM
         #### STABILIZATION
-        self.gamma = None                   # PLASMA TOTAL CURRENT CORRECTION FACTOR
         self.alpha = None                   # AIKTEN'S SCHEME RELAXATION CONSTANT
         self.zeta = None                    # GHOST PENALTY PARAMETER
         #### OPTIMIZATION OF CRITICAL POINTS
@@ -196,6 +195,8 @@ class GradShafranovSolver:
         self.file_L2error = None            # OUTPUT FILE CONTAINING THE ERROR FIELD AND THE L2 ERROR NORM FOR THE CONVERGED SOLUTION 
         self.file_elemsys = None            # OUTPUT FILE CONTAINING THE ELEMENTAL MATRICES FOR EACH ITERATION
         self.file_globalsys = None
+        
+        self.PSIseparatrix = 1.0
         
         print("READ MESH FILES...")
         self.ReadMesh()
@@ -494,6 +495,36 @@ class GradShafranovSolver:
         return integral
     
     
+    def IntegrateBpolPlasmaDomain(self):
+        integral = 0
+        
+        # INTEGRATE OVER PLASMA ELEMENTS
+        for ielem in self.PlasmaElems:
+            # ISOLATE ELEMENT
+            ELEMENT = self.Elements[ielem]
+            # COMPUTE MAGNETIC FIELD AT INTEGRATION NODES
+            Brzg = ELEMENT.Brzg()
+            # LOOP OVER GAUSS NODES
+            for ig in range(ELEMENT.ng):
+                integral += (Brzg[ig,0]**2 + Brzg[ig,1]**2)*ELEMENT.Xg[ig,0]*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                    
+        # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
+        for ielem in self.PlasmaBoundElems:
+            # ISOLATE ELEMENT
+            ELEMENT = self.Elements[ielem]
+            # LOOP OVER SUBELEMENTS
+            for SUBELEM in ELEMENT.SubElements:
+                # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
+                if SUBELEM.Dom < 0:
+                    # COMPUTE MAGNETIC FIELD AT INTEGRATION NODES
+                    Brzg = SUBELEM.Brzg()
+                    # LOOP OVER GAUSS NODES
+                    for ig in range(SUBELEM.ng):
+                        integral += (Brzg[ig,0]**2 + Brzg[ig,1]**2)*SUBELEM.Xg[ig,0]*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
+                        
+        return integral
+    
+    
     ##################################################################################################
     #################################### PLASMA DOMAIN LEVEL-SET #####################################
     ##################################################################################################
@@ -502,7 +533,7 @@ class GradShafranovSolver:
         
         # OBTAIN POINTS CONFORMING THE NEW PLASMA DOMAIN BOUNDARY
         fig, ax = plt.subplots(figsize=(6, 8))
-        cs = ax.tricontour(self.X[:,0],self.X[:,1], PSI, levels=[0])
+        cs = ax.tricontour(self.X[:,0],self.X[:,1], PSI, levels=[self.PSIseparatrix])
 
         paths = list()
 
@@ -642,7 +673,7 @@ class GradShafranovSolver:
                     # LOOP OVER GAUSS NODES
                     for ig in range(ELEMENT.ng):
                         PSI_B[inode] += self.mu0 * GreensFunction(Xbound, ELEMENT.Xg[ig,:])*self.PlasmaCurrent.Jphi(ELEMENT.Xg[ig,:],
-                                            PSIg[ig])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]*self.gamma
+                                            PSIg[ig])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                                     
                 #   2. INTEGRATE IN CUT ELEMENTS, OVER SUBELEMENT IN PLASMA REGION
                 for ielem in self.PlasmaBoundElems:
@@ -656,7 +687,7 @@ class GradShafranovSolver:
                             # LOOP OVER GAUSS NODES
                             for ig in range(SUBELEM.ng):
                                 PSI_B[inode] += self.mu0 * GreensFunction(Xbound, SUBELEM.Xg[ig,:])*self.PlasmaCurrent.Jphi(SUBELEM.Xg[ig,:],
-                                                    PSIg[ig])*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]*self.gamma   
+                                                    PSIg[ig])*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]  
         return PSI_B
     
     ##################################################################################################
@@ -1149,7 +1180,125 @@ class GradShafranovSolver:
         return 
     
     
-    def FindCritical(self,PSI, nr=45, nz=65, tolbound=0.25):
+    def FindCrit(self,PSI,X0, nr=45, nz=65, tolbound=0.25):
+        """
+        Compute the critical values of the magnetic flux function (PSI).
+
+        Input:
+            PSI (array-like): Poloidal magnetic flux function values at the computational domain nodes.
+
+        The following attributes are updated:
+                - self.PSI_0 (float): Value of PSI at the magnetic axis (local extremum).
+                - self.PSI_X (float): Value of PSI at the separatrix (saddle point), if applicable.
+                - self.Xcrit (array-like): Coordinates and element indices of critical points:
+                    - self.Xcrit[1,0,:] -> Magnetic axis ([R, Z, element index]).
+                    - self.Xcrit[1,1,:] -> Saddle point ([R, Z, element index]).
+        """
+        # INTERPOLATION OF GRAD(PSI)
+        def gradPSI(X,Rfine,Zfine,gradPSIfine):
+            dPSIdr = griddata((Rfine.flatten(),Zfine.flatten()), gradPSIfine[0].flatten(), (X[0],X[1]), method='cubic')
+            dPSIdz = griddata((Rfine.flatten(),Zfine.flatten()), gradPSIfine[1].flatten(), (X[0],X[1]), method='cubic')
+            GRAD = np.array([dPSIdr,dPSIdz])
+            return GRAD
+        
+        # INTERPOLATION OF HESSIAN(PSI)
+        # INTERPOLATION OF HESSIAN(PSI)
+        def hessianPSI(X,gradPSIfine,Rfine,Zfine,dr,dz):
+            # compute second derivatives on fine mesh
+            dgradPSIdrfine = np.gradient(gradPSIfine[0],dr,dz)
+            dgradPSIdzfine = np.gradient(gradPSIfine[1],dr,dz)
+            # interpolate HESSIAN components on point 
+            dPSIdrdr = griddata((Rfine.flatten(),Zfine.flatten()), dgradPSIdrfine[0].flatten(), (X[0],X[1]), method='cubic')
+            dPSIdzdr = griddata((Rfine.flatten(),Zfine.flatten()), dgradPSIdrfine[1].flatten(), (X[0],X[1]), method='cubic')
+            dPSIdzdz = griddata((Rfine.flatten(),Zfine.flatten()), dgradPSIdzfine[1].flatten(), (X[0],X[1]), method='cubic')
+            return dPSIdrdr, dPSIdzdr, dPSIdzdz
+        
+        # 1. INTERPOLATE PSI VALUES ON A FINER STRUCTURED MESH USING PSI ON NODES
+        # DEFINE FINER STRUCTURED MESH
+        rfine = np.linspace(self.Rmin, self.Rmax, nr)
+        zfine = np.linspace(self.Zmin, self.Zmax, nz)
+        # INTERPOLATE PSI VALUES
+        Rfine, Zfine = np.meshgrid(rfine,zfine, indexing='ij')
+        PSIfine = griddata((self.X[:,0],self.X[:,1]), PSI, (Rfine, Zfine), method='cubic')
+        # CORRECT VALUES AT INTERPOLATION POINTS OUTSIDE OF COMPUTATIONAL DOMAIN
+        for ir in range(nr):
+            for iz in range(nz):
+                if np.isnan(PSIfine[ir,iz]):
+                    PSIfine[ir,iz] = 0
+
+        # 2. DEFINE GRAD(PSI) WITH FINER MESH VALUES USING FINITE DIFFERENCES
+        dr = (self.Rmax-self.Rmin)/nr
+        dz = (self.Zmax-self.Zmin)/nz
+        gradPSIfine = np.gradient(PSIfine,dr,dz)
+            
+        # 3. LOOK FOR GRADIENT CRITICAL POINT
+        Xpoint = []
+        Opoint = []
+        for x0 in X0:
+            sol = optimize.root(gradPSI, x0, args=(Rfine,Zfine,gradPSIfine))
+            if sol.success == True:
+                # 4. LOCATE ELEMENT CONTAINING CRITICAL POINT
+                elemcrit = self.SearchElement(sol.x,range(self.Ne))
+                if type(elemcrit) == type(None):
+                    # POINT OUTSIDE OF COMPUTATIONAL DOMAIN
+                    continue
+                else:
+                    # 5. INTERPOLATE CRITICAL PSI VALUE
+                    PSIcrit = self.Elements[elemcrit].ElementalInterpolationPHYSICAL(sol.x,PSI[self.Elements[elemcrit].Te])
+                    # 6. CHECK HESSIAN 
+                    dPSIdrdr, dPSIdzdr, dPSIdzdz = hessianPSI(sol.x, gradPSIfine, Rfine, Zfine, dr, dz)
+                    if dPSIdrdr*dPSIdzdz-dPSIdzdr**2 > 0.0:
+                        # Found O-point
+                        Opoint.append((sol.x,PSIcrit,elemcrit))
+                    else:
+                        # Found X-point
+                        Xpoint.append((sol.x,PSIcrit,elemcrit))
+                        
+        # Remove duplicates
+        def remove_dup(points):
+            result = []
+            for p in points:
+                dup = False
+                for p2 in result:
+                    if (p[0][0] - p2[0][0]) ** 2 + (p[0][1] - p2[0][1]) ** 2 < 1e-5:
+                        dup = True  # Duplicate
+                        break
+                if not dup:
+                    result.append(p)  # Add to the list
+            return result
+
+        Xpoint = remove_dup(Xpoint)
+        Opoint = remove_dup(Opoint)  
+
+        # Check distance to computational boundary
+        def remove_closeboundary(points):
+            for boundarypoint in self.BoundaryNodes:
+                Xbound = self.X[boundarypoint,:]
+                for p in points:
+                    if np.linalg.norm(p[0][0]-Xbound) < tolbound:
+                        points.remove(p)
+            return points
+                    
+        Xpoint = remove_closeboundary(Xpoint)
+        Opoint = remove_closeboundary(Opoint)    
+                
+        if len(Opoint) == 0:
+            # Can't order primary O-point, X-point so return
+            print("Warning: No O points found")
+            return Opoint, Xpoint
+
+        # Find primary O-point by sorting by distance from middle of domain
+        Rmid = 0.5 * (self.Rmax-self.Rmin)
+        Zmid = 0.5 * (self.Zmax-self.Zmin)
+        Opoint.sort(key=lambda x: (x[0] - Rmid) ** 2 + (x[1] - Zmid) ** 2)
+            
+        return Opoint, Xpoint
+    
+    
+    
+    
+    
+    def FindCritical(self,PSI, X0 = None, nr=45, nz=65, tolbound=0.1):
             
         # INTERPOLATION OF GRAD(PSI)
         def gradPSI(X,Rfine,Zfine,gradPSIfine):
@@ -1182,58 +1331,86 @@ class GradShafranovSolver:
                 if np.isnan(PSIfine[ir,iz]):
                     PSIfine[ir,iz] = 0
 
-        # CREATE MASK FOR BACKGROUND MESH POINTS LYING OUTSIDE COMPUTATIONAL DOMAIN   
-        grid_points = np.vstack([Rfine.ravel(), Zfine.ravel()]).T
-        # Create polygon path and test containment
-        path = Path(self.X[self.BoundaryVertices,:])
-        mask = path.contains_points(grid_points)
-
-        # Reshape mask to the grid shape
-        mask_grid = mask.reshape(Rfine.shape)
-
         # 2. DEFINE GRAD(PSI) WITH FINER MESH VALUES USING FINITE DIFFERENCES
         dr = (self.Rmax-self.Rmin)/nr
         dz = (self.Zmax-self.Zmin)/nz
         gradPSIfine = np.gradient(PSIfine,dr,dz)
-
-        # 3. COMPUTE SQUARE MODUL OF POLOIDAL MAGNETIC FIELD Bp^2
-        Bp2 = (gradPSIfine[0]**2 + gradPSIfine[1]**2)/Rfine**2
-
-        # 4. FIND LOCAL MINIMA BY MINIMISING Bp^2
+        
+        # 3. LOOK FOR CRITICAL POINTS
         Xpoint = []
         Opoint = []
-        for i in range(2, nr - 2):
-            for j in range(2, nz - 2):
-                if (
-                    (Bp2[i, j] < Bp2[i + 1, j + 1])
-                    and (Bp2[i, j] < Bp2[i + 1, j])
-                    and (Bp2[i, j] < Bp2[i + 1, j - 1])
-                    and (Bp2[i, j] < Bp2[i - 1, j + 1])
-                    and (Bp2[i, j] < Bp2[i - 1, j])
-                    and (Bp2[i, j] < Bp2[i - 1, j - 1])
-                    and (Bp2[i, j] < Bp2[i, j + 1])
-                    and (Bp2[i, j] < Bp2[i, j - 1])
-                ):
-                    # Found local minimum
-                    # 5. CHECK IF POINT OUTSIDE OF COMPUTATIONAL DOMAIN
-                    if mask_grid[i,j]:
-                        # 6. LAUNCH NONLINEAR SOLVER
-                        X0 = np.array([Rfine[i,j],Zfine[i,j]], dtype=float)
-                        sol = optimize.root(gradPSI, X0, args=(Rfine,Zfine,gradPSIfine))
+        if type(X0) == type(None):      # IF NO INITIAL GUESS POINTS ARE GIVEN, LOOK OVER WHOLE MESH
+            
+            # CREATE MASK FOR BACKGROUND MESH POINTS LYING OUTSIDE COMPUTATIONAL DOMAIN   
+            grid_points = np.vstack([Rfine.ravel(), Zfine.ravel()]).T
+            # Create polygon path and test containment
+            path = Path(self.X[self.BoundaryVertices,:])
+            mask = path.contains_points(grid_points)
 
-                        if sol.success == True:
-                            # 7. INTERPOLATE VALUE OF PSI AT LOCAL EXTREMUM
-                            elemcrit = self.SearchElement(sol.x,range(self.Ne))
-                            PSIcrit = self.Elements[elemcrit].ElementalInterpolationPHYSICAL(sol.x,PSI[self.Elements[elemcrit].Te])
-                            
-                            # 8. CHECK LOCAL EXTREMUM HESSIAN 
-                            dPSIdrdr, dPSIdzdr, dPSIdzdz = hessianPSI(sol.x, gradPSIfine, Rfine, Zfine, dr, dz)
-                            if dPSIdrdr*dPSIdzdz-dPSIdzdr**2 > 0.0:
-                                # Found O-point
-                                Opoint.append((sol.x,PSIcrit,elemcrit))
-                            else:
-                                # Found X-point
-                                Xpoint.append((sol.x,PSIcrit,elemcrit))
+            # Reshape mask to the grid shape
+            mask_grid = mask.reshape(Rfine.shape)
+            
+            # 3. COMPUTE SQUARE MODUL OF POLOIDAL MAGNETIC FIELD Bp^2
+            Bp2 = (gradPSIfine[0]**2 + gradPSIfine[1]**2)/Rfine**2
+
+            # 4. FIND LOCAL MINIMA BY MINIMISING Bp^2
+            for i in range(2, nr - 2):
+                for j in range(2, nz - 2):
+                    if (
+                        (Bp2[i, j] < Bp2[i + 1, j + 1])
+                        and (Bp2[i, j] < Bp2[i + 1, j])
+                        and (Bp2[i, j] < Bp2[i + 1, j - 1])
+                        and (Bp2[i, j] < Bp2[i - 1, j + 1])
+                        and (Bp2[i, j] < Bp2[i - 1, j])
+                        and (Bp2[i, j] < Bp2[i - 1, j - 1])
+                        and (Bp2[i, j] < Bp2[i, j + 1])
+                        and (Bp2[i, j] < Bp2[i, j - 1])
+                    ):
+                        # Found local minimum
+                        # 5. CHECK IF POINT OUTSIDE OF COMPUTATIONAL DOMAIN
+                        if mask_grid[i,j]:
+                            # 6. LAUNCH NONLINEAR SOLVER
+                            x0 = np.array([Rfine[i,j],Zfine[i,j]], dtype=float)
+                            sol = optimize.root(gradPSI, x0, args=(Rfine,Zfine,gradPSIfine))
+
+                            if sol.success == True:
+                                # 7. INTERPOLATE VALUE OF PSI AT LOCAL EXTREMUM
+                                elemcrit = self.SearchElement(sol.x,range(self.Ne))
+                                if type(elemcrit) == type(None):
+                                    # POINT OUTSIDE OF COMPUTATIONAL DOMAIN
+                                    continue
+                                else:
+                                    PSIcrit = self.Elements[elemcrit].ElementalInterpolationPHYSICAL(sol.x,PSI[self.Elements[elemcrit].Te])
+                                    
+                                    # 8. CHECK LOCAL EXTREMUM HESSIAN 
+                                    dPSIdrdr, dPSIdzdr, dPSIdzdz = hessianPSI(sol.x, gradPSIfine, Rfine, Zfine, dr, dz)
+                                    if dPSIdrdr*dPSIdzdz-dPSIdzdr**2 > 0.0:
+                                        # Found O-point
+                                        Opoint.append((sol.x,PSIcrit,elemcrit))
+                                    else:
+                                        # Found X-point
+                                        Xpoint.append((sol.x,PSIcrit,elemcrit))
+                                        
+        else:       # IF INITIAL GUESSES X0 ARE DEFINED
+            for x0 in X0:
+                sol = optimize.root(gradPSI, x0, args=(Rfine,Zfine,gradPSIfine))
+                if sol.success == True:
+                    # 4. LOCATE ELEMENT CONTAINING CRITICAL POINT
+                    elemcrit = self.SearchElement(sol.x,range(self.Ne))
+                    if type(elemcrit) == type(None):
+                        # POINT OUTSIDE OF COMPUTATIONAL DOMAIN
+                        continue
+                    else:
+                        # 5. INTERPOLATE CRITICAL PSI VALUE
+                        PSIcrit = self.Elements[elemcrit].ElementalInterpolationPHYSICAL(sol.x,PSI[self.Elements[elemcrit].Te])
+                        # 6. CHECK HESSIAN 
+                        dPSIdrdr, dPSIdzdr, dPSIdzdz = hessianPSI(sol.x, gradPSIfine, Rfine, Zfine, dr, dz)
+                        if dPSIdrdr*dPSIdzdz-dPSIdzdr**2 > 0.0:
+                            # Found O-point
+                            Opoint.append((sol.x,PSIcrit,elemcrit))
+                        else:
+                            # Found X-point
+                            Xpoint.append((sol.x,PSIcrit,elemcrit))
         
         # Remove duplicates
         def remove_dup(points):
@@ -1277,8 +1454,19 @@ class GradShafranovSolver:
 
 
     def ComputeCriticalPSI(self):
+        # DEFINE INITIAL GUESSES
+        X0 = list()
+        if self.it == 1:
+            X0.append(np.array([self.EXTR_R0,self.EXTR_Z0],dtype=float))
+            X0.append(np.array([self.SADD_R0,self.SADD_Z0],dtype=float))
+        else:
+            # TAKE PREVIOUS SOLUTION AS INITIAL GUESS
+            X0.append(self.Xcrit[0,0,:-1])
+            X0.append(self.Xcrit[0,1,:-1])
         
-        Opoint, Xpoint = self.FindCritical(self.PSI.T[0])   
+        Opoint, Xpoint = self.FindCritical(self.PSI.T[0], X0)   
+        print('Opoint = ', Opoint)
+        print('Xpoint = ', Xpoint)
         # O-point
         self.Xcrit[1,0,:-1] = Opoint[0][0] 
         self.PSI_0 = Opoint[0][1]
@@ -1300,7 +1488,8 @@ class GradShafranovSolver:
         """
         if not self.FIXED_BOUNDARY or self.PlasmaCurrent.CURRENT_MODEL == self.PlasmaCurrent.PROFILES_CURRENT:
             for i in range(self.Nn):
-                self.PSI_NORMstar[i,1] = (self.PSI_X-self.PSI[i])/(self.PSI_X-self.PSI_0)
+                #self.PSI_NORMstar[i,1] = (self.PSI_X-self.PSI[i])/(self.PSI_X-self.PSI_0)
+                self.PSI_NORMstar[i,1] = (self.PSI[i]-self.PSI_0)/(self.PSI_X-self.PSI_0)
         else: 
             for i in range(self.Nn):
                 self.PSI_NORMstar[i,1] = self.PSI[i]
@@ -1575,6 +1764,7 @@ class GradShafranovSolver:
         self.PlasmaLS = self.initialPHI.PHI0
         return 
     
+    
     def InitialiseElements(self):
         """ 
         Function initialising attribute ELEMENTS which is a list of all elements in the mesh. 
@@ -1612,32 +1802,36 @@ class GradShafranovSolver:
             - Assigns boundary constraint values for both the plasma and vacuum vessel boundaries.
         """
         
-        ####### COMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION
-        self.NnPB = self.ComputePlasmaBoundaryNumberNodes()
-        
         ####### INITIALISE PSI VECTORS
         print('     -> INITIALISE PSI ARRAYS...', end="")
         # INITIALISE ITERATIVE UPDATED ARRAYS
         self.PSI = np.zeros([self.Nn],dtype=float)            # SOLUTION FROM SOLVING CutFEM SYSTEM OF EQUATIONS (INTERNAL LOOP)       
         self.PSI_NORMstar = np.zeros([self.Nn,2],dtype=float) # UNRELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)
         self.PSI_NORM = np.zeros([self.Nn,2],dtype=float)     # RELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)
-        self.PSI_B = np.zeros([self.Nnbound,2],dtype=float)   # VACUUM VESSEL FIRST WALL PSI VALUES (EXTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)    
         self.PSI_CONV = np.zeros([self.Nn],dtype=float)       # CONVERGED SOLUTION FIELD
         print('Done!')
         
         ####### COMPUTE INITIAL GUESS AND STORE IT IN ARRAY FOR N=0
         # COMPUTE INITIAL GUESS
         print('     -> COMPUTE INITIAL GUESS FOR PSI_NORM...', end="")
-        self.PSI_NORM[:,0] = self.initialPSI.ComputeField(self.X)  
+        self.PSI_NORM[:,0] = self.initialPSI.PSI0
         self.PSI_NORM[:,1] = self.PSI_NORM[:,0]
+        self.PSI_0 = self.initialPSI.PSI0_0
+        self.PSI_X = self.initialPSI.PSI0_X
         # ASSIGN VALUES TO EACH ELEMENT
         self.UpdateElementalPSI()
         print('Done!')   
+        return
+    
+        
+    def InitialisePSI_B(self):
+        ####### INITIALISE PSI BOUNDARY VECTOR
+        self.PSI_B = np.zeros([self.Nnbound,2],dtype=float)   # VACUUM VESSEL FIRST WALL PSI VALUES (EXTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)    
         
         ####### COMPUTE INITIAL VACUUM VESSEL BOUNDARY VALUES PSI_B AND STORE THEM IN ARRAY FOR N=0
         print('     -> COMPUTE INITIAL VACUUM VESSEL BOUNDARY VALUES PSI_B...', end="")
         # COMPUTE INITIAL TOTAL PLASMA CURRENT CORRECTION FACTOR
-        self.ComputeTotalPlasmaCurrentNormalization()
+        #self.ComputeTotalPlasmaCurrentNormalization()
         self.PSI_B[:,0] = self.ComputeBoundaryPSI()
         self.PSI_B[:,1] = self.PSI_B[:,0]
         print('Done!')
@@ -1645,7 +1839,7 @@ class GradShafranovSolver:
         ####### ASSIGN CONSTRAINT VALUES ON PLASMA BOUNDARY
         print('     -> ASSIGN INITIAL BOUNDARY VALUES...', end="")
         # ASSIGN PLASMA BOUNDARY VALUES
-        self.PSI_X = 0   # INITIAL CONSTRAINT VALUE ON SEPARATRIX
+        self.PSI_X = self.PSIseparatrix   # INITIAL CONSTRAINT VALUE ON SEPARATRIX
         self.UpdatePlasmaBoundaryValues()
         self.UpdateVacuumVesselBoundaryValues()
         print('Done!')    
@@ -1706,6 +1900,9 @@ class GradShafranovSolver:
         print('     -> COMPUTE NUMERICAL INTEGRATION QUADRATURES...', end="")
         self.ComputeIntegrationQuadratures()
         print('Done!')
+        
+        # COMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION
+        self.NnPB = self.ComputePlasmaBoundaryNumberNodes()
         
         print('Done!')
         return  
@@ -2681,12 +2878,12 @@ class GradShafranovSolver:
     def writePSIcrit(self):
         if self.out_PSIcrit:
             self.file_PSIcrit.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
-            self.file_PSIcrit.write("{:f}  {:f}  {:f}  {:f}\n".format(self.Xcrit[1,0,-1],self.Xcrit[1,0,0],self.Xcrit[1,0,1],self.PSI_0[0]))
-            self.file_PSIcrit.write("{:f}  {:f}  {:f}  {:f}\n".format(self.Xcrit[1,1,-1],self.Xcrit[1,1,0],self.Xcrit[1,1,1],self.PSI_X[0]))
+            self.file_PSIcrit.write("{:f}  {:f}  {:f}  {:f}\n".format(self.Xcrit[1,0,-1],self.Xcrit[1,0,0],self.Xcrit[1,0,1],self.PSI_0))
+            self.file_PSIcrit.write("{:f}  {:f}  {:f}  {:f}\n".format(self.Xcrit[1,1,-1],self.Xcrit[1,1,0],self.Xcrit[1,1,1],self.PSI_X))
             self.file_PSIcrit.write('END_ITERATION\n')
             
             if self.out_pickle:
-                PSIcrit = np.concatenate((self.Xcrit[1,:,:],np.array([[self.PSI_0[0]],[self.PSI_X[0]]])),axis=1)
+                PSIcrit = np.concatenate((self.Xcrit[1,:,:],np.array([[self.PSI_0],[self.PSI_X]])),axis=1)
                 self.PSIcrit_sim.append(PSIcrit)
         return
     
@@ -2876,7 +3073,7 @@ class GradShafranovSolver:
         self.it = 0
         self.it_EXT = 0
         self.it_INT = 0
-        self.InitialisePSI()
+        self.InitialisePSI_B()
         print('Done!')
         
         # WRITE INITIAL SIMULATION DATA
@@ -2907,6 +3104,7 @@ class GradShafranovSolver:
                 self.it_INT += 1
                 self.it += 1
                 print('OUTER ITERATION = '+str(self.it_EXT)+' , INNER ITERATION = '+str(self.it_INT))
+                print('     Total current = ', self.IntegratePlasmaDomain(self.PlasmaCurrent.Jphi))
                 
                 if self.plotelemsClas:
                     self.PlotClassifiedElements(GHOSTFACES=self.GhostStabilization)
@@ -2915,7 +3113,7 @@ class GradShafranovSolver:
                 self.AssembleGlobalSystem()                 # 0. ASSEMBLE CUTFEM SYSTEM
                 self.SolveSystem()                          # 1. SOLVE CutFEM SYSTEM  ->> PSI
                 if not self.FIXED_BOUNDARY:
-                    self.ComputeCriticalPSI(self.PSI)       # 2. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
+                    self.ComputeCriticalPSI()               # 2. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
                     self.writePSIcrit()                     #    WRITE CRITICAL POINTS
                 self.NormalisePSI()                         # 3. NORMALISE PSI RESPECT TO CRITICAL VALUES  ->> PSI_NORM 
                 self.AitkenRelaxation()
@@ -2928,12 +3126,13 @@ class GradShafranovSolver:
                 self.UpdatePSI('PSI_NORM')                  # 6. UPDATE PSI_NORM VALUES (PSI_NORM[:,0] = PSI_NORM[:,1])
                 self.UpdateElementalPSI()                   # 7. UPDATE PSI_NORM VALUES IN CORRESPONDING ELEMENTS (ELEMENT.PSIe = PSI_NORM[ELEMENT.Te,0])
                 self.UpdatePlasmaBoundaryValues()           # 8. UPDATE ELEMENTAL CONSTRAINT VALUES PSIgseg FOR PLASMA/VACUUM INTERFACE
+                self.PlasmaCurrent.Normalise()
                 
                 #######################################################
                 ################ END INTERNAL LOOP ####################
                 #######################################################
-            
-            self.ComputeTotalPlasmaCurrentNormalization()
+                
+            #self.ComputeTotalPlasmaCurrentNormalization()
             print('COMPUTE VACUUM VESSEL FIRST WALL VALUES PSI_B...', end="")
             self.PSI_B[:,1] = self.ComputeBoundaryPSI()     # COMPUTE VACUUM VESSEL FIRST WALL VALUES PSI_B WITH INTERNALLY CONVERGED PSI_NORM
             self.UpdateVacuumVesselBoundaryValues()
@@ -3075,7 +3274,7 @@ class GradShafranovSolver:
         
         def subplotfield(self,ax,field):
             contourf = ax.tricontourf(self.X[:,0],self.X[:,1], field, levels=50)
-            contour1 = ax.tricontour(self.X[:,0],self.X[:,1], field, levels=[0], colors = 'black')
+            contour1 = ax.tricontour(self.X[:,0],self.X[:,1], field, levels=[self.PSIseparatrix], colors = 'black')
             contour2 = ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
             # Mask solution outside computational domain's boundary 
             compboundary = np.zeros([len(self.BoundaryVertices)+1,2])

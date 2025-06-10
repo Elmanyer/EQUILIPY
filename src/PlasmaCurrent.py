@@ -84,6 +84,7 @@ class CurrentModel:
                 self.G0 = kwargs['G0']                      # TOROIDAL FIELD FACTOR
                 self.n_g = kwargs['ng']                     # EXPONENT FOR TOROIDAL FIELD PROFILE g_hat FUNCTION
                 self.TOTAL_CURRENT = kwargs['Tcurrent']     # TOTAL CURRENT IN PLASMA (NORMALISATION PARAMETER)
+                self.L = self.ComputeIpconstrain()
                 # MODEL PLASMA CURRENT 
                 self.Jphi = self.JphiPROFILES
                 
@@ -131,6 +132,14 @@ class CurrentModel:
         return
     
     
+    def Normalise(self):
+        if self.CURRENT_MODEL == self.PROFILES_CURRENT:
+            self.L = self.ComputeIpconstrain()
+        if self.CURRENT_MODEL == self.PCONSTRAIN_CURRENT:
+            self.L, self.Beta0 = self.ComputePConstrains()
+        return
+    
+    
     def SourceTerm(self,X,PSI):
         return self.mu0*X[0]*self.Jphi(X,PSI)
 
@@ -163,7 +172,7 @@ class CurrentModel:
 ##################################################################################################    
 
     def JphiPROFILES(self,X,PSI):
-        return -X[0] * self.dPdPSI(PSI) - 0.5*self.dG2dPSI(PSI)/ (X[0]*self.mu0)
+        return self.L * (-X[0] * self.dPdPSI(PSI) - 0.5*self.dG2dPSI(PSI))/ (X[0]*self.mu0)
     
     # PLASMA PRESSURE MODELING
     def dPdPSI(self,PSI):
@@ -185,8 +194,13 @@ class CurrentModel:
         dg = (self.G0**2)*self.n_g*(PSI**(self.n_g-1))
         return dg
     
+    def ComputeIpconstrain(self):
+        Tcurrent = self.problem.IntegratePlasmaDomain(self.Jphi)     
+        L = self.TOTAL_CURRENT/Tcurrent
+        return L
+    
 ##################################################################################################
-#################################### PCONSTRAIN MODEL ############################################
+#################################### CONSTRAIN MODELS ############################################
 ##################################################################################################   
     
     def JphiPCONSTRAIN(self,X,PSI):
@@ -203,7 +217,7 @@ class CurrentModel:
             func = lambda x: (1.0 - x**self.alpha_m) ** self.alpha_n, 
             a = 0.0, 
             b = 1.0)
-        #shapeintegral *= self.problem.PSI_X - self.problem.PSI_0
+        shapeintegral *= self.problem.PSI_X - self.problem.PSI_0
 
         # Integrate current components
         def funIR(X,PSI):
@@ -228,6 +242,58 @@ class CurrentModel:
         L = self.TOTAL_CURRENT / I_R - LBeta0 * (IR / I_R - 1)
         Beta0 = LBeta0 / L
         return L, Beta0
+    
+    
+    def ComputeBetaConstrains(self):
+        
+        # Need integral of jtorshape to calculate pressure
+        # Note factor to convert from normalised psi integral
+        def pshape(psinorm):
+            shapeintegral, _ = quad(
+                lambda x: (1.0 - x**self.alpha_m) ** self.alpha_n, psinorm, 1.0
+            )
+            shapeintegral *= self.problem.PSI_X - self.problem.PSI_0
+            return shapeintegral
+
+        # Pressure is
+        #
+        # p(psinorm) = - (L*Beta0/Raxis) * pshape(psinorm)
+
+        # Integrate over plasma
+        # betap = (2mu0) * (int(p)RdRdZ)/(int(B_poloidal**2)RdRdZ)
+        #       = - (2L*Beta0*mu0/Raxis) * (pfunc*RdRdZ)/((int(B_poloidal**2)RdRdZ))
+
+        def P(X,PSI):
+            return X[0]*pshape(PSI)
+        
+        p_int = self.problem.IntegratePlasmaDomain(P)
+        b_int = self.problem.IntegrateBpolPlasmaDomain()
+
+        # self.betap = - (2*LBeta0*mu0/ self.Raxis) * (p_int/b_int)
+        LBeta0 = (b_int / p_int) * (-self.betap * self.Raxis) / (2 * self.mu0)
+
+        # Integrate current components
+        def funIR(X,PSI):
+            return (1.0 - PSI**self.alpha_m)**self.alpha_n * X[0] / self.Raxis
+        
+        def funI_R(X,PSI):
+            return (1.0 - PSI**self.alpha_m)**self.alpha_n * self.Raxis / X[0] 
+
+        IR = self.problem.IntegratePlasmaDomain(funIR)
+        I_R = self.problem.IntegratePlasmaDomain(funI_R)
+
+        # Toroidal plasma current Ip is
+        #
+        # Ip = L * (Beta0 * IR + (1-Beta0)*I_R)
+        #    = L*Beta0*(IR - I_R) + L*I_R
+        #
+        # L = self.Ip / ((Beta0*IR) + ((1.0-Beta0)*(I_R)))
+
+        L = self.Ip / I_R - LBeta0 * (IR / I_R - 1)
+        Beta0 = LBeta0 / L
+
+        return L, Beta0
+        
     
 
 ##################################################################################################
@@ -254,6 +320,19 @@ class CurrentModel:
         ax.set_aspect('equal')
         ax.set_xlim(self.problem.Rmin,self.problem.Rmax)
         ax.set_ylim(self.problem.Zmin,self.problem.Zmax)
+        
+        # Plot low-opacity background (outside plasma region)
+        contourf_bg = ax.tricontourf(self.problem.X[:,0], self.problem.X[:,1], Jphi, levels=30, alpha=0.8)
+        # Define computational domain's boundary path
+        compboundary = np.zeros([len(self.problem.BoundaryVertices)+1,2])
+        compboundary[:-1,:] = self.problem.X[self.problem.BoundaryVertices,:]
+        # Close path
+        compboundary[-1,:] = compboundary[0,:]
+        clip_path = Path(compboundary)
+        patch = PathPatch(clip_path, transform=ax.transData)
+        for coll in contourf_bg.collections:
+            coll.set_clip_path(patch)
+        
         # PLOT INITIAL PSI GUESS BACKGROUND VALUES
         contourf = ax.tricontourf(self.problem.X[:,0],self.problem.X[:,1],Jphi,levels=30)
         contour = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1],Jphi,levels=30,colors='black', linewidths=1)
@@ -266,34 +345,17 @@ class CurrentModel:
             v = path.vertices  # shape (N, 2) array of (x, y)
             plasmabounpath.append(v)
         plasmabounpath = plasmabounpath[0]
-        # APPLY MASK TO NOT PLOT OUTSIDE OF MESH
+        # APPLY MASK TO NOT PLOT OUTSIDE OF PLASMA REGION
         clip_path = Path(plasmabounpath)
         patch = PathPatch(clip_path, transform=ax.transData)
         for cont in [contourf, contour, contour0]:
             for coll in cont.collections:
                 coll.set_clip_path(patch)
             
-        # PLOT MESH
-        triang = tri.Triangulation(self.problem.X[:, 0], self.problem.X[:, 1])
-        # Define computational domain's boundary path
-        compboundary = np.zeros([len(self.problem.BoundaryVertices)+1,2])
-        compboundary[:-1,:] = self.problem.X[self.problem.BoundaryVertices,:]
-        # Close path
-        compboundary[-1,:] = compboundary[0,:]
-        clip_path = Path(compboundary)
-        # Mask triangles whose centroids are outside
-        xmid = self.problem.X[:,0][triang.triangles].mean(axis=1)
-        ymid = self.problem.X[:,1][triang.triangles].mean(axis=1)
-        mask = ~clip_path.contains_points(np.column_stack((xmid, ymid)))
-        triang.set_mask(mask)
-        ax.triplot(triang, color='gray')
-        ax.plot(self.problem.X[:, 0], self.problem.X[:, 1], 'o', markersize=2)
-        
         # PLOT MESH BOUNDARY
         for iboun in range(self.problem.Nbound):
             ax.plot(self.problem.X[self.problem.Tbound[iboun,:2],0],self.problem.X[self.problem.Tbound[iboun,:2],1],linewidth = 4, color = 'grey')
         
-    
         # PLOT COLORBAR
         plt.colorbar(contourf, ax=ax)
         ax.set_xlabel('R (in m)')
