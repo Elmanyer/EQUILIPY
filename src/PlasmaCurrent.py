@@ -11,6 +11,12 @@ from scipy.integrate import quad
 class CurrentModel:
     
     mu0 = 12.566370E-7           # H m-1    Magnetic permeability
+    currentcmap = 'viridis'
+    plasmacmap = plt.get_cmap('jet')
+    #plasmacmap = plt.get_cmap('winter_r')
+    plasmabouncolor = 'green'
+    vacvesswallcolor = 'gray'
+    magneticaxiscolor = 'red'
     
     def __init__(self,PROBLEM,MODEL,**kwargs):
         # IMPORT PROBLEM DATA
@@ -20,16 +26,20 @@ class CurrentModel:
         self.LINEAR_CURRENT = 0
         self.ZHENG_CURRENT = 1
         self.NONLINEAR_CURRENT = 2
-        self.PROFILES_CURRENT = 3
+        self.JARDIN_CURRENT = 3
         self.PCONSTRAIN_CURRENT = 4
         self.BetaCONSTRAIN_CURRENT = 5
-        self.OTHER_CURRENT = 6
+        self.APEC_CURRENT = 6
+        self.OTHER_CURRENT = 7
         
         self.PSIdependent = False
         self.DIMENSIONLESS = False
         
         ##### PRE-DEFINED PLASMA CURRENT MODELS
         match MODEL:
+            
+            ######## FIXED-BOUNDARY PROBLEM ANALYTICAL PLASMA CURRENT MODELS
+            
             # LINEAR PLASMA CURRENT 
             case 'LINEAR': 
                 # MODEL PARAMETERS
@@ -74,20 +84,24 @@ class CurrentModel:
                 # MODEL ANALYTICAL SOLUTION
                 self.PSIanalytical = partial(PSIanalyticalNONLINEAR, R0=self.R0, coeffs=self.coeffs)
         
-            # PROFILES PLASMA CURRENT 
-            case 'PROFILES':
+        
+            ######## FREE-BOUNDARY PROBLEM PROFILES PLASMA CURRENT MODELS
+        
+            # JARDIN BOOK PLASMA CURRENT 
+            case 'JARDIN':
                 # MODEL PARAMETERS
-                self.CURRENT_MODEL = self.PROFILES_CURRENT
+                self.CURRENT_MODEL = self.JARDIN_CURRENT
                 self.PSIdependent = True
                 self.P0 = kwargs['P0']                      # PRESSURE VALUE ON MAGNETIC AXIS
                 self.n_p = kwargs['np']                     # EXPONENT FOR PRESSURE PROFILE p_hat FUNCTION
                 self.G0 = kwargs['G0']                      # TOROIDAL FIELD FACTOR
                 self.n_g = kwargs['ng']                     # EXPONENT FOR TOROIDAL FIELD PROFILE g_hat FUNCTION
                 self.TOTAL_CURRENT = kwargs['Tcurrent']     # TOTAL CURRENT IN PLASMA (NORMALISATION PARAMETER)
-                self.L = self.ComputeIpconstrain()
                 # MODEL PLASMA CURRENT 
                 self.Jphi = self.JphiPROFILES
+                self.L = self.ComputeIpconstrain()
                 
+            # PLASMA CURRENT WITH CONSTRAINS ON PRESSURE AND TOTAL CURRENT
             case 'PCONSTRAIN':
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.PCONSTRAIN_CURRENT
@@ -106,6 +120,7 @@ class CurrentModel:
                 # MODEL PLASMA CURRENT 
                 self.Jphi = self.JphiPCONSTRAIN
                 
+            # PLASMA CURRENT WITH CONSTRAINS ON POLOIDAL BETA AND TOTAL CURRENT
             case 'BetaCONSTRAIN':
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.BetaCONSTRAIN_CURRENT
@@ -123,6 +138,22 @@ class CurrentModel:
                 # MODEL PLASMA CURRENT 
                 self.Jphi = self.JphiPCONSTRAIN
                 
+            # PLASMA CURRENT FROM APEC PAPER
+            case 'APEC':
+                # MODEL PARAMETERS
+                self.CURRENT_MODEL = self.APEC_CURRENT
+                self.PSIdependent = True
+                self.Ii = kwargs['Ii']                      # PLASMA INTERNAL INDUCTANCE
+                self.Betap = kwargs['Betap']                # POLOIDAL BETA
+                self.R0 = kwargs['R0']                      # MEAN RADIUS
+                self.TOTAL_CURRENT = kwargs['Tcurrent']     # TOTAL CURRENT IN PLASMA (NORMALISATION PARAMETER)
+                self.L = None                               # RESCALING FACTOR
+                # MODEL PLASMA CURRENT 
+                self.Beta = 1.0/self.Betap                  # 
+                self.alpha = 1.0/self.Ii                    # 
+                self.Jphi = self.JphiAPEC
+                self.L = self.ComputeIpconstrain()
+                
             # USER DEFINED PLASMA CURRENT
             case 'OTHER':
                 self.CURRENT_MODEL = self.OTHER_CURRENT
@@ -133,10 +164,13 @@ class CurrentModel:
     
     
     def Normalise(self):
-        if self.CURRENT_MODEL == self.PROFILES_CURRENT:
-            self.L = self.ComputeIpconstrain()
-        if self.CURRENT_MODEL == self.PCONSTRAIN_CURRENT:
-            self.L, self.Beta0 = self.ComputePConstrains()
+        match self.CURRENT_MODEL:
+            case self.JARDIN_CURRENT:
+                self.L = self.ComputeIpconstrain()
+            case self.APEC_CURRENT:
+                self.L = self.ComputeIpconstrain()
+            case self.PCONSTRAIN_CURRENT:
+                self.L, self.Beta0 = self.ComputePConstrains()
         return
     
     
@@ -168,11 +202,13 @@ class CurrentModel:
         return Jphi
     
 ##################################################################################################
-###################################### PROFILES MODEL ############################################
+######################################## JARDIN MODEL ############################################
 ##################################################################################################    
 
     def JphiPROFILES(self,X,PSI):
-        return self.L * (-X[0] * self.dPdPSI(PSI) - 0.5*self.dG2dPSI(PSI))/ (X[0]*self.mu0)
+        # REVERSE NORMALISATION
+        PSIstar = 1.0 - PSI
+        return self.L * (-X[0] * self.dPdPSI(PSIstar) - 0.5*self.dG2dPSI(PSIstar))/ (X[0]*self.mu0)
     
     # PLASMA PRESSURE MODELING
     def dPdPSI(self,PSI):
@@ -195,6 +231,7 @@ class CurrentModel:
         return dg
     
     def ComputeIpconstrain(self):
+        self.L = 1.0
         Tcurrent = self.problem.IntegratePlasmaDomain(self.Jphi)     
         L = self.TOTAL_CURRENT/Tcurrent
         return L
@@ -294,6 +331,13 @@ class CurrentModel:
 
         return L, Beta0
         
+        
+##################################################################################################
+########################################## APEC MODEL ############################################
+##################################################################################################
+
+    def JphiAPEC(self,X,PSI):
+        return self.L*(self.Beta*X[0]/self.R0 + (1-self.Beta)*self.R0/X[0])*(1-abs(PSI)**self.alpha)
     
 
 ##################################################################################################
@@ -318,8 +362,8 @@ class CurrentModel:
         #### FIGURE
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        ax.set_xlim(self.problem.Rmin,self.problem.Rmax)
-        ax.set_ylim(self.problem.Zmin,self.problem.Zmax)
+        ax.set_xlim(self.problem.Rmin+0.1,self.problem.Rmax+0.1)
+        ax.set_ylim(self.problem.Zmin-0.1,self.problem.Zmax-0.1)
         
         # Plot low-opacity background (outside plasma region)
         contourf_bg = ax.tricontourf(self.problem.X[:,0], self.problem.X[:,1], Jphi, levels=30, alpha=0.8)

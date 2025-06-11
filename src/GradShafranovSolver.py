@@ -43,6 +43,28 @@ class GradShafranovSolver:
     
     mu0 = 12.566370E-7           # H m-1    Magnetic permeability
     dzoom = 0.1
+    Vermillion = '#D55E00'
+    Blue = '#0072B2'
+    BluishGreen = '#009E73'
+    Orange = '#E69F00'
+    SkyBlue = '#56B4E9'
+    ReddishPurple = '#CC79A7'
+    Yellow = '#F0E442'
+    Black = '#000000'
+    Grey = '#BBBBBB'
+    White = '#FFFFFF'
+    # exec(open("./colourMaps.py").read()) # load colour map
+    # VermBlue = CBWcm['VeBu']             # Vermillion (-) White (0) Blue (+)
+    # BlueVerm = CBWcm['BuVe']             # Blue (-) White (0) Vermillion (+)
+    colorlist = [Blue, Vermillion, BluishGreen, Black,Grey, Orange, ReddishPurple, Yellow, SkyBlue]
+    markerlist = ['o','^', '<', '>', 'v', 's','p','*','D']
+
+    plasmacmap = plt.get_cmap('jet')
+    #plasmacmap = plt.get_cmap('winter_r')
+    plasmabouncolor = 'green'
+    vacvesswallcolor = 'gray'
+    magneticaxiscolor = 'red'
+    saddlepointcolor = BluishGreen
 
     def __init__(self,MESH):
         # WORKING DIRECTORY
@@ -533,7 +555,7 @@ class GradShafranovSolver:
         
         # OBTAIN POINTS CONFORMING THE NEW PLASMA DOMAIN BOUNDARY
         fig, ax = plt.subplots(figsize=(6, 8))
-        cs = ax.tricontour(self.X[:,0],self.X[:,1], PSI, levels=[self.PSIseparatrix])
+        cs = ax.tricontour(self.X[:,0],self.X[:,1], 1.0-PSI, levels=[1-self.PSIseparatrix])
 
         paths = list()
 
@@ -613,7 +635,7 @@ class GradShafranovSolver:
         inside = polygon_path.contains_points(self.X)
 
         # FORCE PLASMA LEVEL-SET SIGN DEPENDING ON REGION
-        PSILevSet = PSI.copy()
+        PSILevSet = 1.0-PSI.copy()
         for inode in range(self.Nn):
             if inside[inode]:
                 PSILevSet[inode] = -np.abs(PSILevSet[inode])
@@ -621,6 +643,18 @@ class GradShafranovSolver:
                 PSILevSet[inode] = np.abs(PSILevSet[inode])
     
         return PSILevSet
+    
+    
+    def AitkenRelaxationLS(self,RELAXATION = False):
+        if RELAXATION:
+            residual1 = self.PSI_NORMstar[:,1] - self.PSI_NORM[:,1]
+            if self.it > 2: 
+                residual0 = self.PSI_NORMstar[:,0] - self.PSI_NORM[:,0]
+                self.alpha = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
+            self.PSI_NORM[:,1] = self.PSI_NORM[:,0] + self.alpha*residual1
+        else:
+            self.PSI_NORM[:,1] = self.PSI_NORMstar[:,1]
+        return
     
     
     ##################################################################################################
@@ -1486,7 +1520,7 @@ class GradShafranovSolver:
         """
         Normalize the magnetic flux function (PSI) based on critical PSI values (PSI_0 and PSI_X).
         """
-        if not self.FIXED_BOUNDARY or self.PlasmaCurrent.CURRENT_MODEL == self.PlasmaCurrent.PROFILES_CURRENT:
+        if not self.FIXED_BOUNDARY:
             for i in range(self.Nn):
                 #self.PSI_NORMstar[i,1] = (self.PSI_X-self.PSI[i])/(self.PSI_X-self.PSI_0)
                 self.PSI_NORMstar[i,1] = (self.PSI[i]-self.PSI_0)/(self.PSI_X-self.PSI_0)
@@ -1496,15 +1530,15 @@ class GradShafranovSolver:
         return 
     
     
-    def AitkenRelaxation(self):
-        
-        residual1 = self.PSI_NORMstar[:,1] - self.PSI_NORM[:,1]
-        
-        if self.it > 2: 
-            residual0 = self.PSI_NORMstar[:,0] - self.PSI_NORM[:,0]
-            self.alpha = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
-        
-        self.PSI_NORM[:,1] = self.PSI_NORM[:,0] + self.alpha*residual1
+    def AitkenRelaxation(self,RELAXATION = False):
+        if RELAXATION:
+            residual1 = self.PSI_NORMstar[:,1] - self.PSI_NORM[:,1]
+            if self.it > 2: 
+                residual0 = self.PSI_NORMstar[:,0] - self.PSI_NORM[:,0]
+                self.alpha = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
+            self.PSI_NORM[:,1] = self.PSI_NORM[:,0] + self.alpha*residual1
+        else:
+            self.PSI_NORM[:,1] = self.PSI_NORMstar[:,1]
         return
     
     
@@ -1513,7 +1547,7 @@ class GradShafranovSolver:
         Compute and apply a correction factor to ensure the total plasma current in the computational domain matches the specified input parameter `TOTAL_CURRENT`.
         """
         self.gamma = 1.0
-        if self.PlasmaCurrent.CURRENT_MODEL == self.PlasmaCurrent.PROFILES_CURRENT:
+        if self.PlasmaCurrent.CURRENT_MODEL == self.PlasmaCurrent.JARDIN_CURRENT:
             # COMPUTE TOTAL PLASMA CURRENT    
             Tcurrent = self.IntegratePlasmaDomain(self.PlasmaCurrent.Jphi)
             #print('Total plasma current computed = ', Tcurrent)    
@@ -2755,7 +2789,7 @@ class GradShafranovSolver:
                 self.file_proparams.write('END_PLASMA_REGION_GEOMETRY_PARAMETERS\n')
                 self.file_proparams.write('\n')
             
-            if self.PLASMA_CURRENT == self.PROFILES_CURRENT:
+            if self.PLASMA_CURRENT == self.JARDIN_CURRENT:
                 self.file_proparams.write('PLASMA_CURRENT_MODEL_PARAMETERS\n')
                 self.file_proparams.write("    B0 = {:f}\n".format(self.B0))
                 self.file_proparams.write("    q0 = {:f}\n".format(self.q0))
@@ -3116,7 +3150,7 @@ class GradShafranovSolver:
                     self.ComputeCriticalPSI()               # 2. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
                     self.writePSIcrit()                     #    WRITE CRITICAL POINTS
                 self.NormalisePSI()                         # 3. NORMALISE PSI RESPECT TO CRITICAL VALUES  ->> PSI_NORM 
-                self.AitkenRelaxation()
+                self.AitkenRelaxation(RELAXATION=False)
                 self.writePSI()                             #    WRITE SOLUTION             
                 if self.plotPSI:
                     self.PlotSolutionPSI()                  #    PLOT SOLUTION AND NORMALISED SOLUTION
@@ -3151,7 +3185,7 @@ class GradShafranovSolver:
         if self.plotPSI:
             self.PlotSolutionPSI()
         
-        if self.FIXED_BOUNDARY and self.PlasmaCurrent.CURRENT_MODEL != self.PlasmaCurrent.PROFILES_CURRENT:
+        if self.FIXED_BOUNDARY and self.PlasmaCurrent.CURRENT_MODEL != self.PlasmaCurrent.JARDIN_CURRENT:
             self.ErrorL2norm, self.RelErrorL2norm, self.ErrorL2normPlasmaBound, self.RelErrorL2normPlasmaBound = self.ComputeL2errorPlasma()
             self.ErrorL2normINT, self.RelErrorL2normINT = self.ComputeL2errorInterface()
             self.InterfGradJumpErrorL2norm, self.JumpError, self.JumpRelError = self.ComputeL2errorInterfaceJump()
@@ -3272,10 +3306,14 @@ class GradShafranovSolver:
         """ FUNCTION WHICH PLOTS THE FIELD VALUES FOR PSI, OBTAINED FROM SOLVING THE CUTFEM SYSTEM, 
         AND PSI_NORM IF NORMALISED. """
         
-        def subplotfield(self,ax,field):
-            contourf = ax.tricontourf(self.X[:,0],self.X[:,1], field, levels=50)
-            contour1 = ax.tricontour(self.X[:,0],self.X[:,1], field, levels=[self.PSIseparatrix], colors = 'black')
-            contour2 = ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
+        def subplotfield(self,ax,field,normalised=True):
+            if normalised:
+                psisep = self.PSIseparatrix
+            else:
+                psisep = self.PSI_X
+            contourf = ax.tricontourf(self.X[:,0],self.X[:,1], field, levels=50, cmap=self.plasmacmap)
+            contour1 = ax.tricontour(self.X[:,0],self.X[:,1], field, levels=[psisep], colors = 'black',linewidths=2)
+            contour2 = ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = self.plasmabouncolor, linewidths=3)
             # Mask solution outside computational domain's boundary 
             compboundary = np.zeros([len(self.BoundaryVertices)+1,2])
             compboundary[:-1,:] = self.X[self.BoundaryVertices,:]
@@ -3288,13 +3326,13 @@ class GradShafranovSolver:
                     coll.set_clip_path(patch)
             # Plot computational domain's boundary
             for iboun in range(self.Nbound):
-                ax.plot(self.X[self.Tbound[iboun,:2],0],self.X[self.Tbound[iboun,:2],1],linewidth = 3, color = 'grey')
+                ax.plot(self.X[self.Tbound[iboun,:2],0],self.X[self.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
             ax.set_xlim(self.Rmin-self.dzoom,self.Rmax+self.dzoom)
             ax.set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
             plt.colorbar(contourf, ax=ax)
             return
         
-        if self.PlasmaCurrent.CURRENT_MODEL in [self.PlasmaCurrent.PROFILES_CURRENT, self.PlasmaCurrent.PCONSTRAIN_CURRENT]:
+        if not self.FIXED_BOUNDARY:
             psi_sol = " normalised solution PSI_NORM"
         else:
             psi_sol = " solution PSI"
@@ -3314,12 +3352,12 @@ class GradShafranovSolver:
             axs.set_title('Converged'+psi_sol)
             plt.show()
             
-        elif self.PlasmaCurrent.CURRENT_MODEL in [self.PlasmaCurrent.PROFILES_CURRENT, self.PlasmaCurrent.PCONSTRAIN_CURRENT]:  # ITERATION SOLUTION FOR PROFILES PLASMA CURRENT (PLOT PSI and PSI_NORM)
+        elif not self.FIXED_BOUNDARY:  # ITERATION SOLUTION FOR JARDIN PLASMA CURRENT (PLOT PSI and PSI_NORM)
             fig, axs = plt.subplots(1, 2, figsize=(11,6))
             axs[0].set_aspect('equal')
             axs[1].set_aspect('equal')
             # LEFT PLOT: PSI at iteration N+1 WITHOUT NORMALISATION (SOLUTION OBTAINED BY SOLVING CUTFEM SYSTEM)
-            subplotfield(self,axs[0],self.PSI[:,0])
+            subplotfield(self,axs[0],self.PSI[:,0],normalised=False)
             axs[0].set_title('Poloidal magnetic flux PSI')
             # RIGHT PLOT: NORMALISED PSI at iteration N+1
             subplotfield(self,axs[1],self.PSI_NORM[:,1])
@@ -3328,9 +3366,9 @@ class GradShafranovSolver:
             ## PLOT LOCATION OF CRITICAL POINTS
             for i in range(2):
                 # LOCAL EXTREMUM
-                axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'x',color='red', s = 40, linewidths = 2)
+                axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=self.magneticaxiscolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
                 # SADDLE POINT
-                axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'x',color='green', s = 40, linewidths = 2)
+                axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=self.saddlepointcolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
             plt.suptitle("Iteration n = "+str(self.it))
             plt.show(block=False)
             plt.pause(0.8)
@@ -3338,7 +3376,7 @@ class GradShafranovSolver:
         else:  # ITERATION SOLUTION FOR ANALYTICAL PLASMA CURRENT CASES (PLOT PSI)
             fig, axs = plt.subplots(1, 1, figsize=(5,6))
             axs.set_aspect('equal')
-            subplotfield(self,axs,self.PSI[:,0])
+            subplotfield(self,axs,self.PSI[:,0],normalised=False)
             axs.set_title('Poloidal magnetic flux PSI')
             axs.set_title("Iteration n = "+str(self.it)+ psi_sol)
             plt.show(block=False)
@@ -3701,7 +3739,7 @@ class GradShafranovSolver:
             for SEGMENT in self.Elements[ielem].InterfApprox.Segments:
                 for inode in range(SEGMENT.ng):
                     X_Dg[k,:] = SEGMENT.Xg[inode,:]
-                    if self.PLASMA_CURRENT != self.PROFILES_CURRENT:
+                    if self.PLASMA_CURRENT != self.JARDIN_CURRENT:
                         PSI_Dexact[k] = self.PSIAnalyticalSolution(X_Dg[k,:],self.PLASMA_CURRENT)
                     else:
                         PSI_Dexact[k] = SEGMENT.PSIgseg[inode]

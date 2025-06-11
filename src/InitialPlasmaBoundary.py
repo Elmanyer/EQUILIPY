@@ -4,10 +4,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 from matplotlib.path import Path
+from matplotlib.patches import PathPatch
 from AnalyticalSolutions import *
 from functools import partial
 
 class InitialPlasmaBoundary:
+    
+    plasmacmap = plt.get_cmap('jet')
+    #plasmacmap = plt.get_cmap('winter_r')
+    plasmabouncolor = 'green'
+    vacvesswallcolor = 'gray'
+    magneticaxiscolor = 'red'
     
     def __init__(self,PROBLEM,GEOMETRY,**kwargs):
         # IMPORT PROBLEM DATA
@@ -107,26 +114,24 @@ class InitialPlasmaBoundary:
         # PLOT PHI LEVEL-SET BACKGROUND VALUES 
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        ax.tricontourf(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=30)
-        # PLOT MESH
-        triang = tri.Triangulation(self.problem.X[:, 0], self.problem.X[:, 1])
+        # Plot low-opacity background (outside plasma region)
+        ax.tricontourf(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=30, alpha=0.5)
+        # Plot level-set inside computational domain
+        contourf = ax.tricontourf(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=30)
+        
         # Define computational domain's boundary path
         compboundary = np.zeros([len(self.problem.BoundaryVertices)+1,2])
         compboundary[:-1,:] = self.problem.X[self.problem.BoundaryVertices,:]
         # Close path
         compboundary[-1,:] = compboundary[0,:]
         clip_path = Path(compboundary)
-        # Mask triangles whose centroids are outside
-        xmid = self.problem.X[:,0][triang.triangles].mean(axis=1)
-        ymid = self.problem.X[:,1][triang.triangles].mean(axis=1)
-        mask = ~clip_path.contains_points(np.column_stack((xmid, ymid)))
-        triang.set_mask(mask)
-        ax.triplot(triang, color='gray')
-        ax.plot(self.problem.X[:, 0], self.problem.X[:, 1], 'o', markersize=2)
+        patch = PathPatch(clip_path, transform=ax.transData)
+        for coll in contourf.collections:
+            coll.set_clip_path(patch)
         
         # PLOT MESH BOUNDARY
         for iboun in range(self.problem.Nbound):
-            ax.plot(self.problem.X[self.problem.Tbound[iboun,:2],0],self.problem.X[self.problem.Tbound[iboun,:2],1],linewidth = 4, color = 'grey')
+            ax.plot(self.problem.X[self.problem.Tbound[iboun,:2],0],self.problem.X[self.problem.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
         # PLOT LEVEL-SET CONTOURS
         ax.tricontour(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=30,colors='black', linewidths=1)
         # PLOT INITIAL PLASMA BOUNDARY

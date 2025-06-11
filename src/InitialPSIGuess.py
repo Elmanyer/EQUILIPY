@@ -9,6 +9,12 @@ from functools import partial
 
 class InitialGuess:
     
+    plasmacmap = plt.get_cmap('jet')
+    #plasmacmap = plt.get_cmap('winter_r')
+    plasmabouncolor = 'green'
+    vacvesswallcolor = 'gray'
+    magneticaxiscolor = 'red'
+    
     def __init__(self,PROBLEM,PSI_GUESS,NORMALISE=False,NOISE=False,**kwargs):
         # IMPORT PROBLEM DATA
         self.problem = proxy(PROBLEM)
@@ -177,9 +183,9 @@ class InitialGuess:
         # PLOT INITIAL PSI GUESS BACKGROUND VALUES
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        contourf = ax.tricontourf(self.problem.X[:,0],self.problem.X[:,1],self.PSI0,levels=30)
-        contour = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1],self.PSI0,levels=30,colors='black', linewidths=1)
-        contour0 = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1],self.PSI0,levels=[klevel],colors='black', linewidths=3)
+        contourf = ax.tricontourf(self.problem.X[:,0],self.problem.X[:,1], self.PSI0, levels=30, cmap=self.plasmacmap)
+        contour = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1], self.PSI0, levels=30, colors='black', linewidths=1)
+        contour0 = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1], self.PSI0, levels=[klevel], colors=self.plasmabouncolor, linewidths=3)
         # Define computational domain's boundary path
         compboundary = np.zeros([len(self.problem.BoundaryVertices)+1,2])
         compboundary[:-1,:] = self.problem.X[self.problem.BoundaryVertices,:]
@@ -193,7 +199,7 @@ class InitialGuess:
             
         # PLOT MESH BOUNDARY
         for iboun in range(self.problem.Nbound):
-            ax.plot(self.problem.X[self.problem.Tbound[iboun,:2],0],self.problem.X[self.problem.Tbound[iboun,:2],1],linewidth = 4, color = 'grey')
+            ax.plot(self.problem.X[self.problem.Tbound[iboun,:2],0],self.problem.X[self.problem.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
         # PLOT COLORBAR
         plt.colorbar(contourf, ax=ax)
         ax.set_xlabel('R (in m)')
