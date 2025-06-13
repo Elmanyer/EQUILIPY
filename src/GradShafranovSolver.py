@@ -59,7 +59,7 @@ class GradShafranovSolver:
     colorlist = [Blue, Vermillion, BluishGreen, Black,Grey, Orange, ReddishPurple, Yellow, SkyBlue]
     markerlist = ['o','^', '<', '>', 'v', 's','p','*','D']
 
-    plasmacmap = plt.get_cmap('jet')
+    plasmacmap = plt.get_cmap('jet_r')
     #plasmacmap = plt.get_cmap('winter_r')
     plasmabouncolor = 'green'
     vacvesswallcolor = 'gray'
@@ -158,7 +158,10 @@ class GradShafranovSolver:
         #### BOUNDARY CONSTRAINTS
         self.beta = None                    # NITSCHE'S METHOD PENALTY TERM
         #### STABILIZATION
-        self.alpha = None                   # AIKTEN'S SCHEME RELAXATION CONSTANT
+        self.PSIrelax = False
+        self.alphaPSI = None                   # AIKTEN'S SCHEME RELAXATION CONSTANT
+        self.PHIrelax = False
+        self.alphaPHI = None
         self.zeta = None                    # GHOST PENALTY PARAMETER
         #### OPTIMIZATION OF CRITICAL POINTS
         self.EXTR_R0 = None                 # MAGNETIC AXIS OPTIMIZATION INITIAL GUESS R COORDINATE
@@ -169,7 +172,8 @@ class GradShafranovSolver:
         self.OPTI_TOL = None
         
         # ARRAYS
-        self.PlasmaLS = None                # PLASMA REGION GEOMETRY LEVEL-SET FUNCTION NODAL VALUES
+        self.PlasmaLS = None                # PLASMA REGION GEOMETRY LEVEL-SET FUNCTION NODAL VALUES AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
+        self.PlasmaLSstar = None            # UNRELAXED PLASMA REGION GEOMETRY LEVEL-SET FUNCTION NODAL VALUES
         self.PSI = None                     # PSI SOLUTION FIELD OBTAINED BY SOLVING CutFEM SYSTEM
         self.Xcrit = None                   # COORDINATES MATRIX FOR CRITICAL PSI POINTS
         self.PSI_0 = None                   # PSI VALUE AT MAGNETIC AXIS MINIMA
@@ -644,19 +648,6 @@ class GradShafranovSolver:
     
         return PSILevSet
     
-    
-    def AitkenRelaxationLS(self,RELAXATION = False):
-        if RELAXATION:
-            residual1 = self.PSI_NORMstar[:,1] - self.PSI_NORM[:,1]
-            if self.it > 2: 
-                residual0 = self.PSI_NORMstar[:,0] - self.PSI_NORM[:,0]
-                self.alpha = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
-            self.PSI_NORM[:,1] = self.PSI_NORM[:,0] + self.alpha*residual1
-        else:
-            self.PSI_NORM[:,1] = self.PSI_NORMstar[:,1]
-        return
-    
-    
     ##################################################################################################
     ################################# VACUUM VESSEL BOUNDARY PSI_B ###################################
     ##################################################################################################
@@ -877,10 +868,9 @@ class GradShafranovSolver:
                     
             # IF THERE EXISTS 'HIGH-ORDER' NODES WITH DIFFERENT PLASMA LEVEL-SET SIGN
             if DHONplasma:
-                self.OLDplasmaBoundLevSet = self.PlasmaLS.copy()
                 for inode in DHONplasma:  # LOOP OVER LOCAL INDICES 
                     self.Elements[ielem].LSe[inode] *= -1 
-                    self.PlasmaLS[self.Elements[ielem].Te[inode]] *= -1       
+                    self.PlasmaLS[self.Elements[ielem].Te[inode],1] *= -1       
         
         # DELETE REST OF UNUSED MEMORY
         self.PlasmaElems = self.PlasmaElems[:kplasm]
@@ -925,7 +915,7 @@ class GradShafranovSolver:
                 self.VacuumNodes.add(node)    
         for ielem in self.PlasmaBoundElems:
             for node in self.T[ielem,:]:
-                if self.PlasmaLS[node] < 0:
+                if self.PlasmaLS[node,1] < 0:
                     self.PlasmaNodes.add(node)
                 else:
                     self.VacuumNodes.add(node)
@@ -1509,9 +1499,13 @@ class GradShafranovSolver:
         
         # X-point
         if not self.FIXED_BOUNDARY: 
-            self.Xcrit[1,1,:-1] = Xpoint[0][0] 
-            self.PSI_X = Xpoint[0][1]
-            self.Xcrit[1,1,-1] = Xpoint[0][2]
+            if not Xpoint and self.it > 1:
+                print("SADDLE POINT NOT FOUND, TAKING PREVIOUS SOLUTION")
+                self.Xcrit[1,1,:] = self.Xcrit[0,1,:]
+            else:
+                self.Xcrit[1,1,:-1] = Xpoint[0][0] 
+                self.PSI_X = Xpoint[0][1]
+                self.Xcrit[1,1,-1] = Xpoint[0][2]
             print('SADDLE POINT AT ',self.Xcrit[1,1,:-1],' (ELEMENT ', int(self.Xcrit[1,1,-1]),') WITH VALUE PSI_X = ',self.PSI_X)
         return
 
@@ -1535,11 +1529,13 @@ class GradShafranovSolver:
             residual1 = self.PSI_NORMstar[:,1] - self.PSI_NORM[:,1]
             if self.it > 2: 
                 residual0 = self.PSI_NORMstar[:,0] - self.PSI_NORM[:,0]
-                self.alpha = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
-            self.PSI_NORM[:,1] = self.PSI_NORM[:,0] + self.alpha*residual1
+                self.alphaPSI = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
+            newPSI_NORM = self.PSI_NORM[:,1] + self.alphaPSI*residual1
+            return newPSI_NORM
         else:
+            #newPSI_NORM = self.PSI_NORMstar[:,1]
             self.PSI_NORM[:,1] = self.PSI_NORMstar[:,1]
-        return
+            return
     
     
     def ComputeTotalPlasmaCurrentNormalization(self):
@@ -1634,6 +1630,7 @@ class GradShafranovSolver:
         elif VALUES == 'PSI_B':
             if self.converg_EXT == False:
                 self.PSI_B[:,0] = self.PSI_B[:,1]
+                self.PSI_NORMstar[:,0] = self.PSI_NORMstar[:,1]
                 self.PSI_NORM[:,0] = self.PSI_NORM[:,1]
             elif self.converg_EXT == True:
                 self.PSI_CONV = self.PSI_NORM[:,1]
@@ -1679,11 +1676,11 @@ class GradShafranovSolver:
     
     def UpdateElementalPlasmaLevSet(self):
         for ELEMENT in self.Elements:
-            ELEMENT.LSe = self.PlasmaLS[self.T[ELEMENT.index,:]]
+            ELEMENT.LSe = self.PlasmaLS[self.T[ELEMENT.index,:],1]
         return
     
     
-    def UpdatePlasmaRegion(self):
+    def UpdatePlasmaRegion(self,RELAXATION=False):
         """
         If necessary, the level-set function is updated according to the new normalised solution's 0-level contour.
         If the new saddle point is close enough to the old one, the function exits early, assuming the plasma region is already well-defined.
@@ -1709,7 +1706,25 @@ class GradShafranovSolver:
                 #   DISCARTED BECAUSE THE LEVEL-SET DESCRIBES ONLY THE PLASMA REGION GEOMETRY -> NEED TO POST-PROCESS CUTFEM
                 #   SOLUTION IN ORDER TO TAKE ITS 0-LEVEL CONTOUR ENCLOSING ONLY THE PLASMA REGION.  
                 
-                self.PlasmaLS = self.ComputePSILevelSet(self.PSI_NORM[:,1])
+                self.PlasmaLSstar[:,1] = self.ComputePSILevelSet(self.PSI_NORM[:,1])
+                
+                # AITKEN RELAXATION FOR PLASMA REGION EVOLUTION
+                if RELAXATION:
+                    residual1 = self.PlasmaLSstar[:,1] - self.PlasmaLS[:,1] 
+                    if self.it > 2:
+                        residual0 = self.PlasmaLSstar[:,0] - self.PlasmaLS[:,0]
+                        self.alphaPHI = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
+                    newPlasmaLS = self.PlasmaLS[:,1] + self.alphaPHI*residual1
+                    
+                    # SHOULD THE CRITICAL POINT BE IN AGREEMENT WITH THE RELAXED PLASMA REGION?
+                    
+                else:
+                    newPlasmaLS = self.PlasmaLSstar[:,1]
+                
+                # UPDATE PLASMA LS
+                self.PlasmaLSstar[:,0] = self.PlasmaLSstar[:,1]
+                self.PlasmaLS[:,0] = self.PlasmaLS[:,1]
+                self.PlasmaLS[:,1] = newPlasmaLS
                 
                 ###### RECOMPUTE ALL PLASMA BOUNDARY ELEMENTS ATTRIBUTES
                 # UPDATE PLASMA REGION LEVEL-SET ELEMENTAL VALUES     
@@ -1795,7 +1810,11 @@ class GradShafranovSolver:
         """
         Computes the initial level-set function values describing the plasma boundary. Negative values represent inside the plasma region.
         """ 
-        self.PlasmaLS = self.initialPHI.PHI0
+        
+        self.PlasmaLS = np.zeros([self.Nn,2])
+        self.PlasmaLSstar = np.zeros([self.Nn,2])
+        self.PlasmaLS[:,0] = self.initialPHI.PHI0
+        self.PlasmaLS[:,1] = self.PlasmaLS[:,0]
         return 
     
     
@@ -1808,7 +1827,7 @@ class GradShafranovSolver:
                                     ElOrder = self.ElOrder,
                                     Xe = self.X[self.T[e,:],:],
                                     Te = self.T[e,:],
-                                    PlasmaLSe = self.PlasmaLS[self.T[e,:]]) for e in range(self.Ne)]
+                                    PlasmaLSe = self.PlasmaLS[self.T[e,:],1]) for e in range(self.Ne)]
         
         # COMPUTE MESH MEAN SIZE
         self.meanArea, self.meanLength = self.ComputeMeshElementsMeanSize()
@@ -2835,7 +2854,7 @@ class GradShafranovSolver:
             self.file_proparams.write("    INT_TOL = {:e}\n".format(self.INT_TOL))
             self.file_proparams.write("    Beta = {:f}\n".format(self.beta))
             self.file_proparams.write("    Zeta = {:f}\n".format(self.zeta))
-            self.file_proparams.write("    Alpha = {:f}\n".format(self.alpha))
+            self.file_proparams.write("    Alpha = {:f}\n".format(self.alphaPSI))
             self.file_proparams.write("    EXTR_R0 = {:f}\n".format(self.EXTR_R0))
             self.file_proparams.write("    EXTR_Z0 = {:f}\n".format(self.EXTR_Z0))
             self.file_proparams.write("    SADD_R0 = {:f}\n".format(self.SADD_R0))
@@ -2882,12 +2901,12 @@ class GradShafranovSolver:
         if not self.FIXED_BOUNDARY:
             self.file_PSI_B.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
         for inode in range(self.Nnbound):
-            self.file_PSI_B.write("{:d} {:e}\n".format(inode+1,self.PSI_B[inode,0]))
+            self.file_PSI_B.write("{:d} {:e}\n".format(inode+1,self.PSI_B[inode,1]))
         if not self.FIXED_BOUNDARY:
             self.file_PSI_B.write('END_ITERATION\n')
             
         if self.out_pickle:
-            self.PSI_B_sim.append(self.PSI_B[:,0].copy())
+            self.PSI_B_sim.append(self.PSI_B[:,1].copy())
         return
     
     def writeresidu(self,which_loop):
@@ -2940,12 +2959,12 @@ class GradShafranovSolver:
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaLS.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
             for inode in range(self.Nn):
-                self.file_plasmaLS.write("{:d} {:e}\n".format(inode+1,self.PlasmaLS[inode]))
+                self.file_plasmaLS.write("{:d} {:e}\n".format(inode+1,self.PlasmaLS[inode,1]))
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaLS.write('END_ITERATION\n')
                 
         if self.out_pickle:
-            self.PlasmaLS_sim.append(self.PlasmaLS.copy())
+            self.PlasmaLS_sim.append(self.PlasmaLS[:,1].copy())
             self.PlasmaUpdateIt_sim.append(self.it)
         return
     
@@ -3150,13 +3169,15 @@ class GradShafranovSolver:
                     self.ComputeCriticalPSI()               # 2. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
                     self.writePSIcrit()                     #    WRITE CRITICAL POINTS
                 self.NormalisePSI()                         # 3. NORMALISE PSI RESPECT TO CRITICAL VALUES  ->> PSI_NORM 
-                self.AitkenRelaxation(RELAXATION=False)
+                self.AitkenRelaxation(RELAXATION = self.PSIrelax)
                 self.writePSI()                             #    WRITE SOLUTION             
                 if self.plotPSI:
                     self.PlotSolutionPSI()                  #    PLOT SOLUTION AND NORMALISED SOLUTION
                 self.CheckConvergence('PSI_NORM')           # 4. CHECK CONVERGENCE OF PSI_NORM FIELD
                 self.writeresidu("INTERNAL")                #    WRITE INTERNAL LOOP RESIDU
-                self.UpdatePlasmaRegion()                   # 5. UPDATE MESH ELEMENTS CLASSIFACTION RESPECT TO NEW PLASMA BOUNDARY LEVEL-SET
+                
+                self.UpdatePlasmaRegion(RELAXATION = self.PHIrelax)                   # 5. UPDATE MESH ELEMENTS CLASSIFACTION RESPECT TO NEW PLASMA BOUNDARY LEVEL-SET
+                
                 self.UpdatePSI('PSI_NORM')                  # 6. UPDATE PSI_NORM VALUES (PSI_NORM[:,0] = PSI_NORM[:,1])
                 self.UpdateElementalPSI()                   # 7. UPDATE PSI_NORM VALUES IN CORRESPONDING ELEMENTS (ELEMENT.PSIe = PSI_NORM[ELEMENT.Te,0])
                 self.UpdatePlasmaBoundaryValues()           # 8. UPDATE ELEMENTAL CONSTRAINT VALUES PSIgseg FOR PLASMA/VACUUM INTERFACE
@@ -3210,9 +3231,9 @@ class GradShafranovSolver:
         ax.set_aspect('equal')
         ax.set_xlim(self.Rmin-self.dzoom,self.Rmax+self.dzoom)
         ax.set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
-        contourf = ax.tricontourf(self.X[:,0],self.X[:,1], self.PSI[:,0], levels=30)
-        contour1 = ax.tricontour(self.X[:,0],self.X[:,1], self.PSI[:,0], levels=[0], colors = 'black')
-        contour2 = ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
+        contourf = ax.tricontourf(self.X[:,0],self.X[:,1], self.PSI[:,0], levels=30, cmap = self.plasmacmap)
+        contour1 = ax.tricontour(self.X[:,0],self.X[:,1], self.PSI[:,0], levels=[self.PSI_X], colors = 'black')
+        contour2 = ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS[:,1], levels=[0], colors = self.plasmabouncolor)
         
         # Mask solution outside computational domain's boundary 
         compboundary = np.zeros([len(self.BoundaryVertices)+1,2])
@@ -3240,7 +3261,7 @@ class GradShafranovSolver:
         ax.set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
         a = ax.tricontourf(self.X[plotnodes,0],self.X[plotnodes,1], FIELD[plotnodes], levels=30)
         ax.tricontour(self.X[plotnodes,0],self.X[plotnodes,1], FIELD[plotnodes], levels=[0], colors = 'black')
-        ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
+        ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS[:,1], levels=[0], colors = 'red')
         plt.colorbar(a, ax=ax)
         plt.show()
         
@@ -3271,13 +3292,13 @@ class GradShafranovSolver:
         axs[0].set_xlim(self.Rmin-self.dzoom,self.Rmax+self.dzoom)
         axs[0].set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
         a1 = axs[0].tricontourf(self.X[:,0],self.X[:,1], AnaliticalNorm, levels=30, vmin=vmin, vmax=vmax)
-        axs[0].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
+        axs[0].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS[:,1], levels=[0], colors = 'red')
         axs[0].tricontour(self.X[:,0],self.X[:,1], AnaliticalNorm, levels=[0], colors = 'black')
 
         axs[1].set_xlim(self.Rmin-self.dzoom,self.Rmax+self.dzoom)
         axs[1].set_ylim(self.Zmin-self.dzoom,self.Zmax+self.dzoom)
         a2 = axs[1].tricontourf(self.X[:,0],self.X[:,1], self.PSI_CONV, levels=30, vmin=vmin, vmax=vmax)
-        axs[1].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = 'red')
+        axs[1].tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS[:,1], levels=[0], colors = 'red')
         axs[1].tricontour(self.X[:,0],self.X[:,1], self.PSI_CONV, levels=[0], colors = 'black')
 
         fig.colorbar(a1, ax=axs[2], orientation="vertical", fraction=0.8, pad=-0.7)
@@ -3313,7 +3334,7 @@ class GradShafranovSolver:
                 psisep = self.PSI_X
             contourf = ax.tricontourf(self.X[:,0],self.X[:,1], field, levels=50, cmap=self.plasmacmap)
             contour1 = ax.tricontour(self.X[:,0],self.X[:,1], field, levels=[psisep], colors = 'black',linewidths=2)
-            contour2 = ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], colors = self.plasmabouncolor, linewidths=3)
+            contour2 = ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS[:,1], levels=[0], colors = self.plasmabouncolor, linewidths=3)
             # Mask solution outside computational domain's boundary 
             compboundary = np.zeros([len(self.BoundaryVertices)+1,2])
             compboundary[:-1,:] = self.X[self.BoundaryVertices,:]
