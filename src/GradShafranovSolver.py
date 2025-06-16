@@ -38,6 +38,7 @@ from Greens import *
 from InitialPlasmaBoundary import *
 from InitialPSIGuess import *
 from PlasmaCurrent import *
+from mpi4py import MPI
 
 class GradShafranovSolver:
     
@@ -80,6 +81,7 @@ class GradShafranovSolver:
         # PROBLEM CASE PARAMETERS
         self.FIXED_BOUNDARY = None          # PLASMA BOUNDARY FIXED BEHAVIOUR: True  or  False 
         self.GhostStabilization = False     # GHOST STABILIZATION SWITCH
+        self.PARALLEL = False               # PARALLEL SIMULATION BASED ON MPI RUN (NEEDS TO RUN ON .py file)
         
         # OUTPUT SWITCHES
         self.out_PSIcrit = False
@@ -159,7 +161,10 @@ class GradShafranovSolver:
         self.beta = None                    # NITSCHE'S METHOD PENALTY TERM
         #### STABILIZATION
         self.PSIrelax = False
-        self.alphaPSI = None                   # AIKTEN'S SCHEME RELAXATION CONSTANT
+        self.lambdaPSI = None
+        self.lambdamin = None
+        self.lambdamax = None
+        self.lambda0 = None                 # INITIAL AIKTEN'S SCHEME RELAXATION CONSTANT  (alpha0 = 1 - lambda0)
         self.PHIrelax = False
         self.alphaPHI = None
         self.zeta = None                    # GHOST PENALTY PARAMETER
@@ -228,6 +233,10 @@ class GradShafranovSolver:
         self.ReadMesh()
         self.ReadFixdata()
         print('Done!')
+        
+        # INITIALISE PARALLEL PROCESSING COMMUNICATOR AND ARRAYS
+        if self.PARALLEL:
+            self.comm = MPI.COMM_WORLD
         return
     
     def print_all_attributes(self):
@@ -559,7 +568,7 @@ class GradShafranovSolver:
         
         # OBTAIN POINTS CONFORMING THE NEW PLASMA DOMAIN BOUNDARY
         fig, ax = plt.subplots(figsize=(6, 8))
-        cs = ax.tricontour(self.X[:,0],self.X[:,1], 1.0-PSI, levels=[1-self.PSIseparatrix])
+        cs = ax.tricontour(self.X[:,0],self.X[:,1], PSI-1.0, levels=[self.PSIseparatrix-1.0])
 
         paths = list()
 
@@ -1469,11 +1478,12 @@ class GradShafranovSolver:
             print("Warning: No O points found")
             return Opoint, Xpoint
 
+        """
         # Find primary O-point by sorting by distance from middle of domain
         Rmid = 0.5 * (self.Rmax-self.Rmin)
         Zmid = 0.5 * (self.Zmax-self.Zmin)
         Opoint.sort(key=lambda x: (x[0] - Rmid) ** 2 + (x[1] - Zmid) ** 2)
-            
+        """    
         return Opoint, Xpoint
 
 
@@ -1526,16 +1536,26 @@ class GradShafranovSolver:
     
     def AitkenRelaxation(self,RELAXATION = False):
         if RELAXATION:
-            residual1 = self.PSI_NORMstar[:,1] - self.PSI_NORM[:,1]
-            if self.it > 2: 
-                residual0 = self.PSI_NORMstar[:,0] - self.PSI_NORM[:,0]
-                self.alphaPSI = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
-            newPSI_NORM = self.PSI_NORM[:,1] + self.alphaPSI*residual1
-            return newPSI_NORM
+            if self.it == 1: 
+                alpha = 1 - self.lambdaPSI[0]
+            else:
+                residual0 = self.PSI_NORM[:,0] - self.PSI_NORMstar[:,0]
+                residual1 = self.PSI_NORM[:,1] - self.PSI_NORMstar[:,1]
+                self.lambdaPSI[1] = self.lambdaPSI[0] + (self.lambdaPSI[0] - 1)*(residual0-residual1)@residual1/np.linalg.norm(residual0-residual1)
+                alpha = 1 - max(min(self.lambdaPSI[1], self.lambdamax), self.lambdamin)
+                # UPDATE lambda
+                self.lambdaPSI[0] = self.lambdaPSI[1]
+                
+            print("AITKEN'S RELAXATION PARAMETER (alpha) = ", alpha)
+            newPSI = (1-alpha)*self.PSI_NORM[:,1] + alpha*self.PSI_NORMstar[:,1]
         else:
-            #newPSI_NORM = self.PSI_NORMstar[:,1]
-            self.PSI_NORM[:,1] = self.PSI_NORMstar[:,1]
-            return
+            newPSI = self.PSI_NORMstar[:,1]
+            
+        # UPDATE ARRAYS
+        self.PSI_NORMstar[:,0] = self.PSI_NORMstar[:,1]
+        self.PSI_NORM[:,0] = self.PSI_NORM[:,1]
+        self.PSI_NORM[:,1] = newPSI
+        return
     
     
     def ComputeTotalPlasmaCurrentNormalization(self):
@@ -1613,27 +1633,16 @@ class GradShafranovSolver:
                 print(" ")
         return 
     
-    def UpdatePSI(self,VALUES):
+    def UpdatePSI_B(self):
         """
-        Updates the PSI arrays.
-
-        Input:
-            VALUES (str) 
-                - 'PSI_NORM' : Updates the normalized PSI values.
-                - 'PSI_B'    : Updates the boundary PSI values, or stores the converged values if external convergence is reached.
+        Updates the PSI_B arrays.
         """
-        if VALUES == 'PSI_NORM':
+        if self.converg_EXT == False:
+            self.PSI_B[:,0] = self.PSI_B[:,1]
             self.PSI_NORMstar[:,0] = self.PSI_NORMstar[:,1]
             self.PSI_NORM[:,0] = self.PSI_NORM[:,1]
-            self.Xcrit[0,:,:] = self.Xcrit[1,:,:]
-        
-        elif VALUES == 'PSI_B':
-            if self.converg_EXT == False:
-                self.PSI_B[:,0] = self.PSI_B[:,1]
-                self.PSI_NORMstar[:,0] = self.PSI_NORMstar[:,1]
-                self.PSI_NORM[:,0] = self.PSI_NORM[:,1]
-            elif self.converg_EXT == True:
-                self.PSI_CONV = self.PSI_NORM[:,1]
+        elif self.converg_EXT == True:
+            self.PSI_CONV = self.PSI_NORM[:,1]
         return
     
     def UpdateElementalPSI(self):
@@ -1660,6 +1669,7 @@ class GradShafranovSolver:
                 # FREE BOUNDARY PROBLEM -> PLASMA BOUNDARY VALUES = SEPARATRIX VALUE
                 else:
                     INTAPPROX.PSIg[ig] = self.PSI_X
+                    #INTAPPROX.PSIg[ig] = self.PSIseparatrix
         return
     
     def UpdateVacuumVesselBoundaryValues(self):
@@ -1697,9 +1707,8 @@ class GradShafranovSolver:
             # IN CASE WHERE THE NEW SADDLE POINT (N+1) CORRESPONDS (CLOSE TO) TO THE OLD SADDLE POINT, THEN THAT MEANS THAT THE PLASMA REGION
             # IS ALREADY WELL DEFINED BY THE OLD LEVEL-SET 
             
-            if self.it <= self.PLASMA_IT or np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]) < 0.2:
-                return
-            else:
+            if self.it >= self.PLASMA_IT and np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]) > 0.2:
+
                 ###### UPDATE PLASMA REGION LEVEL-SET FUNCTION VALUES ACCORDING TO SOLUTION OBTAINED
                 # . RECALL THAT PLASMA REGION IS DEFINED BY NEGATIVE VALUES OF LEVEL-SET -> NEED TO INVERT SIGN
                 # . CLOSED GEOMETRY DEFINED BY 0-LEVEL CONTOUR BENEATH ACTIVE SADDLE POINT (DIVERTOR REGION) NEEDS TO BE
@@ -1756,8 +1765,10 @@ class GradShafranovSolver:
                 
                 # WRITE NEW PLASMA REGION DATA
                 self.writePlasmaBoundaryData()
-                    
-                return
+            
+            # UPDATE CRITICAL VALUES
+            self.Xcrit[0,:,:] = self.Xcrit[1,:,:]        
+            return
     
     
     ##################################################################################################
@@ -1783,6 +1794,12 @@ class GradShafranovSolver:
         self.Xcrit = np.zeros([2,2,3])  # [(iterations n, n+1), (extremum, saddle point), (R_crit,Z_crit,elem_crit)]
         self.Xcrit[0,0,:-1] = np.array([self.EXTR_R0,self.EXTR_Z0])
         self.Xcrit[0,1,:-1] = np.array([self.SADD_R0,self.SADD_Z0])
+        
+        # INITIALISE AITKEN'S RELAXATION LAMBDAS
+        self.lambdaPSI = np.zeros([2])
+        self.lambdaPSI[0] = self.lambda0           # INITIAL LAMBDA PARAMETER
+        self.lambdamax = 0.95
+        self.lambdamin = 0.0
         return
     
     
@@ -2854,7 +2871,7 @@ class GradShafranovSolver:
             self.file_proparams.write("    INT_TOL = {:e}\n".format(self.INT_TOL))
             self.file_proparams.write("    Beta = {:f}\n".format(self.beta))
             self.file_proparams.write("    Zeta = {:f}\n".format(self.zeta))
-            self.file_proparams.write("    Alpha = {:f}\n".format(self.alphaPSI))
+            self.file_proparams.write("    Lambda0 = {:f}\n".format(self.lambda0))
             self.file_proparams.write("    EXTR_R0 = {:f}\n".format(self.EXTR_R0))
             self.file_proparams.write("    EXTR_Z0 = {:f}\n".format(self.EXTR_Z0))
             self.file_proparams.write("    SADD_R0 = {:f}\n".format(self.SADD_R0))
@@ -3170,6 +3187,7 @@ class GradShafranovSolver:
                     self.writePSIcrit()                     #    WRITE CRITICAL POINTS
                 self.NormalisePSI()                         # 3. NORMALISE PSI RESPECT TO CRITICAL VALUES  ->> PSI_NORM 
                 self.AitkenRelaxation(RELAXATION = self.PSIrelax)
+                
                 self.writePSI()                             #    WRITE SOLUTION             
                 if self.plotPSI:
                     self.PlotSolutionPSI()                  #    PLOT SOLUTION AND NORMALISED SOLUTION
@@ -3178,7 +3196,6 @@ class GradShafranovSolver:
                 
                 self.UpdatePlasmaRegion(RELAXATION = self.PHIrelax)                   # 5. UPDATE MESH ELEMENTS CLASSIFACTION RESPECT TO NEW PLASMA BOUNDARY LEVEL-SET
                 
-                self.UpdatePSI('PSI_NORM')                  # 6. UPDATE PSI_NORM VALUES (PSI_NORM[:,0] = PSI_NORM[:,1])
                 self.UpdateElementalPSI()                   # 7. UPDATE PSI_NORM VALUES IN CORRESPONDING ELEMENTS (ELEMENT.PSIe = PSI_NORM[ELEMENT.Te,0])
                 self.UpdatePlasmaBoundaryValues()           # 8. UPDATE ELEMENTAL CONSTRAINT VALUES PSIgseg FOR PLASMA/VACUUM INTERFACE
                 self.PlasmaCurrent.Normalise()
@@ -3196,7 +3213,7 @@ class GradShafranovSolver:
             
             self.CheckConvergence('PSI_B')            # CHECK CONVERGENCE OF VACUUM VESSEL FIEST WALL PSI VALUES  (PSI_B)
             self.writeresidu("EXTERNAL")              # WRITE EXTERNAL LOOP RESIDU 
-            self.UpdatePSI('PSI_B')                   # UPDATE PSI_NORM AND PSI_B VALUES 
+            self.UpdatePSI_B()                   # UPDATE PSI_NORM AND PSI_B VALUES 
             
             #######################################################
             ################ END EXTERNAL LOOP ####################
@@ -3374,25 +3391,52 @@ class GradShafranovSolver:
             plt.show()
             
         elif not self.FIXED_BOUNDARY:  # ITERATION SOLUTION FOR JARDIN PLASMA CURRENT (PLOT PSI and PSI_NORM)
-            fig, axs = plt.subplots(1, 2, figsize=(11,6))
-            axs[0].set_aspect('equal')
-            axs[1].set_aspect('equal')
-            # LEFT PLOT: PSI at iteration N+1 WITHOUT NORMALISATION (SOLUTION OBTAINED BY SOLVING CUTFEM SYSTEM)
-            subplotfield(self,axs[0],self.PSI[:,0],normalised=False)
-            axs[0].set_title('Poloidal magnetic flux PSI')
-            # RIGHT PLOT: NORMALISED PSI at iteration N+1
-            subplotfield(self,axs[1],self.PSI_NORM[:,1])
-            axs[1].set_title('Normalised poloidal magnetic flux PSI_NORM')
-            axs[1].yaxis.set_visible(False)
-            ## PLOT LOCATION OF CRITICAL POINTS
-            for i in range(2):
-                # LOCAL EXTREMUM
-                axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=self.magneticaxiscolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
-                # SADDLE POINT
-                axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=self.saddlepointcolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
-            plt.suptitle("Iteration n = "+str(self.it))
-            plt.show(block=False)
-            plt.pause(0.8)
+            if not self.PSIrelax:
+                fig, axs = plt.subplots(1, 2, figsize=(11,6))
+                axs[0].set_aspect('equal')
+                axs[1].set_aspect('equal')
+                # LEFT PLOT: PSI at iteration N+1 WITHOUT NORMALISATION (SOLUTION OBTAINED BY SOLVING CUTFEM SYSTEM)
+                subplotfield(self,axs[0],self.PSI[:,0],normalised=False)
+                axs[0].set_title('PSI')
+                # RIGHT PLOT: NORMALISED PSI at iteration N+1
+                subplotfield(self,axs[1],self.PSI_NORM[:,1])
+                axs[1].set_title('PSI_NORM')
+                axs[1].yaxis.set_visible(False)
+                ## PLOT LOCATION OF CRITICAL POINTS
+                for i in range(2):
+                    # LOCAL EXTREMUM
+                    axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=self.magneticaxiscolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
+                    # SADDLE POINT
+                    axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=self.saddlepointcolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
+                plt.suptitle("Iteration n = "+str(self.it))
+                plt.show(block=False)
+                plt.pause(0.8)
+            else:
+                fig, axs = plt.subplots(1, 3, figsize=(15,6))
+                axs[0].set_aspect('equal')
+                axs[1].set_aspect('equal')
+                axs[2].set_aspect('equal')
+                # LEFT PLOT: PSI at iteration N+1 WITHOUT NORMALISATION (SOLUTION OBTAINED BY SOLVING CUTFEM SYSTEM)
+                subplotfield(self,axs[0],self.PSI[:,0],normalised=False)
+                axs[0].set_title('PSI')
+                # CENTER PLOT: NORMALISED PSI at iteration N+1
+                subplotfield(self,axs[1],self.PSI_NORMstar[:,1])
+                axs[1].set_title('PSI_NORMstar')
+                axs[1].yaxis.set_visible(False)
+                # RIGHT PLOT: RELAXED SOLUTION
+                subplotfield(self,axs[2],self.PSI_NORMstar[:,1])
+                axs[2].set_title('PSI_NORM')
+                axs[2].yaxis.set_visible(False)
+                
+                ## PLOT LOCATION OF CRITICAL POINTS
+                for i in range(2):
+                    # LOCAL EXTREMUM
+                    axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=self.magneticaxiscolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
+                    # SADDLE POINT
+                    axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=self.saddlepointcolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
+                plt.suptitle("Iteration n = "+str(self.it))
+                plt.show(block=False)
+                plt.pause(0.8)
                 
         else:  # ITERATION SOLUTION FOR ANALYTICAL PLASMA CURRENT CASES (PLOT PSI)
             fig, axs = plt.subplots(1, 1, figsize=(5,6))
