@@ -63,26 +63,25 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.PARALLEL = False               # PARALLEL SIMULATION BASED ON MPI RUN (NEEDS TO RUN ON .py file)
         
         # SIMULATION OBJECTS
-        self.Mesh = None                    # MESH
+        self.MESH = None                    # MESH
         self.PlasmaCurrent = None           # GRAD-SHAFRANOV PLASMA CURRENT MODEL Jphi
         self.initialPHI = None              # INITIAL/FIXED PLASMA BOUNDARY LEVEL-SET
         self.initialPSI = None              # INITIAL PSI GUESS
-        self.COILS = None                   # ARRAY OF COIL OBJECTS
-        self.SOLENOIDS = None               # ARRAY OF SOLENOID OBJECTS
+        self.TOKAMAK = None                 # TOKAMAK
         
         # NUMERICAL TREATMENT PARAMETERS
         self.QuadratureOrder2D = None       # NUMERICAL INTEGRATION QUADRATURE ORDER (2D)
         self.QuadratureOrder1D = None       # NUMERICAL INTEGRATION QUADRATURE ORDER (1D)
-        self.INT_TOL = None                 # INTERNAL LOOP STRUCTURE CONVERGENCE TOLERANCE
-        self.EXT_TOL = None                 # EXTERNAL LOOP STRUCTURE CONVERGENCE TOLERANCE
-        self.INT_ITER = None                # INTERNAL LOOP STRUCTURE MAXIMUM ITERATIONS NUMBER
-        self.EXT_ITER = None                # EXTERNAL LOOP STRUCTURE MAXIMUM ITERATIONS NUMBER
-        self.converg_EXT = None             # EXTERNAL LOOP STRUCTURE CONVERGENCE FLAG
-        self.converg_INT = None             # INTERNAL LOOP STRUCTURE CONVERGENCE FLAG
-        self.it_EXT = None                  # EXTERNAL LOOP STRUCTURE ITERATIONS NUMBER
-        self.it_INT = None                  # INTERNAL LOOP STRUCTURE ITERATIONS NUMBER
         self.it = 0                         # TOTAL NUMBER OF ITERATIONS COUNTER
-        self.PLASMA_IT = None               # ITERATION AFTER WHICH THE PLASMA REGION CAN BE UPDATED
+        self.int_tol = None                 # INTERNAL LOOP STRUCTURE CONVERGENCE TOLERANCE
+        self.ext_tol = None                 # EXTERNAL LOOP STRUCTURE CONVERGENCE TOLERANCE
+        self.int_maxiter = None             # INTERNAL LOOP STRUCTURE MAXIMUM ITERATIONS NUMBER
+        self.ext_maxiter = None             # EXTERNAL LOOP STRUCTURE MAXIMUM ITERATIONS NUMBER
+        self.ext_cvg = None                 # EXTERNAL LOOP STRUCTURE CONVERGENCE FLAG
+        self.int_cvg = None                 # INTERNAL LOOP STRUCTURE CONVERGENCE FLAG
+        self.ext_it = None                  # EXTERNAL LOOP STRUCTURE ITERATIONS NUMBER
+        self.int_it = None                  # INTERNAL LOOP STRUCTURE ITERATIONS NUMBER
+        self.it_plasma = None               # ITERATION AFTER WHICH THE PLASMA REGION CAN BE UPDATED
         #### BOUNDARY CONSTRAINTS
         self.beta = None                    # NITSCHE'S METHOD PENALTY TERM
         #### STABILIZATION
@@ -92,15 +91,15 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.lambdamax = None
         self.lambda0 = None                 # INITIAL AIKTEN'S SCHEME RELAXATION CONSTANT  (alpha0 = 1 - lambda0)
         self.PHIrelax = False
-        self.alphaPHI = None
+        self.alphaPHI = None                # PHI LEVEL-SET AITKEN RELAXATION INITIAL PARAMETER
         self.zeta = None                    # GHOST PENALTY PARAMETER
         #### OPTIMIZATION OF CRITICAL POINTS
-        self.EXTR_R0 = None                 # MAGNETIC AXIS OPTIMIZATION INITIAL GUESS R COORDINATE
-        self.EXTR_Z0 = None                 # MAGNETIC AXIS OPTIMIZATION INITIAL GUESS Z COORDINATE
-        self.SADD_R0 = None                 # SADDLE POINT OPTIMIZATION INITIAL GUESS R COORDINATE
-        self.SADD_Z0 = None                 # SADDLE POINT OPTIMIZATION INITIAL GUESS Z COORDINATE
-        self.OPTI_ITMAX = None              # NONLINEAR OPTIMIZATION METHOD MAXIMAL NUMBER OF ITERATION
-        self.OPTI_TOL = None                # NONLINEAR OPTIMIZATION METHOD TOLERANCE
+        self.R0_axis = None                 # MAGNETIC AXIS OPTIMIZATION INITIAL GUESS R COORDINATE
+        self.Z0_axis = None                 # MAGNETIC AXIS OPTIMIZATION INITIAL GUESS Z COORDINATE
+        self.R0_saddle = None               # SADDLE POINT OPTIMIZATION INITIAL GUESS R COORDINATE
+        self.Z0_saddle = None               # SADDLE POINT OPTIMIZATION INITIAL GUESS Z COORDINATE
+        self.opti_maxiter = None            # NONLINEAR OPTIMIZATION METHOD MAXIMAL NUMBER OF ITERATION
+        self.opti_tol = None                # NONLINEAR OPTIMIZATION METHOD TOLERANCE
         
         # ARRAYS
         self.LHS = None                     # GLOBAL SYSTEM LEFT-HAND-SIDE MATRIX
@@ -115,8 +114,8 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.PSI_NORM = None                # RELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
         self.PSI_B = None                   # VACUUM VESSEL WALL PSI VALUES (EXTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
         self.PSI_CONV = None                # CONVERGED NORMALISED PSI SOLUTION FIELD 
-        self.residu_INT = None              # INTERNAL LOOP RESIDU
-        self.residu_EXT = None              # EXTERNAL LOOP RESIDU
+        self.int_residu = None              # INTERNAL LOOP RESIDU
+        self.ext_residu = None              # EXTERNAL LOOP RESIDU
         
         
         self.nge = None                     # NUMBER OF INTEGRATION NODES PER ELEMENT (STANDARD SURFACE QUADRATURE)
@@ -165,21 +164,21 @@ class GradShafranovSolver(EquilipyInitialisation,
                             defined over the nodes of the vacuum vessel's boundary.
         """
         # INITIALISE BOUNDARY VALUES ARRAY
-        PSI_B = np.zeros([self.Mesh.Nnbound])    
+        PSI_B = np.zeros([self.MESH.Nnbound])    
         
         # FOR FIXED PLASMA BOUNDARY PROBLEM, THE PSI BOUNDARY VALUES PSI_B ARE EQUAL TO THE ANALYTICAL SOLUTION
         if self.FIXED_BOUNDARY:
-            for inode, node in enumerate(self.Mesh.BoundaryNodes):
+            for inode, node in enumerate(self.MESH.BoundaryNodes):
                 # ISOLATE BOUNDARY NODE COORDINATES
-                Xbound = self.Mesh.X[node,:]
+                Xbound = self.MESH.X[node,:]
                 # COMPUTE PSI BOUNDARY VALUES
                 PSI_B[inode] = self.PlasmaCurrent.PSIanalytical(Xbound)
 
         # FOR THE FREE BOUNDARY PROBLEM, THE PSI BOUNDARY VALUES ARE COMPUTED BY PROJECTING THE MAGNETIC CONFINEMENT EFFECT USING THE GREENS FUNCTION FORMALISM
         else:  
-            for inode, node in enumerate(self.Mesh.BoundaryNodes):
+            for inode, node in enumerate(self.MESH.BoundaryNodes):
                 # ISOLATE BOUNDARY NODE COORDINATES
-                Xbound = self.Mesh.X[node,:]
+                Xbound = self.MESH.X[node,:]
                 
                 ##### COMPUTE PSI BOUNDARY VALUES
                 # CONTRIBUTION FROM EXTERNAL COILS CURRENT 
@@ -192,9 +191,9 @@ class GradShafranovSolver(EquilipyInitialisation,
                             
                 # CONTRIBUTION FROM PLASMA CURRENT  ->>  INTEGRATE OVER PLASMA REGION
                 #   1. INTEGRATE IN PLASMA ELEMENTS
-                for ielem in self.Mesh.PlasmaElems:
+                for ielem in self.MESH.PlasmaElems:
                     # ISOLATE ELEMENT OBJECT
-                    ELEMENT = self.Mesh.Elements[ielem]
+                    ELEMENT = self.MESH.Elements[ielem]
                     # INTERPOLATE ELEMENTAL PSI ON PHYSICAL GAUSS NODES
                     PSIg = ELEMENT.Ng @ ELEMENT.PSIe
                     # LOOP OVER GAUSS NODES
@@ -203,9 +202,9 @@ class GradShafranovSolver(EquilipyInitialisation,
                                             PSIg[ig])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                                     
                 #   2. INTEGRATE IN CUT ELEMENTS, OVER SUBELEMENT IN PLASMA REGION
-                for ielem in self.Mesh.PlasmaBoundElems:
+                for ielem in self.MESH.PlasmaBoundElems:
                     # ISOLATE ELEMENT OBJECT
-                    ELEMENT = self.Mesh.Elements[ielem]
+                    ELEMENT = self.MESH.Elements[ielem]
                     # INTEGRATE ON SUBELEMENT INSIDE PLASMA REGION
                     for SUBELEM in ELEMENT.SubElements:
                         if SUBELEM.Dom < 0:  # IN PLASMA REGION
@@ -257,9 +256,9 @@ class GradShafranovSolver(EquilipyInitialisation,
 
         The function double checks the orthogonality of the normal vectors. 
         """
-        for inter, ielem in enumerate(self.Mesh.PlasmaBoundElems):
+        for inter, ielem in enumerate(self.MESH.PlasmaBoundElems):
             # APPROXIMATE PLASMA/VACUUM INTERACE GEOMETRY CUTTING ELEMENT 
-            self.Mesh.Elements[ielem].InterfaceApproximation(inter)
+            self.MESH.Elements[ielem].InterfaceApproximation(inter)
         return
     
     def CheckPlasmaBoundaryApproximationNormalVectors(self):
@@ -269,14 +268,14 @@ class GradShafranovSolver(EquilipyInitialisation,
         normal vector, raising an exception if the dot product is not close to zero (indicating non-orthogonality).
         """
 
-        for ielem in self.Mesh.PlasmaBoundElems:
-            for ig, vec in enumerate(self.Mesh.Elements[ielem].InterfApprox.NormalVec):
+        for ielem in self.MESH.PlasmaBoundElems:
+            for ig, vec in enumerate(self.MESH.Elements[ielem].InterfApprox.NormalVec):
                 # CHECK UNIT LENGTH
                 if np.abs(np.linalg.norm(vec)-1) > 1e-6:
                     raise Exception('Normal vector norm equals',np.linalg.norm(vec), 'for mesh element', ielem, ": Normal vector not unitary")
                 # CHECK ORTHOGONALITY
-                Ngrad = self.Mesh.Elements[ielem].InterfApprox.invJg[ig,:,:]@np.array([self.Mesh.Elements[ielem].InterfApprox.dNdxig[ig,:],self.Mesh.Elements[ielem].InterfApprox.dNdetag[ig,:]])
-                dphidr, dphidz = Ngrad@self.Mesh.Elements[ielem].LSe
+                Ngrad = self.MESH.Elements[ielem].InterfApprox.invJg[ig,:,:]@np.array([self.MESH.Elements[ielem].InterfApprox.dNdxig[ig,:],self.MESH.Elements[ielem].InterfApprox.dNdetag[ig,:]])
+                dphidr, dphidz = Ngrad@self.MESH.Elements[ielem].LSe
                 tangvec = np.array([-dphidz, dphidr]) 
                 scalarprod = np.dot(tangvec,vec)
                 if scalarprod > 1e-10: 
@@ -285,10 +284,10 @@ class GradShafranovSolver(EquilipyInitialisation,
     
     def ComputePlasmaBoundaryGhostFaces(self):
         # COMPUTE PLASMA BOUNDARY GHOST FACES
-        self.Mesh.GhostFaces, self.Mesh.GhostElems = self.IdentifyPlasmaBoundaryGhostFaces()
+        self.MESH.GhostFaces, self.MESH.GhostElems = self.IdentifyPlasmaBoundaryGhostFaces()
         # COMPUTE ELEMENTAL GHOST FACES NORMAL VECTORS
-        for ielem in self.Mesh.GhostElems:
-            self.Mesh.Elements[ielem].GhostFacesNormals()
+        for ielem in self.MESH.GhostElems:
+            self.MESH.Elements[ielem].GhostFacesNormals()
         # CHECK NORMAL VECTORS
         self.CheckGhostFacesNormalVectors()
         return
@@ -300,8 +299,8 @@ class GradShafranovSolver(EquilipyInitialisation,
         normal vector, raising an exception if the dot product is not close to zero (indicating non-orthogonality).
         """
         
-        for ielem in self.Mesh.GhostElems:
-            for SEGMENT in self.Mesh.Elements[ielem].GhostFaces:
+        for ielem in self.MESH.GhostElems:
+            for SEGMENT in self.MESH.Elements[ielem].GhostFaces:
                 # CHECK UNIT LENGTH
                 if np.abs(np.linalg.norm(SEGMENT.NormalVec)-1) > 1e-6:
                     raise Exception('Normal vector norm equals',np.linalg.norm(SEGMENT.NormalVec), 'for mesh element', ielem, ": Normal vector not unitary")
@@ -314,64 +313,6 @@ class GradShafranovSolver(EquilipyInitialisation,
 
     
     ##################################################################################################
-    ############################# NUMERICAL INTEGRATION QUADRATURES ##################################
-    ##################################################################################################
-    
-    def ComputeIntegrationQuadratures(self):
-        """
-        Computes the numerical integration quadratures for different types of elements and boundaries.
-
-        The function computes quadrature entities for the following cases:
-            1. Standard 2D quadratures for non-cut elements.
-            2. Adapted quadratures for cut elements.
-            3. Boundary quadratures for elements on the computational domain's boundary (vacuum vessel).
-            4. Quadratures for solenoids in the case of a free-boundary plasma problem.
-        """
-        
-        # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR NON-CUT ELEMENTS 
-        for ielem in self.Mesh.NonCutElems:
-            self.Mesh.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
-            
-        # DEFINE STANDARD SURFACE QUADRATURE NUMBER OF INTEGRATION NODES
-        self.nge = self.Mesh.Elements[self.Mesh.NonCutElems[0]].ng
-            
-        # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
-        for ielem in self.Mesh.PlasmaBoundElems:
-            self.Mesh.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
-        # CHECK NORMAL VECTORS
-        self.CheckPlasmaBoundaryApproximationNormalVectors()
-            
-        # COMPUTE QUADRATURES FOR GHOST FACES ON PLASMA BOUNDARY ELEMENTS
-        if self.GhostStabilization:
-            for ielem in self.Mesh.GhostElems:
-                self.Mesh.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
-        return
-    
-    
-    def ComputePlasmaBoundStandardQuadratures(self):
-        if len(self.Mesh.PlasmaBoundElems) == 0:
-            return
-        else:
-            if self.FIXED_BOUNDARY:
-                if type(self.Mesh.Elements[self.Mesh.PlasmaBoundElems[0]].Xg) == type(None):
-                    for ielem in self.Mesh.PlasmaBoundElems:
-                        self.Mesh.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
-            else:
-                for ielem in self.Mesh.PlasmaBoundElems:
-                    if type(self.Mesh.Elements[ielem].Xg) == type(None):
-                        self.Mesh.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
-            return
-        
-    def IntegrationNodesMesh(self):
-        if type(self.Xg) == type(None):
-            self.ComputePlasmaBoundStandardQuadratures()
-            self.Xg = np.zeros([self.Mesh.Ne*self.nge,self.Mesh.dim])
-            for ielem, ELEMENT in enumerate(self.Mesh.Elements):
-                self.Xg[ielem*self.nge:(ielem+1)*self.nge,:] = ELEMENT.Xg
-        return
-            
-    
-    ##################################################################################################
     ########################################## INTEGRATION ###########################################
     ##################################################################################################
     
@@ -381,9 +322,9 @@ class GradShafranovSolver(EquilipyInitialisation,
         integral = 0
         if PSIdependent:
             # INTEGRATE OVER PLASMA ELEMENTS
-            for ielem in self.Mesh.PlasmaElems:
+            for ielem in self.MESH.PlasmaElems:
                 # ISOLATE ELEMENT
-                ELEMENT = self.Mesh.Elements[ielem]
+                ELEMENT = self.MESH.Elements[ielem]
                 # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
                 PSIg = ELEMENT.Ng @ ELEMENT.PSIe
                 # LOOP OVER GAUSS NODES
@@ -391,9 +332,9 @@ class GradShafranovSolver(EquilipyInitialisation,
                     integral += fun(ELEMENT.Xg[ig,:],PSIg[ig])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                         
             # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
-            for ielem in self.Mesh.PlasmaBoundElems:
+            for ielem in self.MESH.PlasmaBoundElems:
                 # ISOLATE ELEMENT
-                ELEMENT = self.Mesh.Elements[ielem]
+                ELEMENT = self.MESH.Elements[ielem]
                 # LOOP OVER SUBELEMENTS
                 for SUBELEM in ELEMENT.SubElements:
                     # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
@@ -405,17 +346,17 @@ class GradShafranovSolver(EquilipyInitialisation,
                             integral += fun(SUBELEM.Xg[ig,:],PSIg[ig])*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
         else:
             # INTEGRATE OVER PLASMA ELEMENTS
-            for ielem in self.Mesh.PlasmaElems:
+            for ielem in self.MESH.PlasmaElems:
                 # ISOLATE ELEMENT
-                ELEMENT = self.Mesh.Elements[ielem]
+                ELEMENT = self.MESH.Elements[ielem]
                 # LOOP OVER GAUSS NODES
                 for ig in range(ELEMENT.ng):
                     integral += fun(ELEMENT.Xg[ig,:])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                         
             # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
-            for ielem in self.Mesh.PlasmaBoundElems:
+            for ielem in self.MESH.PlasmaBoundElems:
                 # ISOLATE ELEMENT
-                ELEMENT = self.Mesh.Elements[ielem]
+                ELEMENT = self.MESH.Elements[ielem]
                 # LOOP OVER SUBELEMENTS
                 for SUBELEM in ELEMENT.SubElements:
                     # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
@@ -433,10 +374,10 @@ class GradShafranovSolver(EquilipyInitialisation,
         if self.out_elemsys:
             self.file_elemsys.write('GHOST_FACES\n')
             
-        for ghostface in self.Mesh.GhostFaces:
+        for ghostface in self.MESH.GhostFaces:
             # ISOLATE ADJACENT ELEMENTS
-            ELEMENT0 = self.Mesh.Elements[ghostface[1][0]]
-            ELEMENT1 = self.Mesh.Elements[ghostface[2][0]]
+            ELEMENT0 = self.MESH.Elements[ghostface[1][0]]
+            ELEMENT1 = self.MESH.Elements[ghostface[2][0]]
             # ISOLATE COMMON EDGE 
             FACE0 = ELEMENT0.GhostFaces[ghostface[1][2]]
             FACE1 = ELEMENT1.GhostFaces[ghostface[2][2]]
@@ -445,7 +386,7 @@ class GradShafranovSolver(EquilipyInitialisation,
             RHSe = np.zeros([ELEMENT0.n+ELEMENT1.n])
             
             # COMPUTE ADEQUATE GHOST PENALTY TERM
-            penalty = self.zeta*max(ELEMENT0.length,ELEMENT1.length)  #**(1-2*self.Mesh.ElOrder)
+            penalty = self.zeta*max(ELEMENT0.length,ELEMENT1.length)  #**(1-2*self.MESH.ElOrder)
             #penalty = self.zeta
             
             # LOOP OVER GAUSS INTEGRATION NODES
@@ -517,8 +458,8 @@ class GradShafranovSolver(EquilipyInitialisation,
         """
         
         # INITIALISE GLOBAL SYSTEM MATRICES
-        self.LHS = lil_matrix((self.Mesh.Nn,self.Mesh.Nn))  # FOR SPARSE MATRIX, USE LIST-OF-LIST FORMAT 
-        self.RHS = np.zeros([self.Mesh.Nn,1])
+        self.LHS = lil_matrix((self.MESH.Nn,self.MESH.Nn))  # FOR SPARSE MATRIX, USE LIST-OF-LIST FORMAT 
+        self.RHS = np.zeros([self.MESH.Nn,1])
         
         # OPEN ELEMENTAL MATRICES OUTPUT FILE
         if self.out_elemsys:
@@ -527,9 +468,9 @@ class GradShafranovSolver(EquilipyInitialisation,
         # INTEGRATE OVER THE SURFACE OF ELEMENTS WHICH ARE NOT CUT BY ANY INTERFACE (STANDARD QUADRATURES)
         print("     Integrate over non-cut elements...", end="")
         
-        for ielem in self.Mesh.NonCutElems: 
+        for ielem in self.MESH.NonCutElems: 
             # ISOLATE ELEMENT 
-            ELEMENT = self.Mesh.Elements[ielem]  
+            ELEMENT = self.MESH.Elements[ielem]  
             # COMPUTE SOURCE TERM (PLASMA CURRENT)  mu0*R*Jphi  IN PLASMA REGION NODES
             SourceTermg = np.zeros([ELEMENT.ng])
             if ELEMENT.Dom < 0:
@@ -567,9 +508,9 @@ class GradShafranovSolver(EquilipyInitialisation,
         # INTEGRATE OVER THE SURFACES OF SUBELEMENTS IN ELEMENTS CUT BY INTERFACES (ADAPTED QUADRATURES)
         print("     Integrate over cut-elements subelements...", end="")
         
-        for ielem in self.Mesh.PlasmaBoundElems:
+        for ielem in self.MESH.PlasmaBoundElems:
             # ISOLATE ELEMENT 
-            ELEMENT = self.Mesh.Elements[ielem]
+            ELEMENT = self.MESH.Elements[ielem]
             # NOW, EACH INTERFACE ELEMENT IS DIVIDED INTO SUBELEMENTS ACCORDING TO THE POSITION OF THE APPROXIMATED INTERFACE ->> TESSELLATION
             # ON EACH SUBELEMENT THE WEAK FORM IS INTEGRATED USING ADAPTED NUMERICAL INTEGRATION QUADRATURES
             ####### COMPUTE DOMAIN TERMS
@@ -612,9 +553,9 @@ class GradShafranovSolver(EquilipyInitialisation,
         # INTEGRATE OVER THE CUT EDGES IN ELEMENTS CUT BY INTERFACES (ADAPTED QUADRATURES)
         print("     Integrate along cut-elements interface edges...", end="")
         
-        for ielem in self.Mesh.PlasmaBoundElems:
+        for ielem in self.MESH.PlasmaBoundElems:
             # ISOLATE ELEMENT 
-            ELEMENT = self.Mesh.Elements[ielem]
+            ELEMENT = self.MESH.Elements[ielem]
             # COMPUTE ELEMENTAL MATRICES
             LHSe,RHSe = ELEMENT.IntegrateElementalInterfaceTerms(self.beta)
                 
@@ -649,13 +590,13 @@ class GradShafranovSolver(EquilipyInitialisation,
         # WRITE GLOBAL SYSTEM MATRICES
         if self.out_elemsys:
             self.file_globalsys.write('RHS_VECTOR\n')
-            for inode in range(self.Mesh.Nn):
+            for inode in range(self.MESH.Nn):
                 self.file_globalsys.write("{:d} {:f}\n".format(inode+1, self.RHS[inode,0]))
             self.file_globalsys.write('END_RHS_VECTOR\n')
                 
             self.file_globalsys.write('LHS_MATRIX\n')
-            for irow in range(self.Mesh.Nn):
-                for jcol in range(self.Mesh.Nn):
+            for irow in range(self.MESH.Nn):
+                for jcol in range(self.MESH.Nn):
                     if self.LHS[irow,jcol] != 0:
                         self.file_globalsys.write("{:d} {:d} {:f}\n".format(irow+1, jcol+1, self.LHS[irow,jcol]))
             self.file_globalsys.write('END_LHS_MATRIX\n')
@@ -669,7 +610,7 @@ class GradShafranovSolver(EquilipyInitialisation,
     ##################################################################################################
     
     def SolveSystem(self):
-        self.PSI = spsolve(self.LHS.tocsr(), self.RHS).reshape([self.Mesh.Nn,1])
+        self.PSI = spsolve(self.LHS.tocsr(), self.RHS).reshape([self.MESH.Nn,1])
         return
 
     
@@ -719,8 +660,8 @@ class GradShafranovSolver(EquilipyInitialisation,
         # INITIALISE PSI UNKNOWNS
         print("INITIALISE SIMULATION ARRAYS ...")
         self.it = 0
-        self.it_EXT = 0
-        self.it_INT = 0
+        self.ext_it = 0
+        self.int_it = 0
         self.InitialisePSI_B()
         print('Done!')
         
@@ -735,23 +676,23 @@ class GradShafranovSolver(EquilipyInitialisation,
 
         # START DOBLE LOOP STRUCTURE
         print('START ITERATION...')
-        self.converg_EXT = False
-        self.it_EXT = 0
+        self.ext_cvg = False
+        self.ext_it = 0
         
         #######################################################
         ################## EXTERNAL LOOP ######################
         #######################################################
-        while (self.converg_EXT == False and self.it_EXT < self.EXT_ITER):
-            self.it_EXT += 1
-            self.converg_INT = False
-            self.it_INT = 0
+        while (self.ext_cvg == False and self.ext_it < self.ext_maxiter):
+            self.ext_it += 1
+            self.int_cvg = False
+            self.int_it = 0
             #######################################################
             ################## INTERNAL LOOP ######################
             #######################################################
-            while (self.converg_INT == False and self.it_INT < self.INT_ITER):
-                self.it_INT += 1
+            while (self.int_cvg == False and self.int_it < self.int_maxiter):
+                self.int_it += 1
                 self.it += 1
-                print('OUTER ITERATION = '+str(self.it_EXT)+' , INNER ITERATION = '+str(self.it_INT))
+                print('OUTER ITERATION = '+str(self.ext_it)+' , INNER ITERATION = '+str(self.int_it))
                 print('     Total current = ', self.IntegratePlasmaDomain(self.PlasmaCurrent.Jphi))
                 
                 if self.plotelemsClas:

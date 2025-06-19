@@ -282,6 +282,31 @@ class Mesh:
     ###################################### ELEMENTS DEFINITION #######################################
     ##################################################################################################
     
+    def DimensionlessCoordinates(self): 
+        for ELEMENT in self.Elements:
+            ELEMENT.Xe /= self.PlasmaCurrent.R0
+        return 
+    
+    
+    def InitialiseElements(self):
+        """ 
+        Function initialising attribute ELEMENTS which is a list of all elements in the mesh. 
+        """
+        self.Elements = [Element(index = e,
+                                    ElType = self.ElType,
+                                    ElOrder = self.ElOrder,
+                                    Xe = self.X[self.T[e,:],:],
+                                    Te = self.T[e,:],
+                                    PlasmaLSe = self.PlasmaLS[self.T[e,:],1]) for e in range(self.Ne)]
+        
+        # COMPUTE MESH MEAN SIZE
+        self.meanArea, self.meanLength = self.ComputeMeshElementsMeanSize()
+        print("         · MESH ELEMENTS MEAN AREA = " + str(self.meanArea) + " m^2")
+        print("         · MESH ELEMENTS MEAN LENGTH = " + str(self.meanLength) + " m")
+        print("         · RECOMMENDED NITSCHE'S PENALTY PARAMETER VALUE    beta ~ C·" + str(self.ElOrder**2/self.meanLength))
+        return
+    
+    
     def IdentifyNearestNeighbors(self):
         """
         Finds the nearest neighbours for each element in mesh.
@@ -588,5 +613,139 @@ class Mesh:
             GhostElems.add(ielem2)
             
         return GhostFaces, list(GhostElems)
+    
+    
+    ##################################################################################################
+    ############################# NUMERICAL INTEGRATION QUADRATURES ##################################
+    ##################################################################################################
+    
+    def ComputeIntegrationQuadratures(self):
+        """
+        Computes the numerical integration quadratures for different types of elements and boundaries.
+
+        The function computes quadrature entities for the following cases:
+            1. Standard 2D quadratures for non-cut elements.
+            2. Adapted quadratures for cut elements.
+            3. Boundary quadratures for elements on the computational domain's boundary (vacuum vessel).
+            4. Quadratures for solenoids in the case of a free-boundary plasma problem.
+        """
+        
+        # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR NON-CUT ELEMENTS 
+        for ielem in self.NonCutElems:
+            self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
+            
+        # DEFINE STANDARD SURFACE QUADRATURE NUMBER OF INTEGRATION NODES
+        self.nge = self.Elements[self.NonCutElems[0]].ng
+            
+        # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
+        for ielem in self.PlasmaBoundElems:
+            self.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
+        # CHECK NORMAL VECTORS
+        self.CheckPlasmaBoundaryApproximationNormalVectors()
+            
+        # COMPUTE QUADRATURES FOR GHOST FACES ON PLASMA BOUNDARY ELEMENTS
+        if self.GhostStabilization:
+            for ielem in self.GhostElems:
+                self.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
+        return
+    
+    
+    def ComputePlasmaBoundStandardQuadratures(self):
+        if len(self.PlasmaBoundElems) == 0:
+            return
+        else:
+            if self.FIXED_BOUNDARY:
+                if type(self.Elements[self.PlasmaBoundElems[0]].Xg) == type(None):
+                    for ielem in self.PlasmaBoundElems:
+                        self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
+            else:
+                for ielem in self.PlasmaBoundElems:
+                    if type(self.Elements[ielem].Xg) == type(None):
+                        self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
+            return
+        
+        
+    def IntegrationNodesMesh(self):
+        if type(self.Xg) == type(None):
+            self.ComputePlasmaBoundStandardQuadratures()
+            self.Xg = np.zeros([self.Ne*self.nge,self.dim])
+            for ielem, ELEMENT in enumerate(self.Elements):
+                self.Xg[ielem*self.nge:(ielem+1)*self.nge,:] = ELEMENT.Xg
+        return
+    
+    
+    ##################################################################################################
+    ####################################### INITIALISATION ###########################################
+    ##################################################################################################
+    
+    def InitialiseMESH(self):
+        """
+        Initializes all mesh related elements and preprocess mesh data for simulation:
+            - Initializes some simulation parameters.
+            - Initializes python pickle lists for direct output.
+            - Initializes the level-set function for plasma and vacuum vessel boundaries.
+            - Initializes the elements in the computational domain.
+            - Classifies elements and writes their classification.
+            - Approximates the plasma boundary interface.
+            - Finds ghost faces if necessary
+            - Computes elemental numerical integration quadratures.
+        """
+        
+        print("INITIALISE MESH...")
+        
+        # MESH INPUT FILES
+        self.mesh_folder = self.pwd + '/MESHES/' + MESH
+        
+        print("READ MESH FILES...")
+        self.ReadMeshFile()
+        self.ReadFixFile()
+        print('Done!')
+        
+        
+        print("     -> INITIALISE SIMULATION PARAMETERS...", end="")
+        self.InitialiseParameters()
+        self.InitialisePickleLists()
+        print('Done!')
+        
+        # INITIALISE LEVEL-SET FUNCTION
+        print("     -> INITIALISE LEVEL-SET...", end="")
+        self.InitialisePlasmaLevelSet()
+        print('Done!')
+        
+        # INITIALISE ELEMENTS 
+        print("     -> INITIALISE ELEMENTS...")
+        self.InitialiseElements()
+        if type(self.PlasmaCurrent) != type(None) and self.PlasmaCurrent.DIMENSIONLESS:
+            self.DimensionlessCoordinates()
+        print('     Done!')
+        
+        # CLASSIFY ELEMENTS   
+        print("     -> CLASSIFY ELEMENTS...", end="")
+        self.IdentifyNearestNeighbors()
+        self.IdentifyBoundaries()
+        self.ClassifyElements()
+        print("Done!")
+
+        # COMPUTE PLASMA BOUNDARY APPROXIMATION
+        print("     -> APPROXIMATE PLASMA BOUNDARY INTERFACE...", end="")
+        self.ComputePlasmaBoundaryApproximation()
+        print("Done!")
+        
+        # IDENTIFY GHOST FACES 
+        if self.GhostStabilization:
+            print("     -> IDENTIFY GHOST FACES...", end="")
+            self.ComputePlasmaBoundaryGhostFaces()
+            print("Done!")
+        
+        # COMPUTE NUMERICAL INTEGRATION QUADRATURES
+        print('     -> COMPUTE NUMERICAL INTEGRATION QUADRATURES...', end="")
+        self.ComputeIntegrationQuadratures()
+        print('Done!')
+        
+        # COMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION
+        self.NnPB = self.ComputePlasmaBoundaryNumberNodes()
+        
+        print('Done!')
+        return  
     
     

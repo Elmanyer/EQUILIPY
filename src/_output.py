@@ -173,11 +173,11 @@ class EquilipyOutput:
             self.file_proparams.write('\n')
             
             self.file_proparams.write('MESH_PARAMETERS\n')
-            self.file_proparams.write("    NPOIN = {:d}\n".format(self.Mesh.Nn))
-            self.file_proparams.write("    NELEM = {:d}\n".format(self.Mesh.Ne))
-            self.file_proparams.write("    ELEMENT = {:d}\n".format(self.Mesh.ElTypeALYA))
-            self.file_proparams.write("    NBOUN = {:d}\n".format(self.Mesh.Nbound))
-            self.file_proparams.write("    DIM = {:d}\n".format(self.Mesh.dim))
+            self.file_proparams.write("    NPOIN = {:d}\n".format(self.MESH.Nn))
+            self.file_proparams.write("    NELEM = {:d}\n".format(self.MESH.Ne))
+            self.file_proparams.write("    ELEMENT = {:d}\n".format(self.MESH.ElTypeALYA))
+            self.file_proparams.write("    NBOUN = {:d}\n".format(self.MESH.Nbound))
+            self.file_proparams.write("    DIM = {:d}\n".format(self.MESH.dim))
             self.file_proparams.write('END_MESH_PARAMETERS\n')
             self.file_proparams.write('\n')
             
@@ -253,19 +253,19 @@ class EquilipyOutput:
             self.file_proparams.write('NUMERICAL_TREATMENT_PARAMETERS\n')
             self.file_proparams.write("    GHOST_STABILIZATION = {0}\n".format(self.GhostStabilization))
             self.file_proparams.write("    QUADRATURE_ORDER = {:d}\n".format(self.QuadratureOrder2D))
-            self.file_proparams.write("    MAX_EXT_IT = {:d}\n".format(self.EXT_ITER))
-            self.file_proparams.write("    EXT_TOL = {:e}\n".format(self.EXT_TOL))
-            self.file_proparams.write("    MAX_INT_IT = {:d}\n".format(self.INT_ITER))
-            self.file_proparams.write("    INT_TOL = {:e}\n".format(self.INT_TOL))
+            self.file_proparams.write("    MAX_EXT_IT = {:d}\n".format(self.ext_maxiter))
+            self.file_proparams.write("    ext_tol = {:e}\n".format(self.ext_tol))
+            self.file_proparams.write("    MAX_INT_IT = {:d}\n".format(self.int_maxiter))
+            self.file_proparams.write("    int_tol = {:e}\n".format(self.int_tol))
             self.file_proparams.write("    Beta = {:f}\n".format(self.beta))
             self.file_proparams.write("    Zeta = {:f}\n".format(self.zeta))
             self.file_proparams.write("    Lambda0 = {:f}\n".format(self.lambda0))
-            self.file_proparams.write("    EXTR_R0 = {:f}\n".format(self.EXTR_R0))
-            self.file_proparams.write("    EXTR_Z0 = {:f}\n".format(self.EXTR_Z0))
-            self.file_proparams.write("    SADD_R0 = {:f}\n".format(self.SADD_R0))
-            self.file_proparams.write("    SADD_Z0 = {:f}\n".format(self.SADD_Z0))
-            self.file_proparams.write("    OPTI_ITMAX = {:d}\n".format(self.OPTI_ITMAX))
-            self.file_proparams.write("    OPTI_TOL = {:f}\n".format(self.OPTI_TOL))
+            self.file_proparams.write("    R0_axis = {:f}\n".format(self.R0_axis))
+            self.file_proparams.write("    Z0_axis = {:f}\n".format(self.Z0_axis))
+            self.file_proparams.write("    R0_saddle = {:f}\n".format(self.R0_saddle))
+            self.file_proparams.write("    Z0_saddle = {:f}\n".format(self.Z0_saddle))
+            self.file_proparams.write("    opti_maxiter = {:d}\n".format(self.opti_maxiter))
+            self.file_proparams.write("    opti_tol = {:f}\n".format(self.opti_tol))
             self.file_proparams.write('END_NUMERICAL_TREATMENT_PARAMETERS\n')
             self.file_proparams.write('\n')
             
@@ -286,26 +286,26 @@ class EquilipyOutput:
 
     def writePSI(self):
         # WRITE PSI (CUTFEM SYSTEM SOLUTION)
-        self.file_PSI.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
-        for inode in range(self.Mesh.Nn):
+        self.file_PSI.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+        for inode in range(self.MESH.Nn):
             self.file_PSI.write("{:d} {:e}\n".format(inode+1,float(self.PSI[inode])))
         self.file_PSI.write('END_ITERATION\n')
         # WRITE NORMALISED PSI
-        self.file_PSI_NORM.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
-        for inode in range(self.Mesh.Nn):
+        self.file_PSI_NORM.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+        for inode in range(self.MESH.Nn):
             self.file_PSI_NORM.write("{:d} {:e}\n".format(inode+1,self.PSI_NORM[inode,1]))
         self.file_PSI_NORM.write('END_ITERATION\n')
         
         if self.out_pickle:
-            self.PSIIt_sim.append((self.it_INT,self.it_EXT))
+            self.PSIIt_sim.append((self.int_it,self.ext_it))
             self.PSI_sim.append(self.PSI.copy())
             self.PSI_NORM_sim.append(self.PSI_NORM[:,1].copy())
         return
 
     def writePSI_B(self):
         if not self.FIXED_BOUNDARY:
-            self.file_PSI_B.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
-        for inode in range(self.Mesh.Nnbound):
+            self.file_PSI_B.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+        for inode in range(self.MESH.Nnbound):
             self.file_PSI_B.write("{:d} {:e}\n".format(inode+1,self.PSI_B[inode,1]))
         if not self.FIXED_BOUNDARY:
             self.file_PSI_B.write('END_ITERATION\n')
@@ -316,26 +316,26 @@ class EquilipyOutput:
 
     def writeresidu(self,which_loop):
         if which_loop == "INTERNAL":
-            if self.it_INT == 1:
+            if self.int_it == 1:
                 self.file_RESIDU.write("INTERNAL_LOOP_STRUCTURE\n")
-            self.file_RESIDU.write("  INTERNAL_ITERATION = {:d} \n".format(self.it_INT))
-            self.file_RESIDU.write("      INTERNAL_RESIDU = {:f} \n".format(self.residu_INT))
+            self.file_RESIDU.write("  INTERNAL_ITERATION = {:d} \n".format(self.int_it))
+            self.file_RESIDU.write("      INTERNAL_RESIDU = {:f} \n".format(self.int_residu))
             
             if self.out_pickle:
-                self.Residu_sim.append(self.residu_INT)
+                self.Residu_sim.append(self.int_residu)
             
         elif which_loop == "EXTERNAL":
             self.file_RESIDU.write("END_INTERNAL_LOOP_STRUCTURE\n")
-            self.file_RESIDU.write("EXTERNAL_ITERATION = {:d} \n".format(self.it_EXT))
-            self.file_RESIDU.write("  EXTERNAL_RESIDU = {:f} \n".format(self.residu_EXT))
+            self.file_RESIDU.write("EXTERNAL_ITERATION = {:d} \n".format(self.ext_it))
+            self.file_RESIDU.write("  EXTERNAL_RESIDU = {:f} \n".format(self.ext_residu))
             
             if self.out_pickle:
-                self.Residu_sim.append(self.residu_EXT)
+                self.Residu_sim.append(self.ext_residu)
         return
 
     def writePSIcrit(self):
         if self.out_PSIcrit:
-            self.file_PSIcrit.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
+            self.file_PSIcrit.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
             self.file_PSIcrit.write("{:f}  {:f}  {:f}  {:f}\n".format(self.Xcrit[1,0,-1],self.Xcrit[1,0,0],self.Xcrit[1,0,1],self.PSI_0))
             self.file_PSIcrit.write("{:f}  {:f}  {:f}  {:f}\n".format(self.Xcrit[1,1,-1],self.Xcrit[1,1,0],self.Xcrit[1,1,1],self.PSI_X))
             self.file_PSIcrit.write('END_ITERATION\n')
@@ -349,8 +349,8 @@ class EquilipyOutput:
         MeshClassi = self.ObtainClassification()
         if self.out_elemsClas:
             if not self.FIXED_BOUNDARY:
-                self.file_elemsClas.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
-            for ielem in range(self.Mesh.Ne):
+                self.file_elemsClas.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+            for ielem in range(self.MESH.Ne):
                 self.file_elemsClas.write("{:d} {:d}\n".format(ielem+1,MeshClassi[ielem]))
             if not self.FIXED_BOUNDARY:
                 self.file_elemsClas.write('END_ITERATION\n')
@@ -362,8 +362,8 @@ class EquilipyOutput:
     def writePlasmaLS(self):
         if self.out_plasmaLS:
             if not self.FIXED_BOUNDARY:
-                self.file_plasmaLS.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
-            for inode in range(self.Mesh.Nn):
+                self.file_plasmaLS.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+            for inode in range(self.MESH.Nn):
                 self.file_plasmaLS.write("{:d} {:e}\n".format(inode+1,self.PlasmaLS[inode,1]))
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaLS.write('END_ITERATION\n')
@@ -376,11 +376,11 @@ class EquilipyOutput:
     def writePlasmaBC(self):
         if self.out_plasmaBC:
             if not self.FIXED_BOUNDARY:
-                self.file_plasmaBC.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
-            for ielem in self.Mesh.PlasmaBoundElems:
-                INTAPPROX = self.Mesh.Elements[ielem].InterfApprox
+                self.file_plasmaBC.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+            for ielem in self.MESH.PlasmaBoundElems:
+                INTAPPROX = self.MESH.Elements[ielem].InterfApprox
                 for ig in range(INTAPPROX.ng):
-                    self.file_plasmaBC.write("{:d} {:d} {:d} {:f} {:f} {:f}\n".format(self.Mesh.Elements[ielem].index,INTAPPROX.index,ig,INTAPPROX.Xg[ig,0],INTAPPROX.Xg[ig,1],INTAPPROX.PSIg[ig]))
+                    self.file_plasmaBC.write("{:d} {:d} {:d} {:f} {:f} {:f}\n".format(self.MESH.Elements[ielem].index,INTAPPROX.index,ig,INTAPPROX.Xg[ig,0],INTAPPROX.Xg[ig,1],INTAPPROX.PSIg[ig]))
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaBC.write("END_ITERATION\n")
         return
@@ -388,21 +388,21 @@ class EquilipyOutput:
     def writePlasmaapprox(self):
         if self.out_plasmaapprox:
             if not self.FIXED_BOUNDARY:
-                self.file_plasmaapprox.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
-            for ielem in self.Mesh.PlasmaBoundElems:
-                INTAPPROX = self.Mesh.Elements[ielem].InterfApprox
+                self.file_plasmaapprox.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+            for ielem in self.MESH.PlasmaBoundElems:
+                INTAPPROX = self.MESH.Elements[ielem].InterfApprox
                 for inode in range(INTAPPROX.n):
-                    self.file_plasmaapprox.write("{:d} {:d} {:d} {:f} {:f}\n".format(self.Mesh.Elements[ielem].index,INTAPPROX.index,inode,INTAPPROX.Xint[inode,0],INTAPPROX.Xint[inode,1]))
+                    self.file_plasmaapprox.write("{:d} {:d} {:d} {:f} {:f}\n".format(self.MESH.Elements[ielem].index,INTAPPROX.index,inode,INTAPPROX.Xint[inode,0],INTAPPROX.Xint[inode,1]))
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaapprox.write("END_ITERATION\n")
                 
         if self.out_pickle:
-            plasmaapprox = np.zeros([len(self.Mesh.PlasmaBoundElems)*self.Mesh.Elements[self.Mesh.PlasmaBoundElems[0]].InterfApprox.n, 5])
+            plasmaapprox = np.zeros([len(self.MESH.PlasmaBoundElems)*self.MESH.Elements[self.MESH.PlasmaBoundElems[0]].InterfApprox.n, 5])
             counter = 0
-            for ielem in self.Mesh.PlasmaBoundElems:
-                INTAPPROX = self.Mesh.Elements[ielem].InterfApprox
+            for ielem in self.MESH.PlasmaBoundElems:
+                INTAPPROX = self.MESH.Elements[ielem].InterfApprox
                 for inode in range(INTAPPROX.n):
-                    plasmaapprox[counter,0] = self.Mesh.Elements[ielem].index
+                    plasmaapprox[counter,0] = self.MESH.Elements[ielem].index
                     plasmaapprox[counter,1] = INTAPPROX.index
                     plasmaapprox[counter,1] = inode
                     plasmaapprox[counter,1] = INTAPPROX.Xint[inode,0]
@@ -414,18 +414,18 @@ class EquilipyOutput:
     def writeGhostFaces(self):
         if self.out_ghostfaces:
             if not self.FIXED_BOUNDARY:
-                self.file_ghostfaces.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.it_EXT,self.it_INT))
-            for FACE in self.Mesh.GhostFaces:
+                self.file_ghostfaces.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+            for FACE in self.MESH.GhostFaces:
                 self.file_ghostfaces.write("{:d} {:d} {:d} {:d}\n".format(FACE[1][0],FACE[1][1],FACE[2][0],FACE[2][1]))
             if not self.FIXED_BOUNDARY:
                 self.file_ghostfaces.write("END_ITERATION\n")
                 
         if self.GhostStabilization and self.out_pickle:
-            self.PlasmaBoundGhostFaces_sim.append(self.Mesh.GhostFaces.copy())
+            self.PlasmaBoundGhostFaces_sim.append(self.MESH.GhostFaces.copy())
         return
 
     def writePlasmaBoundaryData(self):
-        if self.Mesh.PlasmaBoundElems.size > 0:
+        if self.MESH.PlasmaBoundElems.size > 0:
             self.writePlasmaLS()
             self.writeElementsClassification()
             self.writePlasmaapprox()
@@ -436,11 +436,11 @@ class EquilipyOutput:
     def writeerror(self):
         self.file_L2error = open(self.outputdir+'/PSIerror.dat', 'w')
         
-        AnaliticalNorm = np.zeros([self.Mesh.Nn])
-        self.PSIerror = np.zeros([self.Mesh.Nn])
-        self.PSIrelerror = np.zeros([self.Mesh.Nn])
-        for inode in range(self.Mesh.Nn):
-            AnaliticalNorm[inode] = self.PlasmaCurrent.PSIanalytical(self.Mesh.X[inode,:])
+        AnaliticalNorm = np.zeros([self.MESH.Nn])
+        self.PSIerror = np.zeros([self.MESH.Nn])
+        self.PSIrelerror = np.zeros([self.MESH.Nn])
+        for inode in range(self.MESH.Nn):
+            AnaliticalNorm[inode] = self.PlasmaCurrent.PSIanalytical(self.MESH.X[inode,:])
             self.PSIerror[inode] = abs(AnaliticalNorm[inode]-self.PSI_CONV[inode])
             self.PSIrelerror[inode] = self.PSIerror[inode]/abs(AnaliticalNorm[inode])
             if self.PSIerror[inode] < 1e-16:
@@ -448,7 +448,7 @@ class EquilipyOutput:
                 self.PSIrelerror[inode] = 1e-16
                 
         self.file_L2error.write('PSI_ERROR_FIELD\n')
-        for inode in range(self.Mesh.Nn):
+        for inode in range(self.MESH.Nn):
             self.file_L2error.write("{:d} {:e}\n".format(inode+1,self.PSIerror[inode])) 
         self.file_L2error.write('END_PSI_ERROR_FIELD\n')
         

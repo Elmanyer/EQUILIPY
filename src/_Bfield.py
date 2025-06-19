@@ -7,22 +7,22 @@ class EquilipyBfield:
         """
         Total radial magnetic at point X such that    Br = -1/R dpsi/dZ
         """
-        elem = self.SearchElement(X,range(self.Mesh.Ne))
-        return self.Mesh.Elements[elem].Br(X)
+        elem = self.SearchElement(X,range(self.MESH.Ne))
+        return self.MESH.Elements[elem].Br(X)
     
     def Bz(self,X):
         """
         Total vertical magnetic at point X such that    Bz = (1/R) dpsi/dR
         """
-        elem = self.SearchElement(X,range(self.Mesh.Ne))
-        return self.Mesh.Elements[elem].Bz(X)
+        elem = self.SearchElement(X,range(self.MESH.Ne))
+        return self.MESH.Elements[elem].Bz(X)
     
     def Bpol(self,X):
         """
         Toroidal magnetic field
         """
-        elem = self.SearchElement(X,range(self.Mesh.Ne))
-        Brz = self.Mesh.Elements[elem].Brz(X)
+        elem = self.SearchElement(X,range(self.MESH.Ne))
+        Brz = self.MESH.Elements[elem].Brz(X)
         return np.sqrt(Brz[0] * Brz[0] + Brz[1] * Brz[1])
     
     def Btor(self,X):
@@ -45,8 +45,8 @@ class EquilipyBfield:
         Total radial magnetic field such that    Br = (-1/R) dpsi/dZ
         """
         self.ComputePlasmaBoundStandardQuadratures()
-        Br = np.zeros([self.Mesh.Ne*self.nge])
-        for ielem, ELEMENT in enumerate(self.Mesh.Elements):
+        Br = np.zeros([self.MESH.Ne*self.nge])
+        for ielem, ELEMENT in enumerate(self.MESH.Elements):
             Br[ielem*self.nge:(ielem+1)*self.nge] = ELEMENT.Brg()
         return Br
     
@@ -55,8 +55,8 @@ class EquilipyBfield:
         Total vertical magnetic field such that    Bz = (1/R) dpsi/dR
         """
         self.ComputePlasmaBoundStandardQuadratures()
-        Bz = np.zeros([self.Mesh.Ne*self.nge])
-        for ielem, ELEMENT in enumerate(self.Mesh.Elements):
+        Bz = np.zeros([self.MESH.Ne*self.nge])
+        for ielem, ELEMENT in enumerate(self.MESH.Elements):
             Bz[ielem*self.nge:(ielem+1)*self.nge] = ELEMENT.Bzg()
         return Bz
     
@@ -65,8 +65,8 @@ class EquilipyBfield:
         Magnetic vector field such that    (Br, Bz) = ((-1/R) dpsi/dZ, (1/R) dpsi/dR)
         """
         self.ComputePlasmaBoundStandardQuadratures()
-        self.Brzfield = np.zeros([self.Mesh.Ne*self.nge,self.Mesh.dim])
-        for ielem, ELEMENT in enumerate(self.Mesh.Elements):
+        self.Brzfield = np.zeros([self.MESH.Ne*self.nge,self.MESH.dim])
+        for ielem, ELEMENT in enumerate(self.MESH.Elements):
             self.Brzfield[ielem*self.nge:(ielem+1)*self.nge,:] = ELEMENT.Brzg()
         return 
     
@@ -91,17 +91,17 @@ class EquilipyBfield:
                         Bz[iz,ir] += SOLENOID.Bz(np.array([grid_r[iz,ir],grid_z[iz,ir]]))
             return grid_r, grid_z, Br, Bz
         else:
-            Br = np.zeros([self.Mesh.Nn])
-            Bz = np.zeros([self.Mesh.Nn])
-            for inode in range(self.Mesh.Nn):
+            Br = np.zeros([self.MESH.Nn])
+            Bz = np.zeros([self.MESH.Nn])
+            for inode in range(self.MESH.Nn):
                 # SUM COILS CONTRIBUTIONS
                 for COIL in self.COILS:
-                    Br[inode] += COIL.Br(self.Mesh.X[inode,:])
-                    Br[inode] += COIL.Br(self.Mesh.X[inode,:])
+                    Br[inode] += COIL.Br(self.MESH.X[inode,:])
+                    Br[inode] += COIL.Br(self.MESH.X[inode,:])
                 # SUM SOLENOIDS CONTRIBUTIONS
                 for SOLENOID in self.SOLENOIDS:
-                    Br[inode] += SOLENOID.Br(self.Mesh.X[inode,:])
-                    Br[inode] += SOLENOID.Br(self.Mesh.X[inode,:])
+                    Br[inode] += SOLENOID.Br(self.MESH.X[inode,:])
+                    Br[inode] += SOLENOID.Br(self.MESH.X[inode,:])
             return Br, Bz
     
     
@@ -109,9 +109,9 @@ class EquilipyBfield:
         integral = 0
         
         # INTEGRATE OVER PLASMA ELEMENTS
-        for ielem in self.Mesh.PlasmaElems:
+        for ielem in self.MESH.PlasmaElems:
             # ISOLATE ELEMENT
-            ELEMENT = self.Mesh.Elements[ielem]
+            ELEMENT = self.MESH.Elements[ielem]
             # COMPUTE MAGNETIC FIELD AT INTEGRATION NODES
             Brzg = ELEMENT.Brzg()
             # LOOP OVER GAUSS NODES
@@ -119,9 +119,9 @@ class EquilipyBfield:
                 integral += (Brzg[ig,0]**2 + Brzg[ig,1]**2)*ELEMENT.Xg[ig,0]*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                     
         # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
-        for ielem in self.Mesh.PlasmaBoundElems:
+        for ielem in self.MESH.PlasmaBoundElems:
             # ISOLATE ELEMENT
-            ELEMENT = self.Mesh.Elements[ielem]
+            ELEMENT = self.MESH.Elements[ielem]
             # LOOP OVER SUBELEMENTS
             for SUBELEM in ELEMENT.SubElements:
                 # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION

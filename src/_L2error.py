@@ -30,9 +30,9 @@ class EquilipyL2error:
         ErrorL2norm = 0
         PSIexactL2norm = 0
         # INTEGRATE OVER PLASMA ELEMENTS
-        for elem in self.Mesh.PlasmaElems:
+        for elem in self.MESH.PlasmaElems:
             # ISOLATE ELEMENT
-            ELEMENT = self.Mesh.Elements[elem]
+            ELEMENT = self.MESH.Elements[elem]
             # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
             PSIg = ELEMENT.Ng @ ELEMENT.PSIe
             # LOOP OVER GAUSS NODES
@@ -43,9 +43,9 @@ class EquilipyL2error:
         ErrorL2normPlasmaBound = 0
         PSIexactL2normPlasmaBound = 0
         # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
-        for elem in self.Mesh.PlasmaBoundElems:
+        for elem in self.MESH.PlasmaBoundElems:
             # ISOLATE ELEMENT
-            ELEMENT = self.Mesh.Elements[elem]
+            ELEMENT = self.MESH.Elements[elem]
             # LOOP OVER SUBELEMENTS
             for SUBELEM in ELEMENT.SubElements:
                 # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
@@ -79,7 +79,7 @@ class EquilipyL2error:
         ErrorL2norm = 0
         PSIexactL2norm = 0
         # INTEGRATE OVER ALL ELEMENTS
-        for ELEMENT in self.Mesh.Elements:
+        for ELEMENT in self.MESH.Elements:
             # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
             PSIg = ELEMENT.Ng @ ELEMENT.PSIe
             # LOOP OVER GAUSS NODES
@@ -95,11 +95,11 @@ class EquilipyL2error:
         ErrorL2norm = 0
         PSIexactL2norm = 0
         # INTEGRATE OVER CUT ELEMENTS' INTERFACE 
-        for elem in self.Mesh.PlasmaBoundElems:
+        for elem in self.MESH.PlasmaBoundElems:
             # ISOLATE ELEMENTAL INTERFACE APPROXIMATION
-            INTAPPROX = self.Mesh.Elements[elem].InterfApprox
+            INTAPPROX = self.MESH.Elements[elem].InterfApprox
             # COMPUTE SOLUTION PSI VALUES ON INTERFACE
-            PSIg = INTAPPROX.Ng@self.Mesh.Elements[elem].PSIe
+            PSIg = INTAPPROX.Ng@self.MESH.Elements[elem].PSIe
             # LOOP OVER GAUSS NODES
             for ig in range(INTAPPROX.ng):
                 # COMPUTE L2 ERROR
@@ -114,14 +114,14 @@ class EquilipyL2error:
     
     def ComputeL2errorInterfaceJump(self):
         
-        JumpError = np.zeros([self.Mesh.NnPB])
-        JumpRelError = np.zeros([self.Mesh.NnPB])
+        JumpError = np.zeros([self.MESH.NnPB])
+        JumpRelError = np.zeros([self.MESH.NnPB])
         ErrorL2norm = 0
         dn = 1e-4
         knode = 0
         # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
-        for elem in self.Mesh.PlasmaBoundElems:
-            ELEMENT = self.Mesh.Elements[elem]
+        for elem in self.MESH.PlasmaBoundElems:
+            ELEMENT = self.MESH.Elements[elem]
             # ISOLATE ELEMENTAL INTERFACE APPROXIMATION
             INTAPPROX = ELEMENT.InterfApprox
             # MAP PSI VALUES
