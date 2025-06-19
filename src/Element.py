@@ -123,6 +123,24 @@ class Element:
         return area, length
     
     
+    def isinside(self,X):
+        inside = False
+        if self.ElType == 1: # FOR TRIANGULAR ELEMENTS
+            # Calculate the cross products (c1, c2, c3) for the point relative to each edge of the triangle
+            c1 = (self.Xe[1,0]-self.Xe[0,0])*(X[1]-self.Xe[0,1])-(self.Xe[1,1]-self.Xe[0,1])*(X[0]-self.Xe[0,0])
+            c2 = (self.Xe[2,0]-self.Xe[1,0])*(X[1]-self.Xe[1,1])-(self.Xe[2,1]-self.Xe[1,1])*(X[0]-self.Xe[1,0])
+            c3 = (self.Xe[0,0]-self.Xe[2,0])*(X[1]-self.Xe[2,1])-(self.Xe[0,1]-self.Xe[2,1])*(X[0]-self.Xe[2,0])
+            if (c1 < 0 and c2 < 0 and c3 < 0) or (c1 > 0 and c2 > 0 and c3 > 0): # INSIDE TRIANGLE
+                inside = True
+        elif self.ElType == 2: # FOR QUADRILATERAL ELEMENTS
+            # This algorithm counts how many times a ray starting from the point intersects the edges of the quadrilateral. 
+            # If the count is odd, the point is inside; otherwise, it is outside.
+            for i in range(4):
+                if ((self.Xe[i,1] > X[1]) != (self.Xe[(i+1)%4,1]>X[1])) and (X[0]<(self.Xe[(i+1)%4,0]-self.Xe[i,0])*(X[1]-self.Xe[i,1])/(self.Xe[(i+1)%4,1]-self.Xe[i,1])+self.Xe[i,0]):
+                    inside = not inside
+        return inside
+    
+    
     ##################################################################################################
     #################################### ELEMENTAL MAPPING ###########################################
     ##################################################################################################
