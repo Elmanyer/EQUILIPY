@@ -1,6 +1,7 @@
 import numpy as np
 from math import ceil
 from Element import *
+from Mesh import *
 
 class EquilipyInitialisation:
     
@@ -64,6 +65,80 @@ class EquilipyInitialisation:
         return 
     
     
+    def InitialiseMESH(self,mesh_name):
+        """
+        Initializes all mesh related elements and preprocess mesh data for simulation:
+            - Initializes some simulation parameters.
+            - Initializes python pickle lists for direct output.
+            - Initializes the level-set function for plasma and vacuum vessel boundaries.
+            - Initializes the elements in the computational domain.
+            - Classifies elements and writes their classification.
+            - Approximates the plasma boundary interface.
+            - Finds ghost faces if necessary
+            - Computes elemental numerical integration quadratures.
+        """
+        
+        print("INITIALISE MESH...")
+        path_to_mesh = self.pwd + '/MESHES/' + mesh_name
+        self.MESH = Mesh(path_to_mesh)
+        
+        print("     -> READ MESH FILES...", end="")
+        self.MESH.ReadMeshFile()
+        self.MESH.ReadFixFile()
+        self.dim = self.MESH.dim
+        print('Done!')
+        return
+    
+    
+    def Ini(self):
+        
+        print('INITIALISE ELEMENTAL DISCRETISATION...')
+        
+        # INITIALISE LEVEL-SET FUNCTION
+        print("     -> INITIALISE LEVEL-SET...", end="")
+        self.InitialisePlasmaLevelSet()
+        print('Done!')
+        
+        # INITIALISE ELEMENTS 
+        print("     -> INITIALISE ELEMENTS...")
+        self.MESH.InitialiseElements(self.PlasmaLS)
+        if type(self.PlasmaCurrent) != type(None) and self.PlasmaCurrent.DIMENSIONLESS:
+            self.MESH.DimensionlessCoordinates(self.PlasmaCurrent.R0)
+        print('     Done!')
+        
+        # CLASSIFY ELEMENTS   
+        print("     -> CLASSIFY ELEMENTS...", end="")
+        self.MESH.IdentifyNearestNeighbors()
+        self.MESH.IdentifyBoundaries()
+        self.MESH.ClassifyElements()
+        print("Done!")
+
+        # COMPUTE PLASMA BOUNDARY APPROXIMATION
+        print("     -> APPROXIMATE PLASMA BOUNDARY INTERFACE...", end="")
+        self.MESH.ComputePlasmaBoundaryApproximation()
+        print("Done!")
+        
+        # IDENTIFY GHOST FACES 
+        if self.GhostStabilization:
+            print("     -> IDENTIFY GHOST FACES...", end="")
+            self.MESH.ComputePlasmaBoundaryGhostFaces()
+            print("Done!")
+        
+        # COMPUTE NUMERICAL INTEGRATION QUADRATURES
+        print('     -> COMPUTE NUMERICAL INTEGRATION QUADRATURES...', end="")
+        self.MESH.ComputeIntegrationQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
+        if self.GhostStabilization:
+            self.MESH.ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
+        print('Done!')
+        
+        # COMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION
+        self.MESH.NnPB = self.MESH.ComputePlasmaBoundaryNumberNodes()
+        
+        print('Done!')
+        return  
+    
+    
+    
     def InitialisePSI(self):  
         """
         Initializes the PSI vectors used for storing iterative solutions during the simulation and computes the initial guess.
@@ -75,6 +150,7 @@ class EquilipyInitialisation:
             - Computes initial vacuum vessel first wall PSI values and stores them for the first iteration.
             - Assigns boundary constraint values for both the plasma and vacuum vessel boundaries.
         """
+        print('INITIALISE PSI...')
         
         ####### INITIALISE PSI VECTORS
         print('     -> INITIALISE PSI ARRAYS...', end="")
@@ -94,11 +170,16 @@ class EquilipyInitialisation:
         self.PSI_X = self.initialPSI.PSI0_X
         # ASSIGN VALUES TO EACH ELEMENT
         self.UpdateElementalPSI()
-        print('Done!')   
+        print('Done!')  
+        
+        print('Done!') 
         return
     
         
     def InitialisePSI_B(self):
+        
+        print('INITIALISE PSI_B...')
+        
         ####### INITIALISE PSI BOUNDARY VECTOR
         self.PSI_B = np.zeros([self.MESH.Nnbound,2],dtype=float)   # VACUUM VESSEL FIRST WALL PSI VALUES (EXTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)    
         
@@ -116,7 +197,9 @@ class EquilipyInitialisation:
         self.PSI_X = self.PSIseparatrix   # INITIAL CONSTRAINT VALUE ON SEPARATRIX
         self.UpdatePlasmaBoundaryValues()
         self.UpdateVacuumVesselBoundaryValues()
-        print('Done!')    
+        print('Done!')  
+        
+        print('Done!')  
         return
     
     

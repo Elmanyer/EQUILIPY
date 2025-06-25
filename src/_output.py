@@ -1,4 +1,5 @@
 import numpy as np
+import os
 from shutil import copy2
 
 ##################################################################################################
@@ -40,6 +41,20 @@ class EquilipyOutput:
         self.file_globalsys = None
         
         super().__init__()
+        return
+    
+    def InitialiseOutput(self):
+        
+        # Check if the directory exists
+        self.outputdir = self.pwd + '/../RESULTS/' + self.CASE + '-' + self.MESH.name
+        if not os.path.exists(self.outputdir):
+            # Create the directory
+            os.makedirs(self.outputdir)
+        # COPY SIMULATION FILES
+        self.copysimfiles()
+        # WRITE SIMULATION PARAMETERS FILE (IF ON)
+        self.writeparams() 
+        
         return
 
     def openOUTPUTfiles(self):
@@ -155,11 +170,11 @@ class EquilipyOutput:
         """
         
         # COPY DOM.DAT FILE
-        MeshDataFile = self.mesh_folder +'/' + self.MESH +'.dom.dat'
-        copy2(MeshDataFile,self.outputdir+'/'+self.CASE+'-'+self.MESH+'.dom.dat')
+        MeshDataFile = self.MESH.directory +'/' + self.MESH.name +'.dom.dat'
+        copy2(MeshDataFile,self.outputdir+'/'+self.CASE+'-'+self.MESH.name+'.dom.dat')
         # COPY GEO.DAT FILE
-        MeshFile = self.mesh_folder +'/' + self.MESH +'.geo.dat'
-        copy2(MeshFile,self.outputdir+'/'+self.CASE+'-'+self.MESH+'.geo.dat')
+        MeshFile = self.MESH.directory +'/' + self.MESH.name +'.geo.dat'
+        copy2(MeshFile,self.outputdir+'/'+self.CASE+'-'+self.MESH.name+'.geo.dat')
         
         return
 
@@ -346,7 +361,7 @@ class EquilipyOutput:
         return
 
     def writeElementsClassification(self):
-        MeshClassi = self.ObtainClassification()
+        MeshClassi = self.MESH.ObtainClassification()
         if self.out_elemsClas:
             if not self.FIXED_BOUNDARY:
                 self.file_elemsClas.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
@@ -478,6 +493,6 @@ class EquilipyOutput:
             self.file_globalsys = None    
                     
             # Serialize the simulation using Pickle
-            with open(self.outputdir+'/'+self.CASE+'-'+self.MESH+'.pickle', 'wb') as pickle_file:
+            with open(self.outputdir+'/'+self.CASE+'-'+self.MESH.name+'.pickle', 'wb') as pickle_file:
                 pickle.dump(self, pickle_file)
         return

@@ -31,11 +31,11 @@ class EquilipyPlotting:
     markerlist = ['o','^', '<', '>', 'v', 's','p','*','D']
 
     plasmacmap = plt.get_cmap('jet_r')
-    #plasmacmap = plt.get_cmap('winter_r')
     plasmabouncolor = 'green'
     vacvesswallcolor = 'gray'
     magneticaxiscolor = 'red'
     saddlepointcolor = BluishGreen
+    magnetcolor = SkyBlue
 
     def PlotPSI(self):
         fig, ax = plt.subplots(1, 1, figsize=(5,6))

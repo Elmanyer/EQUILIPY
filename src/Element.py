@@ -141,6 +141,37 @@ class Element:
         return inside
     
     
+    def CheckElementalVerticesLevelSetSigns(self):
+        
+        region = None
+        DiffHighOrderNodes = []
+        # CHECK SIGN OF LEVEL SET ON ELEMENTAL VERTICES
+        for i in range(self.numedges-1):
+            # FIND ELEMENTS LYING ON THE INTERFACE (LEVEL-SET VERTICES VALUES EQUAL TO 0 OR WITH DIFFERENT SIGN)
+            if self.LSe[i] == 0:  # if node is on Level-Set 0 contour
+                region = 0
+                break
+            elif np.sign(self.LSe[i]) !=  np.sign(self.LSe[i+1]):  # if the sign between vertices values change -> INTERFACE ELEMENT
+                region = 0
+                break
+            # FIND ELEMENTS LYING INSIDE A SPECIFIC REGION (LEVEL-SET VERTICES VALUES WITH SAME SIGN)
+            else:
+                if i+2 == self.numedges:   # if all vertices values have the same sign
+                    # LOCATE ON WHICH REGION LIES THE ELEMENT
+                    if np.sign(self.LSe[i+1]) > 0:   # all vertices values with positive sign -> EXTERIOR REGION ELEMENT
+                        region = +1
+                    else:   # all vertices values with negative sign -> INTERIOR REGION ELEMENT 
+                        region = -1
+                        
+                    # CHECK LEVEL-SET SIGN ON ELEMENTAL 'HIGH ORDER' NODES
+                    #for i in range(self.numedges,self.n-self.numedges):  # LOOP OVER NODES WHICH ARE NOT ON VERTICES
+                    for i in range(self.numedges,self.n):
+                        if np.sign(self.LSe[i]) != np.sign(self.LSe[0]):
+                            DiffHighOrderNodes.append(i)
+            
+        return region, DiffHighOrderNodes
+    
+    
     ##################################################################################################
     #################################### ELEMENTAL MAPPING ###########################################
     ##################################################################################################

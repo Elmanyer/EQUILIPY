@@ -27,7 +27,7 @@ class Coil:
     Class representing a tokamak's external coil (confinement magnet).
     """
     
-    def __init__(self,index,dim,X,I,Nturns=1):
+    def __init__(self,name,dim,X,I):
         """
         Constructor to initialize the Coil object with the provided attributes.
 
@@ -38,31 +38,30 @@ class Coil:
             - I (float): The current carried by the coil.
         """
         
-        self.index = index      # COIL INDEX
+        self.name = name        # IDENTIFICATION
         self.dim = dim          # SPATIAL DIMENSION
-        self.X = X              # COIL POSITION COORDINATES
-        self.I = I              # COIL CURRENT
-        self.Nturns = Nturns    # NUMBER OF TURNS
+        self.X = X              # POSITION COORDINATES
+        self.I = I              # CURRENT
+        
         return
     
+    def Psi(self,X):
+        """
+        Calculate poloidal flux psi at X=(R,Z) due to coil
+        """
+        return GreensFunction(self.X,X) * self.I 
     
     def Br(self,X):
         """
         Calculate radial magnetic field Br at X=(R,Z)
         """
-        return GreensBr(self.X,X) * self.I * self.Nturns
+        return GreensBr(self.X,X) * self.I 
 
     def Bz(self,X):
         """
         Calculate vertical magnetic field Bz at X=(R,Z)
         """
-        return GreensBz(self.X,X) * self.I * self.Nturns
-
-    def Psi(self,X):
-        """
-        Calculate poloidal flux psi at X=(R,Z) due to coil
-        """
-        return GreensFunction(self.X,X) * self.I * self.Nturns
+        return GreensBz(self.X,X) * self.I 
     
     
 class ShapedCoil:
@@ -145,7 +144,7 @@ class Solenoid:
     Class representing a tokamak's external solenoid (confinement magnet).
     """
     
-    def __init__(self,index,dim,Xe,I,Nturns):
+    def __init__(self,name,dim,Xe,I,Nturns):
         """
         Constructor to initialize the Solenoid object with the provided attributes.
 
@@ -156,11 +155,11 @@ class Solenoid:
             - I (float): The current carried by the solenoid.
         """
         
-        self.index = index      # SOLENOID INDEX
+        self.name = name        # IDENTIFICATION
         self.dim = dim          # SPATIAL DIMENSION
-        self.Xe = Xe            # SOLENOID POSITION COORDINATES MATRIX
-        self.I = I              # SOLENOID CURRENT
-        self.Nturns = Nturns    # SOLENOID NUMBER OF TURNS
+        self.Xe = Xe            # POSITION COORDINATES MATRIX
+        self.I = I              # CURRENT
+        self.Nturns = Nturns    # NUMBER OF TURNS
         
         # NUMERICAL INTEGRATION QUADRATURE
         self.ng = None          # NUMBER OF GAUSS INTEGRATION NODES FOR STANDARD 1D QUADRATURE
@@ -170,20 +169,26 @@ class Solenoid:
         self.Ng = None          # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES 
         self.dNdxig = None      # REFERENCE SHAPE FUNCTIONS DERIVATIVES RESPECT TO XI EVALUATED AT GAUSS INTEGRATION NODES
         self.detJg = None       # DETERMINANT OF JACOBIAN OF TRANSFORMATION FROM 1D REFERENCE ELEMENT TO 2D PHYSICAL SOLENOID
+        
+        # TRANSFORM SOLENOID INTO COIL STRUCTURE EQUIVALENT
+        self.Xcoils = self.Solenoid_coils()
+        
+        #self.COILS = list()
+        #for icoil, Xcoil in enumerate(self.Xcoils):
+        #    self.COILS.append(Coil(index = icoil,
+        #                           dim = self.dim,
+        #                           X = Xcoil,
+        #                           I = self.I))
         return
     
     def Solenoid_coils(self):
         """
         Calculate the position of the individual coils constituting the solenoid.
         """
-        Xcoils = np.zeros([self.Nturns,self.dim])
-        Xcoils[0,:] = self.Xe[0,:]
-        Xcoils[-1,:] = self.Xe[1,:]
-        dr = (self.Xe[1,0]-self.Xe[0,0])/(self.Nturns-1)
-        dz = (self.Xe[1,1]-self.Xe[0,1])/(self.Nturns-1)
-        for icoil in range(1,self.Nturns):
-            Xcoils[icoil,:] = [self.Xe[0,0]+dr*icoil, 
-                               self.Xe[0,1]+dz*icoil]
+        if self.Nturns == 0:
+            Xcoils = np.zeros([np.mean(self.Xe[:,0]),np.mean(self.Xe[:,1])])
+        else:
+            Xcoils = np.linspace(self.Xe[0],self.Xe[1],self.Nturns)
         return Xcoils
     
     def Psi(self,X):
@@ -191,9 +196,8 @@ class Solenoid:
         Calculate poloidal flux psi at (R,Z) due to solenoid
         """
         Psi_sole = 0.0
-        Xcoils = self.Solenoid_coils()
-        for icoil in range(self.Nturns):
-            Psi_sole += GreensFunction(Xcoils[icoil,:],X) * self.I
+        for Xcoil in self.Xcoils:
+            Psi_sole += GreensFunction(Xcoil,X) * self.I
         return Psi_sole
 
     def Br(self,X):
@@ -201,9 +205,8 @@ class Solenoid:
         Calculate radial magnetic field Br at (R,Z) due to solenoid
         """
         Br_sole = 0.0
-        Xcoils = self.Solenoid_coils()
-        for icoil in range(self.Nturns):
-            Br_sole += GreensBr(Xcoils[icoil,:],X) * self.I
+        for Xcoil in self.Xcoils:
+            Br_sole += GreensBr(Xcoil,X) * self.I
         return Br_sole
 
     def Bz(self,X):
@@ -211,9 +214,8 @@ class Solenoid:
         Calculate vertical magnetic field Bz at (R,Z) due to solenoid
         """
         Bz_sole = 0.0
-        Xcoils = self.Solenoid_coils()
-        for icoil in range(self.Nturns):
-            Bz_sole += GreensBz(Xcoils[icoil,:],X) * self.I
+        for Xcoil in self.Xcoils:
+            Bz_sole += GreensBz(Xcoil,X) * self.I
         return Bz_sole
 
 

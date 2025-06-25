@@ -16,9 +16,9 @@ class InitialPlasmaBoundary:
     vacvesswallcolor = 'gray'
     magneticaxiscolor = 'red'
     
-    def __init__(self,PROBLEM,GEOMETRY,**kwargs):
+    def __init__(self,EQUILIBRIUM,GEOMETRY,**kwargs):
         # IMPORT PROBLEM DATA
-        self.problem = proxy(PROBLEM)
+        self.eq = proxy(EQUILIBRIUM)
         # INITIAL BOUNDARY PREDEFINED MODELS
         self.INITIAL_GEOMETRY = None
         self.LINEAR_SOLUTION = 0
@@ -72,15 +72,15 @@ class InitialPlasmaBoundary:
                 self.PHI0fun = kwargs['PHI0']
                 
         # COMPUTE PLASMA BOUNDARY LEVEL-SET VALUES ON COMPUTATIONAL DOMAIN
-        self.PHI0 = self.ComputeField(self.problem.X)
+        self.PHI0 = self.ComputeField(self.eq.MESH.X)
         # COMPUTE PLASMA BOUNDARY LEVEL-SET VALUES ON EXTENDED RECTANGULAR MESH
         ### PREPARE RECTANGULAR MESH
         Nr = 50
         Nz = 60
         self.Xrec = np.zeros([Nr*Nz,2])
         inode = 0
-        for r in np.linspace(self.problem.Rmin-0.1,self.problem.Rmax+0.1,Nr):
-            for z in np.linspace(self.problem.Zmin-0.1,self.problem.Zmax+0.1,Nz):
+        for r in np.linspace(self.eq.MESH.Rmin-0.1,self.eq.MESH.Rmax+0.1,Nr):
+            for z in np.linspace(self.eq.MESH.Zmin-0.1,self.eq.MESH.Zmax+0.1,Nz):
                 self.Xrec[inode,:] = [r,z]
                 inode += 1
         self.PHI0rec = self.ComputeField(self.Xrec)
@@ -119,19 +119,13 @@ class InitialPlasmaBoundary:
         # Plot level-set inside computational domain
         contourf = ax.tricontourf(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=30)
         
-        # Define computational domain's boundary path
-        compboundary = np.zeros([len(self.problem.BoundaryVertices)+1,2])
-        compboundary[:-1,:] = self.problem.X[self.problem.BoundaryVertices,:]
-        # Close path
-        compboundary[-1,:] = compboundary[0,:]
-        clip_path = Path(compboundary)
-        patch = PathPatch(clip_path, transform=ax.transData)
+        patch = PathPatch(self.eq.MESH.boundary_path, transform=ax.transData)
         for coll in contourf.collections:
             coll.set_clip_path(patch)
         
         # PLOT MESH BOUNDARY
-        for iboun in range(self.problem.Nbound):
-            ax.plot(self.problem.X[self.problem.Tbound[iboun,:2],0],self.problem.X[self.problem.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
+        for iboun in range(self.eq.MESH.Nbound):
+            ax.plot(self.eq.MESH.X[self.eq.MESH.Tbound[iboun,:2],0],self.eq.MESH.X[self.eq.MESH.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
         # PLOT LEVEL-SET CONTOURS
         ax.tricontour(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=30,colors='black', linewidths=1)
         # PLOT INITIAL PLASMA BOUNDARY

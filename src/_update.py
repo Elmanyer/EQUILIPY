@@ -103,7 +103,7 @@ class EquilipyUpdate:
         for inode in range(self.MESH.Nnbound):
             PSI_Bextend[self.MESH.BoundaryNodes[inode]] = self.PSI_B[inode,1]
         
-        for ielem in self.DirichletElems:
+        for ielem in self.MESH.DirichletElems:
             self.MESH.Elements[ielem].PSI_Be = PSI_Bextend[self.MESH.Elements[ielem].Te]
         
         return

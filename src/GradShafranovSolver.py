@@ -28,6 +28,7 @@ from scipy.sparse.linalg import spsolve
 from ShapeFunctions import *
 from Element import *
 from Mesh import *
+from Tokamak import *
 from Magnet import *
 from Greens import *
 from _initialisation import *
@@ -61,6 +62,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.FIXED_BOUNDARY = None          # PLASMA BOUNDARY FIXED BEHAVIOUR: True  or  False 
         self.GhostStabilization = False     # GHOST STABILIZATION SWITCH
         self.PARALLEL = False               # PARALLEL SIMULATION BASED ON MPI RUN (NEEDS TO RUN ON .py file)
+        self.dim = None                     # DIMENSION
         
         # SIMULATION OBJECTS
         self.MESH = None                    # MESH
@@ -85,12 +87,12 @@ class GradShafranovSolver(EquilipyInitialisation,
         #### BOUNDARY CONSTRAINTS
         self.beta = None                    # NITSCHE'S METHOD PENALTY TERM
         #### STABILIZATION
-        self.PSIrelax = False
-        self.lambdaPSI = None
-        self.lambdamin = None
-        self.lambdamax = None
+        self.PSIrelax = False               # PSI SOLUTION AITKEN RELAXATION SWITCH
+        self.lambdaPSI = None               # PHI LEVEL-SET AITKEN RELAXATION PARAMETER 
+        self.lambdamin = None               # PHI LEVEL-SET AITKEN RELAXATION PARAMETER MINIMAL VALUE
+        self.lambdamax = None               # PHI LEVEL-SET AITKEN RELAXATION PARAMETER MAXIMAL VALUE 
         self.lambda0 = None                 # INITIAL AIKTEN'S SCHEME RELAXATION CONSTANT  (alpha0 = 1 - lambda0)
-        self.PHIrelax = False
+        self.PHIrelax = False               # PHI LEVEL-SET AITKEN RELAXATION SWITCH
         self.alphaPHI = None                # PHI LEVEL-SET AITKEN RELAXATION INITIAL PARAMETER
         self.zeta = None                    # GHOST PENALTY PARAMETER
         #### OPTIMIZATION OF CRITICAL POINTS
@@ -117,13 +119,9 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.int_residu = None              # INTERNAL LOOP RESIDU
         self.ext_residu = None              # EXTERNAL LOOP RESIDU
         
-        
-        self.nge = None                     # NUMBER OF INTEGRATION NODES PER ELEMENT (STANDARD SURFACE QUADRATURE)
-        self.Xg = None                      # INTEGRATION NODAL MESH COORDINATES MATRIX 
         self.Brzfield = None                # MAGNETIC (R,Z) COMPONENTS FIELD AT INTEGRATION NODES
         
         self.PSIseparatrix = 1.0
-        
         
         ###############################
         # WORKING DIRECTORY
@@ -244,73 +242,6 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.PSI_NORM[:,1] = newPSI
         return
         
-        
-    ##################################################################################################
-    ############################### PLASMA BOUNDARY APPROXIMATION ####################################
-    ##################################################################################################
-    
-    def ComputePlasmaBoundaryApproximation(self):
-        """ 
-        Computes the elemental cutting segments conforming to the plasma boundary approximation.
-        Computes normal vectors for each segment.
-
-        The function double checks the orthogonality of the normal vectors. 
-        """
-        for inter, ielem in enumerate(self.MESH.PlasmaBoundElems):
-            # APPROXIMATE PLASMA/VACUUM INTERACE GEOMETRY CUTTING ELEMENT 
-            self.MESH.Elements[ielem].InterfaceApproximation(inter)
-        return
-    
-    def CheckPlasmaBoundaryApproximationNormalVectors(self):
-        """
-        This function verifies if the normal vectors at the plasma boundary approximation are unitary and orthogonal to 
-        the corresponding interface. It checks the dot product between the segment direction vector and the 
-        normal vector, raising an exception if the dot product is not close to zero (indicating non-orthogonality).
-        """
-
-        for ielem in self.MESH.PlasmaBoundElems:
-            for ig, vec in enumerate(self.MESH.Elements[ielem].InterfApprox.NormalVec):
-                # CHECK UNIT LENGTH
-                if np.abs(np.linalg.norm(vec)-1) > 1e-6:
-                    raise Exception('Normal vector norm equals',np.linalg.norm(vec), 'for mesh element', ielem, ": Normal vector not unitary")
-                # CHECK ORTHOGONALITY
-                Ngrad = self.MESH.Elements[ielem].InterfApprox.invJg[ig,:,:]@np.array([self.MESH.Elements[ielem].InterfApprox.dNdxig[ig,:],self.MESH.Elements[ielem].InterfApprox.dNdetag[ig,:]])
-                dphidr, dphidz = Ngrad@self.MESH.Elements[ielem].LSe
-                tangvec = np.array([-dphidz, dphidr]) 
-                scalarprod = np.dot(tangvec,vec)
-                if scalarprod > 1e-10: 
-                    raise Exception('Dot product equals',scalarprod, 'for mesh element', ielem, ": Normal vector not perpendicular")
-        return
-    
-    def ComputePlasmaBoundaryGhostFaces(self):
-        # COMPUTE PLASMA BOUNDARY GHOST FACES
-        self.MESH.GhostFaces, self.MESH.GhostElems = self.IdentifyPlasmaBoundaryGhostFaces()
-        # COMPUTE ELEMENTAL GHOST FACES NORMAL VECTORS
-        for ielem in self.MESH.GhostElems:
-            self.MESH.Elements[ielem].GhostFacesNormals()
-        # CHECK NORMAL VECTORS
-        self.CheckGhostFacesNormalVectors()
-        return
-    
-    def CheckGhostFacesNormalVectors(self):
-        """
-        This function verifies if the normal vectors at the plasma boundary ghost faces are unitary and orthogonal to 
-        the corresponding interface segments. It checks the dot product between the segment tangent vector and the 
-        normal vector, raising an exception if the dot product is not close to zero (indicating non-orthogonality).
-        """
-        
-        for ielem in self.MESH.GhostElems:
-            for SEGMENT in self.MESH.Elements[ielem].GhostFaces:
-                # CHECK UNIT LENGTH
-                if np.abs(np.linalg.norm(SEGMENT.NormalVec)-1) > 1e-6:
-                    raise Exception('Normal vector norm equals',np.linalg.norm(SEGMENT.NormalVec), 'for mesh element', ielem, ": Normal vector not unitary")
-                # CHECK ORTHOGONALITY
-                tangvec = np.array([SEGMENT.Xseg[1,0]-SEGMENT.Xseg[0,0], SEGMENT.Xseg[1,1]-SEGMENT.Xseg[0,1]]) 
-                scalarprod = np.dot(tangvec,SEGMENT.NormalVec)
-                if scalarprod > 1e-10: 
-                    raise Exception('Dot product equals',scalarprod, 'for mesh element', ielem, ": Normal vector not perpendicular")
-        return
-
     
     ##################################################################################################
     ########################################## INTEGRATION ###########################################
@@ -643,34 +574,25 @@ class GradShafranovSolver(EquilipyInitialisation,
         print("PREPARE OUTPUT DIRECTORY...",end='')
         # INITIALISE SIMULATION CASE NAME
         self.CASE = CASE
-        # OUTPUT RESULTS FOLDER
-        # Check if the directory exists
-        self.outputdir = self.pwd + '/../RESULTS/' + self.CASE + '-' + self.MESH
-        if not os.path.exists(self.outputdir):
-            # Create the directory
-            os.makedirs(self.outputdir)
-        # COPY SIMULATION FILES
-        self.copysimfiles()
-        # WRITE SIMULATION PARAMETERS FILE (IF ON)
-        self.writeparams() 
+        self.InitialiseOutput()
         # OPEN OUTPUT FILES
         self.openOUTPUTfiles()   
         print('Done!')
         
         # INITIALISE PSI UNKNOWNS
-        print("INITIALISE SIMULATION ARRAYS ...")
         self.it = 0
         self.ext_it = 0
         self.int_it = 0
-        self.InitialisePSI_B()
-        print('Done!')
+        self.InitialisePSI_B()          
         
         # WRITE INITIAL SIMULATION DATA
+        print("WRITE INITIAL SIMULATION DATA...",end='')
         self.writePlasmaBoundaryData()
         self.writePSI()
         self.writePSI_B()
         self.writePlasmaBC()
-
+        print('Done!')
+        
         if self.plotPSI:
             self.PlotSolutionPSI()  # PLOT INITIAL SOLUTION
 

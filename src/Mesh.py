@@ -1,13 +1,14 @@
 import numpy as np
 from os.path import basename
 from Element import *
+from matplotlib.path import Path
 
 class Mesh:
     
     def __init__(self,path_to_folder):
         
         self.name = basename(path_to_folder)
-        self.mesh_directory = path_to_folder
+        self.directory = path_to_folder
         
         # ATTRIBUTES
         self.ElTypeALYA = None              # TYPE OF ELEMENTS CONSTITUTING THE MESH, USING ALYA NOTATION
@@ -17,6 +18,12 @@ class Mesh:
         self.T = None                       # MESH ELEMENTS CONNECTIVITY MATRIX 
         self.Nn = None                      # TOTAL NUMBER OF MESH NODES
         self.Ne = None                      # TOTAL NUMBER OF MESH ELEMENTS
+        self.Rmax = None                    # COMPUTATIONAL MESH MAXIMAL X (R) COORDINATE
+        self.Rmin = None                    # COMPUTATIONAL MESH MINIMAL X (R) COORDINATE
+        self.Zmax = None                    # COMPUTATIONAL MESH MAXIMAL Y (Z) COORDINATE
+        self.Zmin = None                    # COMPUTATIONAL MESH MINIMAL Y (Z) COORDINATE
+        self.meanArea = None                # MESH ELEMENTS MEAN AREA
+        self.meanLength = None              # MESH ELEMENTS MEAN LENTH
         self.n = None                       # NUMBER OF NODES PER ELEMENT
         self.numedges = None                # NUMBER OF EDGES PER ELEMENT (= 3 IF TRIANGULAR; = 4 IF QUADRILATERAL)
         self.nedge = None                   # NUMBER OF NODES ON ELEMENTAL EDGE
@@ -25,7 +32,9 @@ class Mesh:
         self.Nbound = None                  # NUMBER OF COMPUTATIONAL DOMAIN'S BOUNDARIES (NUMBER OF ELEMENTAL EDGES)
         self.Nnbound = None                 # NUMBER OF NODES ON COMPUTATIONAL DOMAIN'S BOUNDARY
         self.BoundaryNodes = None           # LIST OF NODES (GLOBAL INDEXES) ON THE COMPUTATIONAL DOMAIN'S BOUNDARY
+        self.BoundaryNodesSets = None
         self.BoundaryVertices = None        # LIST OF CONSECUTIVE NODES (GLOBAL INDEXES) WHICH ARE COMPUTATIONAL DOMAIN'S BOUNDARY VERTICES 
+        self.boundary_path = None           # COMPUTATIONAL DOMAIN'S PATH (FOR PATCHING)
         self.DOFNodes = None                # LIST OF NODES (GLOBAL INDEXES) CORRESPONDING TO UNKNOW DEGREES OF FREEDOM IN THE CUTFEM SYSTEM
         self.NnDOF = None                   # NUMBER OF UNKNOWN DEGREES OF FREEDOM NODES
         self.PlasmaNodes = None             # LIST OF NODES (GLOBAL INDEXES) INSIDE THE PLASMA DOMAIN
@@ -36,19 +45,16 @@ class Mesh:
         self.PlasmaBoundElems = None        # LIST OF CUT ELEMENT'S INDEXES, CONTAINING INTERFACE BETWEEN PLASMA AND VACUUM
         self.FirstWallElems = None          # LIST OF CUT (OR NOT) ELEMENT'S INDEXES, CONTAINING VACUUM VESSEL FIRST WALL (OR COMPUTATIONAL DOMAIN'S BOUNDARY)
         self.NonCutElems = None             # LIST OF ALL NON CUT ELEMENTS
+        self.DirichletElems = None          # LIST OF ALL ELEMENTS POSSESSING A BOUNDARY NODE (NODE ON WHICH APPLY DIRICHLET BC)
         self.Elements = None                # ARRAY CONTAINING ALL ELEMENTS IN MESH (PYTHON OBJECTS)
         
-        self.Rmax = None                    # COMPUTATIONAL MESH MAXIMAL X (R) COORDINATE
-        self.Rmin = None                    # COMPUTATIONAL MESH MINIMAL X (R) COORDINATE
-        self.Zmax = None                    # COMPUTATIONAL MESH MAXIMAL Y (Z) COORDINATE
-        self.Zmin = None                    # COMPUTATIONAL MESH MINIMAL Y (Z) COORDINATE
-        self.meanArea = None                # MESH ELEMENTS MEAN AREA
-        self.meanLength = None              # MESH ELEMENTS MEAN LENTH
         self.nge = None                     # NUMBER OF INTEGRATION NODES PER ELEMENT (STANDARD SURFACE QUADRATURE)
+        self.Xg = None                      # INTEGRATION NODAL MESH COORDINATES MATRIX 
         
         self.GhostFaces = None              # LIST OF PLASMA BOUNDARY GHOST FACES
         self.GhostElems = None              # LIST OF ELEMENTS CONTAINING PLASMA BOUNDARY FACES
         return
+    
     
     def ALYA2Py(self):
         """ 
@@ -94,9 +100,8 @@ class Mesh:
         Read input mesh data files, .dom.dat and .geo.dat, and build mesh simulation attributes. 
         """
         
-        print("     -> READ MESH DATA FILES...",end='')
         # READ DOM FILE .dom.dat
-        MeshDataFile = self.mesh_folder +'/' + self.MESH +'.dom.dat'
+        MeshDataFile = self.directory +'/' + self.name +'.dom.dat'
         self.Nn = 0   # number of nodes
         self.Ne = 0   # number of elements
         file = open(MeshDataFile, 'r') 
@@ -124,7 +129,7 @@ class Mesh:
             self.numedges = 4
         
         # READ MESH FILE .geo.dat
-        MeshFile = self.mesh_folder +'/'+ self.MESH +'.geo.dat'
+        MeshFile = self.directory +'/'+ self.name +'.geo.dat'
         self.T = np.zeros([self.Ne,self.n], dtype = int)
         self.X = np.zeros([self.Nn,self.dim], dtype = float)
         self.Tbound = np.zeros([self.Nbound,self.nedge+1], dtype = int)   # LAST COLUMN YIELDS THE ELEMENT INDEX OF THE CORRESPONDING BOUNDARY EDGE 
@@ -184,7 +189,6 @@ class Mesh:
         
         # ORGANISE BOUNDARY ATTRIBUTES
         self.BoundaryAttributes()
-        print('Done!')
         
         # OBTAIN COMPUTATIONAL MESH LIMITS
         self.Rmax = np.max(self.X[:,0])
@@ -198,9 +202,8 @@ class Mesh:
         """
         Read fix set data from input file .fix.dat. 
         """
-        print("     -> READ FIX DATA FILE...",end='')
         # READ EQU FILE .equ.dat
-        FixDataFile = self.mesh_folder +'/' + self.MESH +'.fix.dat'
+        FixDataFile = self.directory +'/' + self.name +'.fix.dat'
         file = open(FixDataFile, 'r') 
         self.BoundaryIden = np.zeros([self.Nbound],dtype=int)
         for line in file:
@@ -225,7 +228,6 @@ class Mesh:
         # CONVERT BOUNDARY NODES SET INTO ARRAY
         self.BoundaryNodesSets[0] = np.array(sorted(self.BoundaryNodesSets[0]))
         self.BoundaryNodesSets[1] = np.array(sorted(self.BoundaryNodesSets[1]))
-        print('Done!')
         return
     
     
@@ -261,6 +263,15 @@ class Mesh:
                 else:
                     nextbounelem = bounnode[0][0]
                 self.BoundaryVertices[iboun+1] = self.Tbound[nextbounelem,np.where(self.Tbound[nextbounelem,:2] != self.BoundaryVertices[iboun])[0]]
+                
+        ### COMPUTATIONAL DOMAIN'S BOUNDARY PATH 
+        # TAKE BOUNDARY VERTICES
+        compboundary = np.zeros([len(self.BoundaryVertices)+1,2])
+        compboundary[:-1,:] = self.X[self.BoundaryVertices,:]
+        # CLOSE PATH
+        compboundary[-1,:] = compboundary[0,:]
+        self.boundary_path = Path(compboundary)
+        
         return
     
     
@@ -282,13 +293,13 @@ class Mesh:
     ###################################### ELEMENTS DEFINITION #######################################
     ##################################################################################################
     
-    def DimensionlessCoordinates(self): 
+    def DimensionlessCoordinates(self,R0): 
         for ELEMENT in self.Elements:
-            ELEMENT.Xe /= self.PlasmaCurrent.R0
+            ELEMENT.Xe /= R0
         return 
     
     
-    def InitialiseElements(self):
+    def InitialiseElements(self,PlasmaLS):
         """ 
         Function initialising attribute ELEMENTS which is a list of all elements in the mesh. 
         """
@@ -297,7 +308,7 @@ class Mesh:
                                     ElOrder = self.ElOrder,
                                     Xe = self.X[self.T[e,:],:],
                                     Te = self.T[e,:],
-                                    PlasmaLSe = self.PlasmaLS[self.T[e,:],1]) for e in range(self.Ne)]
+                                    PlasmaLSe = PlasmaLS[self.T[e,:],1]) for e in range(self.Ne)]
         
         # COMPUTE MESH MEAN SIZE
         self.meanArea, self.meanLength = self.ComputeMeshElementsMeanSize()
@@ -395,38 +406,9 @@ class Mesh:
         kplasm = 0
         kvacuu = 0
         kint = 0
-        
-        def CheckElementalVerticesLevelSetSigns(LSe):
-            region = None
-            DiffHighOrderNodes = []
-            # CHECK SIGN OF LEVEL SET ON ELEMENTAL VERTICES
-            for i in range(self.numedges-1):
-                # FIND ELEMENTS LYING ON THE INTERFACE (LEVEL-SET VERTICES VALUES EQUAL TO 0 OR WITH DIFFERENT SIGN)
-                if LSe[i] == 0:  # if node is on Level-Set 0 contour
-                    region = 0
-                    break
-                elif np.sign(LSe[i]) !=  np.sign(LSe[i+1]):  # if the sign between vertices values change -> INTERFACE ELEMENT
-                    region = 0
-                    break
-                # FIND ELEMENTS LYING INSIDE A SPECIFIC REGION (LEVEL-SET VERTICES VALUES WITH SAME SIGN)
-                else:
-                    if i+2 == self.numedges:   # if all vertices values have the same sign
-                        # LOCATE ON WHICH REGION LIES THE ELEMENT
-                        if np.sign(LSe[i+1]) > 0:   # all vertices values with positive sign -> EXTERIOR REGION ELEMENT
-                            region = +1
-                        else:   # all vertices values with negative sign -> INTERIOR REGION ELEMENT 
-                            region = -1
-                            
-                        # CHECK LEVEL-SET SIGN ON ELEMENTAL 'HIGH ORDER' NODES
-                        #for i in range(self.numedges,self.n-self.numedges):  # LOOP OVER NODES WHICH ARE NOT ON VERTICES
-                        for i in range(self.numedges,self.n):
-                            if np.sign(LSe[i]) != np.sign(LSe[0]):
-                                DiffHighOrderNodes.append(i)
-                
-            return region, DiffHighOrderNodes
             
         for ielem in range(self.Ne):
-            regionplasma, DHONplasma = CheckElementalVerticesLevelSetSigns(self.Elements[ielem].LSe)
+            regionplasma, DHONplasma = self.Elements[ielem].CheckElementalVerticesLevelSetSigns()
             if regionplasma < 0:   # ALL PLASMA LEVEL-SET NODAL VALUES NEGATIVE -> INSIDE PLASMA DOMAIN 
                 # ALREADY CLASSIFIED AS VACUUM VESSEL ELEMENT (= BOUNDARY ELEMENT)
                 if self.Elements[ielem].Dom == 2:  
@@ -472,7 +454,7 @@ class Mesh:
             raise ValueError("Non-cut elements + Cut elements =/= Total number of elements  --> Wrong mesh classification!!")
         
         # CLASSIFY NODES ACCORDING TO NEW ELEMENT CLASSIFICATION
-        self.ClassifyNodes()
+        #self.ClassifyNodes()
         return
     
     
@@ -524,6 +506,10 @@ class Mesh:
         return
     
     
+    ##################################################################################################
+    ############################### PLASMA BOUNDARY APPROXIMATION ####################################
+    ##################################################################################################
+    
     def ComputePlasmaBoundaryNumberNodes(self):
         """
         Computes the total number of nodes located on the plasma boundary approximation
@@ -533,6 +519,45 @@ class Mesh:
             nnodes += self.Elements[ielem].InterfApprox.ng
         return nnodes
     
+    
+    def ComputePlasmaBoundaryApproximation(self):
+        """ 
+        Computes the elemental cutting segments conforming to the plasma boundary approximation.
+        Computes normal vectors for each segment.
+
+        The function double checks the orthogonality of the normal vectors. 
+        """
+        for inter, ielem in enumerate(self.PlasmaBoundElems):
+            # APPROXIMATE PLASMA/VACUUM INTERACE GEOMETRY CUTTING ELEMENT 
+            self.Elements[ielem].InterfaceApproximation(inter)
+        return
+    
+    
+    def CheckPlasmaBoundaryApproximationNormalVectors(self):
+        """
+        This function verifies if the normal vectors at the plasma boundary approximation are unitary and orthogonal to 
+        the corresponding interface. It checks the dot product between the segment direction vector and the 
+        normal vector, raising an exception if the dot product is not close to zero (indicating non-orthogonality).
+        """
+
+        for ielem in self.PlasmaBoundElems:
+            for ig, vec in enumerate(self.Elements[ielem].InterfApprox.NormalVec):
+                # CHECK UNIT LENGTH
+                if np.abs(np.linalg.norm(vec)-1) > 1e-6:
+                    raise Exception('Normal vector norm equals',np.linalg.norm(vec), 'for mesh element', ielem, ": Normal vector not unitary")
+                # CHECK ORTHOGONALITY
+                Ngrad = self.Elements[ielem].InterfApprox.invJg[ig,:,:]@np.array([self.Elements[ielem].InterfApprox.dNdxig[ig,:],self.Elements[ielem].InterfApprox.dNdetag[ig,:]])
+                dphidr, dphidz = Ngrad@self.Elements[ielem].LSe
+                tangvec = np.array([-dphidz, dphidr]) 
+                scalarprod = np.dot(tangvec,vec)
+                if scalarprod > 1e-10: 
+                    raise Exception('Dot product equals',scalarprod, 'for mesh element', ielem, ": Normal vector not perpendicular")
+        return
+    
+    
+    ##################################################################################################
+    ################################# PLASMA BOUNDARY GHOST FACES ####################################
+    ##################################################################################################
     
     def IdentifyPlasmaBoundaryGhostFaces(self):
         """
@@ -565,8 +590,8 @@ class Mesh:
                     GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))].add((neighbour,neighbour_edge))
                     
         XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
-        GhostFaces = list()
-        GhostElems = set()
+        self.GhostFaces = list()
+        self.GhostElems = set()
 
         for elems in GhostFaces_dict.values():
             # ISOLATE ADJACENT ELEMENTS
@@ -608,60 +633,89 @@ class Mesh:
             ELEM2.GhostFaces[-1].Xseg = ELEM2.GhostFaces[-1].Xseg[permutation,:]
             ELEM2.GhostFaces[-1].XIseg = ELEM2.GhostFaces[-1].XIseg[permutation,:]
 
-            GhostFaces.append((list(ELEM1.Te[nodes1]),(ielem1,iedge1,len(ELEM1.GhostFaces)-1),(ielem2,iedge2,len(ELEM2.GhostFaces)-1), permutation))
-            GhostElems.add(ielem1)
-            GhostElems.add(ielem2)
+            self.GhostFaces.append((list(ELEM1.Te[nodes1]),(ielem1,iedge1,len(ELEM1.GhostFaces)-1),(ielem2,iedge2,len(ELEM2.GhostFaces)-1), permutation))
+            self.GhostElems.add(ielem1)
+            self.GhostElems.add(ielem2)
             
-        return GhostFaces, list(GhostElems)
+            self.GhostElems = list(self.GhostElems)
+        return 
+    
+    
+    def ComputePlasmaBoundaryGhostFaces(self):
+        # COMPUTE PLASMA BOUNDARY GHOST FACES
+        self.IdentifyPlasmaBoundaryGhostFaces()
+        # COMPUTE ELEMENTAL GHOST FACES NORMAL VECTORS
+        for ielem in self.GhostElems:
+            self.Elements[ielem].GhostFacesNormals()
+        # CHECK NORMAL VECTORS
+        self.CheckGhostFacesNormalVectors()
+        return
+    
+    
+    def CheckGhostFacesNormalVectors(self):
+        """
+        This function verifies if the normal vectors at the plasma boundary ghost faces are unitary and orthogonal to 
+        the corresponding interface segments. It checks the dot product between the segment tangent vector and the 
+        normal vector, raising an exception if the dot product is not close to zero (indicating non-orthogonality).
+        """
+        
+        for ielem in self.GhostElems:
+            for FACE in self.Elements[ielem].GhostFaces:
+                # CHECK UNIT LENGTH
+                if np.abs(np.linalg.norm(FACE.NormalVec)-1) > 1e-6:
+                    raise Exception('Normal vector norm equals',np.linalg.norm(FACE.NormalVec), 'for mesh element', ielem, ": Normal vector not unitary")
+                # CHECK ORTHOGONALITY
+                tangvec = np.array([FACE.Xseg[1,0]-FACE.Xseg[0,0], FACE.Xseg[1,1]-FACE.Xseg[0,1]]) 
+                scalarprod = np.dot(tangvec,FACE.NormalVec)
+                if scalarprod > 1e-10: 
+                    raise Exception('Dot product equals',scalarprod, 'for mesh element', ielem, ": Normal vector not perpendicular")
+        return
+
     
     
     ##################################################################################################
     ############################# NUMERICAL INTEGRATION QUADRATURES ##################################
     ##################################################################################################
     
-    def ComputeIntegrationQuadratures(self):
+    def ComputeIntegrationQuadratures(self,QuadOrder2D,QuadOrder1D):
         """
-        Computes the numerical integration quadratures for different types of elements and boundaries.
-
-        The function computes quadrature entities for the following cases:
-            1. Standard 2D quadratures for non-cut elements.
-            2. Adapted quadratures for cut elements.
-            3. Boundary quadratures for elements on the computational domain's boundary (vacuum vessel).
-            4. Quadratures for solenoids in the case of a free-boundary plasma problem.
+        Computes the numerical integration quadratures for different types of elements and, if needed, ghost faces.
         """
         
         # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR NON-CUT ELEMENTS 
         for ielem in self.NonCutElems:
-            self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
+            self.Elements[ielem].ComputeStandardQuadrature2D(QuadOrder2D)
             
         # DEFINE STANDARD SURFACE QUADRATURE NUMBER OF INTEGRATION NODES
         self.nge = self.Elements[self.NonCutElems[0]].ng
             
         # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
         for ielem in self.PlasmaBoundElems:
-            self.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
+            self.Elements[ielem].ComputeAdaptedQuadratures(QuadOrder2D,QuadOrder1D)
         # CHECK NORMAL VECTORS
         self.CheckPlasmaBoundaryApproximationNormalVectors()
-            
-        # COMPUTE QUADRATURES FOR GHOST FACES ON PLASMA BOUNDARY ELEMENTS
-        if self.GhostStabilization:
-            for ielem in self.GhostElems:
-                self.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
         return
     
     
-    def ComputePlasmaBoundStandardQuadratures(self):
+    def ComputeGhostFacesQuadratures(self,QuadOrder1D):
+        # COMPUTE QUADRATURES FOR GHOST FACES ON PLASMA BOUNDARY ELEMENTS
+        for ielem in self.GhostElems:
+            self.Elements[ielem].ComputeGhostFacesQuadratures(QuadOrder1D)
+        return
+    
+    
+    def ComputePlasmaBoundStandardQuadratures(self,QuadOrder2D):
         if len(self.PlasmaBoundElems) == 0:
             return
         else:
             if self.FIXED_BOUNDARY:
                 if type(self.Elements[self.PlasmaBoundElems[0]].Xg) == type(None):
                     for ielem in self.PlasmaBoundElems:
-                        self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
+                        self.Elements[ielem].ComputeStandardQuadrature2D(QuadOrder2D)
             else:
                 for ielem in self.PlasmaBoundElems:
                     if type(self.Elements[ielem].Xg) == type(None):
-                        self.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
+                        self.Elements[ielem].ComputeStandardQuadrature2D(QuadOrder2D)
             return
         
         
@@ -673,79 +727,5 @@ class Mesh:
                 self.Xg[ielem*self.nge:(ielem+1)*self.nge,:] = ELEMENT.Xg
         return
     
-    
-    ##################################################################################################
-    ####################################### INITIALISATION ###########################################
-    ##################################################################################################
-    
-    def InitialiseMESH(self):
-        """
-        Initializes all mesh related elements and preprocess mesh data for simulation:
-            - Initializes some simulation parameters.
-            - Initializes python pickle lists for direct output.
-            - Initializes the level-set function for plasma and vacuum vessel boundaries.
-            - Initializes the elements in the computational domain.
-            - Classifies elements and writes their classification.
-            - Approximates the plasma boundary interface.
-            - Finds ghost faces if necessary
-            - Computes elemental numerical integration quadratures.
-        """
-        
-        print("INITIALISE MESH...")
-        
-        # MESH INPUT FILES
-        self.mesh_folder = self.pwd + '/MESHES/' + MESH
-        
-        print("READ MESH FILES...")
-        self.ReadMeshFile()
-        self.ReadFixFile()
-        print('Done!')
-        
-        
-        print("     -> INITIALISE SIMULATION PARAMETERS...", end="")
-        self.InitialiseParameters()
-        self.InitialisePickleLists()
-        print('Done!')
-        
-        # INITIALISE LEVEL-SET FUNCTION
-        print("     -> INITIALISE LEVEL-SET...", end="")
-        self.InitialisePlasmaLevelSet()
-        print('Done!')
-        
-        # INITIALISE ELEMENTS 
-        print("     -> INITIALISE ELEMENTS...")
-        self.InitialiseElements()
-        if type(self.PlasmaCurrent) != type(None) and self.PlasmaCurrent.DIMENSIONLESS:
-            self.DimensionlessCoordinates()
-        print('     Done!')
-        
-        # CLASSIFY ELEMENTS   
-        print("     -> CLASSIFY ELEMENTS...", end="")
-        self.IdentifyNearestNeighbors()
-        self.IdentifyBoundaries()
-        self.ClassifyElements()
-        print("Done!")
-
-        # COMPUTE PLASMA BOUNDARY APPROXIMATION
-        print("     -> APPROXIMATE PLASMA BOUNDARY INTERFACE...", end="")
-        self.ComputePlasmaBoundaryApproximation()
-        print("Done!")
-        
-        # IDENTIFY GHOST FACES 
-        if self.GhostStabilization:
-            print("     -> IDENTIFY GHOST FACES...", end="")
-            self.ComputePlasmaBoundaryGhostFaces()
-            print("Done!")
-        
-        # COMPUTE NUMERICAL INTEGRATION QUADRATURES
-        print('     -> COMPUTE NUMERICAL INTEGRATION QUADRATURES...', end="")
-        self.ComputeIntegrationQuadratures()
-        print('Done!')
-        
-        # COMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION
-        self.NnPB = self.ComputePlasmaBoundaryNumberNodes()
-        
-        print('Done!')
-        return  
     
     

@@ -15,9 +15,9 @@ class InitialGuess:
     vacvesswallcolor = 'gray'
     magneticaxiscolor = 'red'
     
-    def __init__(self,PROBLEM,PSI_GUESS,NORMALISE=False,NOISE=False,**kwargs):
+    def __init__(self,EQUILIBRIUM,PSI_GUESS,NORMALISE=False,NOISE=False,**kwargs):
         # IMPORT PROBLEM DATA
-        self.problem = proxy(PROBLEM)
+        self.eq = proxy(EQUILIBRIUM)
         # PSI INITIAL GUESS PREDEFINED MODELS
         self.INITIAL_GUESS = None
         self.LINEAR_SOLUTION = 0
@@ -110,7 +110,7 @@ class InitialGuess:
             self.X0 = kwargs['X0']
                 
         # COMPUTE INITIAL GUESS ON COMPUTATIONAL DOMAIN    
-        self.PSI0 = self.ComputeField(self.problem.X,NORMALISE,self.X0)
+        self.PSI0 = self.ComputeField(self.eq.MESH.X,NORMALISE,self.X0)
         return
     
     
@@ -123,7 +123,7 @@ class InitialGuess:
         return PSI0
     
     def NormalisePSI(self,PSI,X0=None):
-        self.Opoint, self.Xpoint = self.problem.FindCritical(PSI,X0)
+        self.Opoint, self.Xpoint = self.eq.FindCritical(PSI,X0)
         if not self.Opoint:
             raise ValueError("No O-points found!")
         else:
@@ -183,23 +183,18 @@ class InitialGuess:
         # PLOT INITIAL PSI GUESS BACKGROUND VALUES
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        contourf = ax.tricontourf(self.problem.X[:,0],self.problem.X[:,1], self.PSI0, levels=30, cmap=self.plasmacmap)
-        contour = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1], self.PSI0, levels=30, colors='black', linewidths=1)
-        contour0 = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1], self.PSI0, levels=[klevel], colors=self.plasmabouncolor, linewidths=3)
-        # Define computational domain's boundary path
-        compboundary = np.zeros([len(self.problem.BoundaryVertices)+1,2])
-        compboundary[:-1,:] = self.problem.X[self.problem.BoundaryVertices,:]
-        # Close path
-        compboundary[-1,:] = compboundary[0,:]
-        clip_path = Path(compboundary)
-        patch = PathPatch(clip_path, transform=ax.transData)
+        contourf = ax.tricontourf(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels=30, cmap=self.plasmacmap)
+        contour = ax.tricontour(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels=30, colors='black', linewidths=1)
+        contour0 = ax.tricontour(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels=[klevel], colors=self.plasmabouncolor, linewidths=3)
+        
+        patch = PathPatch(self.eq.MESH.boundary_path, transform=ax.transData)
         for cont in [contourf,contour,contour0]:
             for coll in cont.collections:
                 coll.set_clip_path(patch)
             
         # PLOT MESH BOUNDARY
-        for iboun in range(self.problem.Nbound):
-            ax.plot(self.problem.X[self.problem.Tbound[iboun,:2],0],self.problem.X[self.problem.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
+        for iboun in range(self.eq.MESH.Nbound):
+            ax.plot(self.eq.MESH.X[self.eq.MESH.Tbound[iboun,:2],0],self.eq.MESH.X[self.eq.MESH.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
         # PLOT COLORBAR
         plt.colorbar(contourf, ax=ax)
         ax.set_xlabel('R (in m)')

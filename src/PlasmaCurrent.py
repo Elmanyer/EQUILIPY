@@ -18,9 +18,9 @@ class CurrentModel:
     vacvesswallcolor = 'gray'
     magneticaxiscolor = 'red'
     
-    def __init__(self,PROBLEM,MODEL,**kwargs):
+    def __init__(self,EQUILIBRIUM,MODEL,**kwargs):
         # IMPORT PROBLEM DATA
-        self.problem = proxy(PROBLEM)
+        self.eq = proxy(EQUILIBRIUM)
         # PLASMA CURRENT PREDEFINED MODELS
         self.CURRENT_MODEL = None
         self.LINEAR_CURRENT = 0
@@ -232,7 +232,7 @@ class CurrentModel:
     
     def ComputeIpconstrain(self):
         self.L = 1.0
-        Tcurrent = self.problem.IntegratePlasmaDomain(self.Jphi)     
+        Tcurrent = self.eq.IntegratePlasmaDomain(self.Jphi)     
         L = self.TOTAL_CURRENT/Tcurrent
         return L
     
@@ -254,7 +254,7 @@ class CurrentModel:
             func = lambda x: (1.0 - x**self.alpha_m) ** self.alpha_n, 
             a = 0.0, 
             b = 1.0)
-        shapeintegral *= self.problem.PSI_X - self.problem.PSI_0
+        shapeintegral *= self.eq.PSI_X - self.eq.PSI_0
 
         # Integrate current components
         def funIR(X,PSI):
@@ -263,8 +263,8 @@ class CurrentModel:
         def funI_R(X,PSI):
             return (1.0 - PSI**self.alpha_m)**self.alpha_n * self.Raxis / X[0] 
 
-        IR = self.problem.IntegratePlasmaDomain(funIR)
-        I_R = self.problem.IntegratePlasmaDomain(funI_R)
+        IR = self.eq.IntegratePlasmaDomain(funIR)
+        I_R = self.eq.IntegratePlasmaDomain(funI_R)
         
         # Pressure on axis is
         #
@@ -289,7 +289,7 @@ class CurrentModel:
             shapeintegral, _ = quad(
                 lambda x: (1.0 - x**self.alpha_m) ** self.alpha_n, psinorm, 1.0
             )
-            shapeintegral *= self.problem.PSI_X - self.problem.PSI_0
+            shapeintegral *= self.eq.PSI_X - self.eq.PSI_0
             return shapeintegral
 
         # Pressure is
@@ -303,8 +303,8 @@ class CurrentModel:
         def P(X,PSI):
             return X[0]*pshape(PSI)
         
-        p_int = self.problem.IntegratePlasmaDomain(P)
-        b_int = self.problem.IntegrateBpolPlasmaDomain()
+        p_int = self.eq.IntegratePlasmaDomain(P)
+        b_int = self.eq.IntegrateBpolPlasmaDomain()
 
         # self.betap = - (2*LBeta0*mu0/ self.Raxis) * (p_int/b_int)
         LBeta0 = (b_int / p_int) * (-self.betap * self.Raxis) / (2 * self.mu0)
@@ -316,8 +316,8 @@ class CurrentModel:
         def funI_R(X,PSI):
             return (1.0 - PSI**self.alpha_m)**self.alpha_n * self.Raxis / X[0] 
 
-        IR = self.problem.IntegratePlasmaDomain(funIR)
-        I_R = self.problem.IntegratePlasmaDomain(funI_R)
+        IR = self.eq.IntegratePlasmaDomain(funIR)
+        I_R = self.eq.IntegratePlasmaDomain(funI_R)
 
         # Toroidal plasma current Ip is
         #
@@ -357,32 +357,27 @@ class CurrentModel:
     
     def Plot(self):     
         # COMPUTE PLASMA CURRENT FIELD
-        Jphi = self.ComputeField(self.problem.X,self.problem.initialPSI.PSI0)
+        Jphi = self.ComputeField(self.eq.MESH.X,self.eq.initialPSI.PSI0)
         
         #### FIGURE
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        ax.set_xlim(self.problem.Rmin+0.1,self.problem.Rmax+0.1)
-        ax.set_ylim(self.problem.Zmin-0.1,self.problem.Zmax-0.1)
+        ax.set_xlim(self.eq.MESH.Rmin+0.1,self.eq.MESH.Rmax+0.1)
+        ax.set_ylim(self.eq.MESH.Zmin-0.1,self.eq.MESH.Zmax-0.1)
         
         # Plot low-opacity background (outside plasma region)
-        contourf_bg = ax.tricontourf(self.problem.X[:,0], self.problem.X[:,1], Jphi, levels=30, alpha=0.8)
-        # Define computational domain's boundary path
-        compboundary = np.zeros([len(self.problem.BoundaryVertices)+1,2])
-        compboundary[:-1,:] = self.problem.X[self.problem.BoundaryVertices,:]
-        # Close path
-        compboundary[-1,:] = compboundary[0,:]
-        clip_path = Path(compboundary)
-        patch = PathPatch(clip_path, transform=ax.transData)
+        contourf_bg = ax.tricontourf(self.eq.MESH.X[:,0], self.eq.MESH.X[:,1], Jphi, levels=30, alpha=0.8)
+        
+        patch = PathPatch(self.eq.MESH.boundary_path, transform=ax.transData)
         for coll in contourf_bg.collections:
             coll.set_clip_path(patch)
         
         # PLOT INITIAL PSI GUESS BACKGROUND VALUES
-        contourf = ax.tricontourf(self.problem.X[:,0],self.problem.X[:,1],Jphi,levels=30)
-        contour = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1],Jphi,levels=30,colors='black', linewidths=1)
-        contour0 = ax.tricontour(self.problem.X[:,0],self.problem.X[:,1],Jphi,levels=[0],colors='black', linewidths=3)
+        contourf = ax.tricontourf(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1],Jphi,levels=30)
+        contour = ax.tricontour(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1],Jphi,levels=30,colors='black', linewidths=1)
+        contour0 = ax.tricontour(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1],Jphi,levels=[0],colors='black', linewidths=3)
         # PLOT INITIAL PLASMA BOUNDARY
-        cs = ax.tricontour(self.problem.initialPHI.Xrec[:,0],self.problem.initialPHI.Xrec[:,1],self.problem.initialPHI.PHI0rec,levels=[0],colors='red', linewidths=3)
+        cs = ax.tricontour(self.eq.initialPHI.Xrec[:,0],self.eq.initialPHI.Xrec[:,1],self.eq.initialPHI.PHI0rec,levels=[0],colors='red', linewidths=3)
         # Loop over paths and extract vertices
         plasmabounpath = []
         for path in cs.collections[0].get_paths():
@@ -397,8 +392,8 @@ class CurrentModel:
                 coll.set_clip_path(patch)
             
         # PLOT MESH BOUNDARY
-        for iboun in range(self.problem.Nbound):
-            ax.plot(self.problem.X[self.problem.Tbound[iboun,:2],0],self.problem.X[self.problem.Tbound[iboun,:2],1],linewidth = 4, color = 'grey')
+        for iboun in range(self.eq.MESH.Nbound):
+            ax.plot(self.eq.MESH.X[self.eq.MESH.Tbound[iboun,:2],0],self.eq.MESH.X[self.eq.MESH.Tbound[iboun,:2],1],linewidth = 4, color = 'grey')
         
         # PLOT COLORBAR
         plt.colorbar(contourf, ax=ax)
