@@ -637,7 +637,7 @@ class Mesh:
             self.GhostElems.add(ielem1)
             self.GhostElems.add(ielem2)
             
-            self.GhostElems = list(self.GhostElems)
+        self.GhostElems = list(self.GhostElems)
         return 
     
     

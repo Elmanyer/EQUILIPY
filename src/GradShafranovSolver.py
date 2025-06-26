@@ -179,13 +179,9 @@ class GradShafranovSolver(EquilipyInitialisation,
                 Xbound = self.MESH.X[node,:]
                 
                 ##### COMPUTE PSI BOUNDARY VALUES
-                # CONTRIBUTION FROM EXTERNAL COILS CURRENT 
-                for COIL in self.COILS: 
-                    PSI_B[inode] += self.mu0 * COIL.Psi(Xbound)
-                
-                # CONTRIBUTION FROM EXTERNAL SOLENOIDS CURRENT   
-                for SOLENOID in self.SOLENOIDS:
-                    PSI_B[inode] += self.mu0 * SOLENOID.Psi(Xbound)
+                # CONTRIBUTION FROM EXTERNAL MAGNETS
+                for MAGNET in self.TOKAMAK.MAGNETS: 
+                    PSI_B[inode] += self.mu0 * MAGNET.Psi(Xbound)
                             
                 # CONTRIBUTION FROM PLASMA CURRENT  ->>  INTEGRATE OVER PLASMA REGION
                 #   1. INTEGRATE IN PLASMA ELEMENTS

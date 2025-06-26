@@ -2,6 +2,7 @@ import numpy as np
 from math import ceil
 from Element import *
 from Mesh import *
+from Magnet import *
 
 class EquilipyInitialisation:
     
@@ -126,9 +127,11 @@ class EquilipyInitialisation:
         
         # COMPUTE NUMERICAL INTEGRATION QUADRATURES
         print('     -> COMPUTE NUMERICAL INTEGRATION QUADRATURES...', end="")
+        # MESH ELEMENTS' QUADRATURES
         self.MESH.ComputeIntegrationQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
         if self.GhostStabilization:
             self.MESH.ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
+                    
         print('Done!')
         
         # COMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION

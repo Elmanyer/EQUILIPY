@@ -814,7 +814,9 @@ class Element:
         for ig in range(self.ng):
             self.invJg[ig,:,:], self.detJg[ig] = Jacobian(self.Xe,self.dNdxig[ig,:],self.dNdetag[ig,:])
             self.detJg[ig] = abs(self.detJg[ig])
-            
+        
+        # CHECK NUMERICAL QUADRATURE
+        self.CheckQuadrature()
         return    
     
     
@@ -885,6 +887,10 @@ class Element:
             for ig in range(SUBELEM.ng):
                 SUBELEM.invJg[ig,:,:], SUBELEM.detJg[ig] = Jacobian(SUBELEM.Xe,dNdxistand2D[ig,:],dNdetastand2D[ig,:])
                 SUBELEM.detJg[ig] = abs(SUBELEM.detJg[ig])
+                
+        # CHECK NUMERICAL QUADRATURE
+        self.CheckQuadrature()
+                
         
         ######### ADAPTED QUADRATURE TO INTEGRATE OVER ELEMENTAL INTERFACE APPROXIMATION (1D)
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
@@ -909,6 +915,47 @@ class Element:
             
         # COMPUTE OUTWARDS NORMAL VECTORS ON INTEGRATION NODES
         self.InterfaceNormals()
+        return
+    
+    def CheckQuadrature(self):
+        # CHECK NUMERICAL INTEGRATION QUADRATURE BY INTEGRATING AREA
+        error = False
+        ##### STANDARD QUADRATURE ELEMENTS
+        if type(self.SubElements) == type(None):
+            integral = 0
+            for ig in range(self.ng):
+                for inode in range(self.n):
+                    integral += self.Ng[ig,inode]*self.detJg[ig]*self.Wg[ig] 
+            if abs(integral - self.area) > 1e-6:
+                error = True
+            
+        ##### CUT ELEMENTS WITH ADAPTED QUADRATURES
+        else:
+            # SUBELEMENTAL SURFACE QUADRATURES
+            integral = 0
+            for SUBELEM in self.SubElements:
+                for ig in range(SUBELEM.ng):
+                    for inode in range(self.n):
+                        integral += SUBELEM.Ng[ig,inode]*SUBELEM.detJg[ig]*SUBELEM.Wg[ig] 
+            if abs(integral - self.area) > 1e-6:
+                error = True
+                
+            # INTERFACE APPROXIMATION CURVE QUADRATURE
+            # PIECE-WISE LINEAR APPROXIMATION
+            length = 0
+            for inode in range(self.ElOrder):
+                lengthi = np.linalg.norm(self.InterfApprox.Xint[self.InterfApprox.Tint[inode+1],:]-self.InterfApprox.Xint[self.InterfApprox.Tint[inode],:])
+                length += lengthi
+            
+            integral = 0
+            for ig in range(self.InterfApprox.ng):
+                for inode in range(self.n):
+                    integral += self.InterfApprox.Ng[ig,inode]*self.InterfApprox.detJg1D[ig]*self.InterfApprox.Wg[ig]
+            if abs(length - integral) > 1e-2:
+                error = True
+                    
+        if error:
+            raise ValueError('Element '+self.index+': error in integration quadrature.')
         return 
     
     

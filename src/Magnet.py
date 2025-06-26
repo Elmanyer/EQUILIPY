@@ -21,13 +21,16 @@
 
 
 from Greens import *
+from GaussQuadrature import *
+from ShapeFunctions import *
+from Element import compute_quadrilateral_area
 
 class Coil:
     """
     Class representing a tokamak's external coil (confinement magnet).
     """
     
-    def __init__(self,name,dim,X,I):
+    def __init__(self,name,dim,X,I,Nturns=1):
         """
         Constructor to initialize the Coil object with the provided attributes.
 
@@ -42,6 +45,7 @@ class Coil:
         self.dim = dim          # SPATIAL DIMENSION
         self.X = X              # POSITION COORDINATES
         self.I = I              # CURRENT
+        self.Nturns = Nturns    # NUMBER OF TURNS (TOTAL CURRENT = I*Nturns)
         
         return
     
@@ -49,37 +53,245 @@ class Coil:
         """
         Calculate poloidal flux psi at X=(R,Z) due to coil
         """
-        return GreensFunction(self.X,X) * self.I 
+        return GreensFunction(self.X,X) * self.I * self.Nturns
     
     def Br(self,X):
         """
         Calculate radial magnetic field Br at X=(R,Z)
         """
-        return GreensBr(self.X,X) * self.I 
+        return GreensBr(self.X,X) * self.I * self.Nturns
 
     def Bz(self,X):
         """
         Calculate vertical magnetic field Bz at X=(R,Z)
         """
-        return GreensBz(self.X,X) * self.I 
+        return GreensBz(self.X,X) * self.I * self.Nturns
     
     
-class ShapedCoil:
+class RectangularMultiCoil:
+    """
+    Class representing a tokamak's external solenoid (confinement magnet).
+    """
     
-    def __init__(self, shape, current=0.0, Nturns=1, ElOrder=2):
-        
-        # Find the geometric middle of the coil
-        # The R,Z properties have accessor functions to handle modifications
-        self.Rcentre = sum(r for r, z in shape) / len(shape)
-        self.Zcentre = sum(z for r, z in shape) / len(shape)
+    def __init__(self,name,dim,Xe,I,ncoils=1,Xcoils=None):
+        """
+        Constructor to initialize the Solenoid object with the provided attributes.
 
-        self.current = current
-        self.Nturns = Nturns
-        self.shape = shape
+        Input:
+            - index (int): The index of the solenoid in the global system.
+            - dim (int): The spatial dimension of the solenoid coordinates.
+            - X (numpy.ndarray): Solenoid nodal coordinates matrix.
+            - I (float): The current carried by the solenoid.
+        """
         
+        self.name = name        # IDENTIFICATION
+        self.dim = dim          # SPATIAL DIMENSION
+        self.Xe = Xe            # VERTICES COORDINATES MATRIX
+        self.I = I              # CURRENT
+        self.n = ncoils         # NUMBER OF COILS (IF Xcoils not specified)
+        self.Xcoils = Xcoils    # POSITIONS OF COILS CONSTITUTING MULTICOIL 
         
+        # TRANSFORM SOLENOID INTO COIL STRUCTURE EQUIVALENT
+        if type(Xcoils) == type(None):
+            self.Xcoils = self.Distribute_coils()
+        
+        self.COILS = list()
+        for icoil, xcoil in enumerate(self.Xcoils):
+            self.COILS.append(Coil(name = 'coil '+str(icoil),
+                                   dim = self.dim,
+                                   X = xcoil,
+                                   I = self.I/self.Nturns))
         return
     
+    def Distribute_coils(self):
+        """
+        Generate approximately n_points equally spaced within a rectangle.
+        
+        Returns:
+            Xcoils : np.ndarray of shape (<=n_points, 2)
+                Grid-aligned points inside the rectangle.
+        """
+        xmax = np.max(self.Xe[:,0])
+        xmin = np.min(self.Xe[:,0])
+        ymax = np.max(self.Xe[:,1])
+        ymin = np.min(self.Xe[:,1])
+        
+        width = xmax - xmin
+        height = ymax - ymin
+        aspect_ratio = width / height
+
+        # Determine grid size
+        n_y = int(np.sqrt(self.n / aspect_ratio))
+        n_x = int(np.round(n_y * aspect_ratio))
+        
+        # Generate equidistant grid
+        x = np.linspace(xmin, xmax, n_x)
+        y = np.linspace(ymin, ymax, n_y)
+        grid_x, grid_y = np.meshgrid(x, y)
+        Xcoils = np.column_stack((grid_x.ravel(), grid_y.ravel()))
+        return Xcoils
+    
+    def Psi(self,X):
+        """
+        Calculate poloidal flux psi at (R,Z) due to solenoid
+        """
+        Psi_sole = 0.0
+        for coil in self.COILS:
+            Psi_sole += coil.PSI(X)
+        return Psi_sole 
+
+    def Br(self,X):
+        """
+        Calculate radial magnetic field Br at (R,Z) due to solenoid
+        """
+        Br_sole = 0.0
+        for coil in self.COILS:
+            Br_sole += coil.Br(X)
+        return Br_sole
+
+    def Bz(self,X):
+        """
+        Calculate vertical magnetic field Bz at (R,Z) due to solenoid
+        """
+        Bz_sole = 0.0
+        for coil in self.COILS:
+            Bz_sole += coil.Bz(X)
+        return Bz_sole
+    
+
+
+class QuadrilateralCoil:
+    
+    def __init__(self, name, Xvertices, Itotal, ElOrder=2, QuadOrder=4):
+        
+        self.name = name                    # IDENTIFICATION
+        self.dim = np.shape(Xvertices,0)    # SPATIAL DIMENSION
+        self.Xvertices = Xvertices          # VERTICES COORDINATES MATRIX
+        self.I = Itotal                     # CURRENT
+        self.ElOrder = ElOrder              # ELEMENT ORDER
+        # QUADRILATERAL SHAPED MAGNET
+        self.ElType = 2                     
+        self.numedges = 4
+        
+        # NUMERICAL INTEGRATION QUADRATURE
+        self.ng = None          # NUMBER OF GAUSS INTEGRATION NODES FOR STANDARD 1D QUADRATURE
+        self.XIg = None         # GAUSS INTEGRATION NODES (REFERENCE SPACE)
+        self.Xg = None          # GAUSS INTEGRATION NODES (PHYSICAL SPACE)
+        self.Wg = None          # GAUSS INTEGRATION WEIGTHS 
+        self.Ng = None          # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES 
+        self.dNdxig = None      # REFERENCE SHAPE FUNCTIONS DERIVATIVES RESPECT TO XI EVALUATED AT GAUSS INTEGRATION NODES
+        self.dNdetag = None         # REFERENCE SHAPE FUNCTIONS DERIVATIVES RESPECT TO ETA EVALUATED AT GAUSS INTEGRATION NODES
+        self.invJg = None           # INVERSE MATRIX OF JACOBIAN OF TRANSFORMATION FROM 2D REFERENCE ELEMENT TO 2D PHYSICAL ELEMENT, EVALUATED AT GAUSS INTEGRATION NODES
+        self.detJg = None           # MATRIX DETERMINANT OF JACOBIAN OF TRANSFORMATION FROM 2D REFERENCE ELEMENT TO 2D PHYSICAL ELEMENT, EVALUATED AT GAUSS INTEGRATION NODES 
+        
+        # COMPUTE QUADRILATERAL COIL AREA
+        self.area = compute_quadrilateral_area(self.Xe)
+        # COMPUTE QUADRILATERAL HIGH-ORDER NODES
+        self.Xe = self.HO_QUA()
+        # COMPUTE NUMERICAL INTEGRATION QUADRATURE
+        self.ComputeQuadrature(QuadOrder)
+        self.CheckQuadrature()
+        return
+    
+    
+    def HO_quadrilateral(self):
+        """
+        Generates a high-order quadrilateral element from a linear one with nodal vertices coordinates XeLIN, incorporating high-order 
+        nodes on the edges and interior.
+
+        Input: 
+            - XeLIN (numpy.ndarray): An array of shape (n, 2) containing the coordinates of the linear (low-order) element nodes.
+            - ElOrder (int): The order of the element, determining the number of high-order nodes to be added.
+
+        Output: 
+            XeHO (numpy.ndarray): An array containing the coordinates of the high-order element nodes, including those on 
+                the edges and interior.
+        """
+        
+        XeHO = self.Xvertices.copy()
+        for iedge in range(self.numedges):
+            inode = iedge
+            jnode = (iedge+1)%self.numedges
+            for k in range(1,self.ElOrder):
+                HOnode = np.array([self.Xvertices[inode,0]+((self.Xvertices[jnode,0]-self.Xvertices[inode,0])/self.ElOrder)*k,self.Xvertices[inode,1]+((self.Xvertices[jnode,1]-self.XeLIN[inode,1])/self.ElOrder)*k])
+                XeHO = np.concatenate((XeHO,HOnode.reshape((1,2))), axis=0)
+        # INTERIOR HIGH-ORDER NODES:
+        if self.ElOrder == 2:
+            HOnode = np.array([np.mean(XeHO[:,0]),np.mean(XeHO[:,1])])
+            XeHO = np.concatenate((XeHO,HOnode.reshape((1,2))), axis=0)
+        elif self.ElOrder == 3:
+            for k in range(1,self.ElOrder):
+                dx = (XeHO[12-k,0]-XeHO[5+k,0])/self.ElOrder
+                dy = (XeHO[12-k,1]-XeHO[5+k,1])/self.ElOrder
+                for j in range(1,self.ElOrder):
+                    if k == 1:
+                        HOnode = XeHO[11,:] - np.array([dx*j,dy*j])
+                    elif k == 2:
+                        HOnode = XeHO[7,:] + np.array([dx*j,dy*j])
+                    XeHO = np.concatenate((XeHO,HOnode.reshape((1,2))), axis=0)
+        return XeHO
+    
+    
+    def ComputeQuadrature(self,QuadOrder):
+        
+        #### REFERENCE ELEMENT QUADRATURE TO INTEGRATE SURFACES
+        self.XIg, self.Wg, self.ng = GaussQuadrature(self.ElType,QuadOrder)
+        # EVALUATE REFERENCE SHAPE FUNCTIONS 
+        self.Ng, self.dNdxig, self.dNdetag = EvaluateReferenceShapeFunctions(self.XIg, self.ElType, self.ElOrder)
+        
+        # COMPUTE MAPPED GAUSS NODES
+        self.Xg = self.Ng @ self.Xe       
+        # COMPUTE JACOBIAN INVERSE AND DETERMINANT
+        self.invJg = np.zeros([self.ng,self.dim,self.dim])
+        self.detJg = np.zeros([self.ng])
+        for ig in range(self.ng):
+            self.invJg[ig,:,:], self.detJg[ig] = Jacobian(self.Xe,self.dNdxig[ig,:],self.dNdetag[ig,:])
+            self.detJg[ig] = abs(self.detJg[ig])
+        return
+    
+    def CheckQuadrature(self):
+        # CHECK NUMERICAL INTEGRATION QUADRATURE BY INTEGRATING AREA
+        integral = 0
+        for ig in range(self.ng):
+            integral += self.detJg[ig]*self.Wg[ig] 
+        if abs(integral - self.area) > 1e-6:
+            raise ValueError('Quadrilateral coil '+self.name+': error in integration quadrature.')
+        return
+    
+    
+    def Psi(self,X):
+        """
+        Calculate poloidal flux psi at (R,Z) due to quadrilateral coil
+        """
+        Psi_coil = 0.0
+        # INTEGRATE ALONG SOLENOID AREA 
+        for ig in range(self.ng):
+            Psi_coil += GreensFunction(self.Xg[ig,:],X) * self.detJg[ig] * self.Wg[ig] * self.I/self.area
+        return Psi_coil  
+    
+    def Br(self,X):
+        """
+        Calculate radial magnetic field Br at (R,Z) due to quadrilateral coil
+        """
+        Br_coil = 0.0
+        # INTEGRATE ALONG SOLENOID AREA 
+        for ig in range(self.ng):
+            Br_coil += GreensBr(self.Xg[ig,:],X) * self.detJg[ig] * self.Wg[ig] * self.I/self.area
+        return Br_coil
+
+    def Bz(self,X):
+        """
+        Calculate vertical magnetic field Bz at (R,Z) due to quadrilateral coil
+        """
+        Bz_coil = 0.0
+        # INTEGRATE ALONG SOLENOID AREA 
+        for ig in range(self.ng):
+            Br_coil += GreensBz(self.Xg[ig,:],X) * self.detJg[ig] * self.Wg[ig] * self.I/self.area
+        return Bz_coil
+    
+
+
+class ShapedCoil:
     
     def triangulate(self):
         """
@@ -138,85 +350,6 @@ class ShapedCoil:
         triangles.append(self.shape)
         return triangles
     
-    
-class Solenoid:
-    """
-    Class representing a tokamak's external solenoid (confinement magnet).
-    """
-    
-    def __init__(self,name,dim,Xe,I,Nturns):
-        """
-        Constructor to initialize the Solenoid object with the provided attributes.
-
-        Input:
-            - index (int): The index of the solenoid in the global system.
-            - dim (int): The spatial dimension of the solenoid coordinates.
-            - X (numpy.ndarray): Solenoid nodal coordinates matrix.
-            - I (float): The current carried by the solenoid.
-        """
-        
-        self.name = name        # IDENTIFICATION
-        self.dim = dim          # SPATIAL DIMENSION
-        self.Xe = Xe            # POSITION COORDINATES MATRIX
-        self.I = I              # CURRENT
-        self.Nturns = Nturns    # NUMBER OF TURNS
-        
-        # NUMERICAL INTEGRATION QUADRATURE
-        self.ng = None          # NUMBER OF GAUSS INTEGRATION NODES FOR STANDARD 1D QUADRATURE
-        self.XIg = None         # GAUSS INTEGRATION NODES (REFERENCE SPACE)
-        self.Xg = None          # GAUSS INTEGRATION NODES (PHYSICAL SPACE)
-        self.Wg = None          # GAUSS INTEGRATION WEIGTHS 
-        self.Ng = None          # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES 
-        self.dNdxig = None      # REFERENCE SHAPE FUNCTIONS DERIVATIVES RESPECT TO XI EVALUATED AT GAUSS INTEGRATION NODES
-        self.detJg = None       # DETERMINANT OF JACOBIAN OF TRANSFORMATION FROM 1D REFERENCE ELEMENT TO 2D PHYSICAL SOLENOID
-        
-        # TRANSFORM SOLENOID INTO COIL STRUCTURE EQUIVALENT
-        self.Xcoils = self.Solenoid_coils()
-        
-        #self.COILS = list()
-        #for icoil, Xcoil in enumerate(self.Xcoils):
-        #    self.COILS.append(Coil(index = icoil,
-        #                           dim = self.dim,
-        #                           X = Xcoil,
-        #                           I = self.I))
-        return
-    
-    def Solenoid_coils(self):
-        """
-        Calculate the position of the individual coils constituting the solenoid.
-        """
-        if self.Nturns == 0:
-            Xcoils = np.zeros([np.mean(self.Xe[:,0]),np.mean(self.Xe[:,1])])
-        else:
-            Xcoils = np.linspace(self.Xe[0],self.Xe[1],self.Nturns)
-        return Xcoils
-    
-    def Psi(self,X):
-        """
-        Calculate poloidal flux psi at (R,Z) due to solenoid
-        """
-        Psi_sole = 0.0
-        for Xcoil in self.Xcoils:
-            Psi_sole += GreensFunction(Xcoil,X) * self.I
-        return Psi_sole
-
-    def Br(self,X):
-        """
-        Calculate radial magnetic field Br at (R,Z) due to solenoid
-        """
-        Br_sole = 0.0
-        for Xcoil in self.Xcoils:
-            Br_sole += GreensBr(Xcoil,X) * self.I
-        return Br_sole
-
-    def Bz(self,X):
-        """
-        Calculate vertical magnetic field Bz at (R,Z) due to solenoid
-        """
-        Bz_sole = 0.0
-        for Xcoil in self.Xcoils:
-            Bz_sole += GreensBz(Xcoil,X) * self.I
-        return Bz_sole
 
 
 

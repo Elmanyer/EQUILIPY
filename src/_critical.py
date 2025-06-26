@@ -178,7 +178,7 @@ class EquilipyCritical:
             X0.append(self.Xcrit[0,0,:-1])
             X0.append(self.Xcrit[0,1,:-1])
         
-        Opoint, Xpoint = self.FindCritical(self,self.PSI.T[0], X0)   
+        Opoint, Xpoint = self.FindCritical(self.PSI.T[0], X0)   
         print('Opoint = ', Opoint)
         print('Xpoint = ', Xpoint)
         # O-point
