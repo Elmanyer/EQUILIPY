@@ -24,13 +24,16 @@ from Greens import *
 from GaussQuadrature import *
 from ShapeFunctions import *
 from Element import compute_quadrilateral_area
+import matplotlib.pyplot as plt
+
+dcoil = 0.2
+coilcolor = '#56B4E9'
 
 class Coil:
-    """
-    Class representing a tokamak's external coil (confinement magnet).
-    """
     
-    def __init__(self,name,dim,X,I,Nturns=1):
+    """ Class defining a tokamak's external magnet as a single point coil. """
+    
+    def __init__(self,name,X,I,Nturns=1):
         """
         Constructor to initialize the Coil object with the provided attributes.
 
@@ -42,8 +45,8 @@ class Coil:
         """
         
         self.name = name        # IDENTIFICATION
-        self.dim = dim          # SPATIAL DIMENSION
         self.X = X              # POSITION COORDINATES
+        self.dim = len(X)       # SPATIAL DIMENSION
         self.I = I              # CURRENT
         self.Nturns = Nturns    # NUMBER OF TURNS (TOTAL CURRENT = I*Nturns)
         
@@ -67,13 +70,17 @@ class Coil:
         """
         return GreensBz(self.X,X) * self.I * self.Nturns
     
+    def Plot(self,ax):
+        ax.add_patch(plt.Circle((self.X[0],self.X[1]),dcoil,facecolor=coilcolor,edgecolor='k',linewidth=2))
+        ax.text(self.X[0]+0.4,self.X[1]+0.4,self.name)
+        return
+    
     
 class RectangularMultiCoil:
-    """
-    Class representing a tokamak's external solenoid (confinement magnet).
-    """
     
-    def __init__(self,name,dim,Xe,I,ncoils=1,Xcoils=None):
+    """ Class defining a tokamak's external magnet constituted of multiple single coils. """
+    
+    def __init__(self,name,Xe,I, nr=1, nz=4, padr = 0.05, padz = 0.1, Xcoils=None):
         """
         Constructor to initialize the Solenoid object with the provided attributes.
 
@@ -84,26 +91,30 @@ class RectangularMultiCoil:
             - I (float): The current carried by the solenoid.
         """
         
-        self.name = name        # IDENTIFICATION
-        self.dim = dim          # SPATIAL DIMENSION
-        self.Xe = Xe            # VERTICES COORDINATES MATRIX
-        self.I = I              # CURRENT
-        self.n = ncoils         # NUMBER OF COILS (IF Xcoils not specified)
-        self.Xcoils = Xcoils    # POSITIONS OF COILS CONSTITUTING MULTICOIL 
+        self.name = name            # IDENTIFICATION
+        self.Xe = Xe                # VERTICES COORDINATES MATRIX
+        self.dim = np.shape(Xe)[1]  # SPATIAL DIMENSION
+        self.I = I                  # CURRENT
+        self.n = nr*nz              # NUMBER OF COILS (IF Xcoils not specified)
+        self.Xcoils = Xcoils        # POSITIONS OF COILS CONSTITUTING MULTICOIL 
         
         # TRANSFORM SOLENOID INTO COIL STRUCTURE EQUIVALENT
         if type(Xcoils) == type(None):
-            self.Xcoils = self.Distribute_coils()
+            self.Xcoils = self.Distribute_coils(nr,nz,padr,padz)
+            
+        # CHECK THAT ncoils IS EQUAL TO THE DEFINED NUMBER OF COILS' POSITIONS
+        if self.n != np.shape(self.Xcoils)[0]:
+            self.n = np.shape(self.Xcoils)[0]
+            print('Multicoil '+self.name+': number of coils corrected to '+ str(self.n))
         
         self.COILS = list()
         for icoil, xcoil in enumerate(self.Xcoils):
             self.COILS.append(Coil(name = 'coil '+str(icoil),
-                                   dim = self.dim,
                                    X = xcoil,
-                                   I = self.I/self.Nturns))
+                                   I = self.I/self.n))
         return
     
-    def Distribute_coils(self):
+    def Distribute_coils(self, nr, nz, padr, padz):
         """
         Generate approximately n_points equally spaced within a rectangle.
         
@@ -111,22 +122,31 @@ class RectangularMultiCoil:
             Xcoils : np.ndarray of shape (<=n_points, 2)
                 Grid-aligned points inside the rectangle.
         """
-        xmax = np.max(self.Xe[:,0])
-        xmin = np.min(self.Xe[:,0])
-        ymax = np.max(self.Xe[:,1])
-        ymin = np.min(self.Xe[:,1])
+        # Determine domain boundaries
+        xmax = np.max(self.Xe[:, 0])
+        xmin = np.min(self.Xe[:, 0])
+        ymax = np.max(self.Xe[:, 1])
+        ymin = np.min(self.Xe[:, 1])
         
         width = xmax - xmin
         height = ymax - ymin
-        aspect_ratio = width / height
 
-        # Determine grid size
-        n_y = int(np.sqrt(self.n / aspect_ratio))
-        n_x = int(np.round(n_y * aspect_ratio))
+        # Compute padding
+        pad_x = width * padr
+        pad_y = height * padz
+
+        # Handle x (horizontal) positions
+        if nr == 1:
+            x = np.array([(xmin + xmax) / 2.0])  # center x
+        else:
+            x = np.linspace(xmin + pad_x, xmax - pad_x, nr)
+
+        # Handle y (vertical) positions
+        if nz == 1:
+            y = np.array([(ymin + ymax) / 2.0])  # center y
+        else:
+            y = np.linspace(ymin + pad_y, ymax - pad_y, nz)
         
-        # Generate equidistant grid
-        x = np.linspace(xmin, xmax, n_x)
-        y = np.linspace(ymin, ymax, n_y)
         grid_x, grid_y = np.meshgrid(x, y)
         Xcoils = np.column_stack((grid_x.ravel(), grid_y.ravel()))
         return Xcoils
@@ -137,7 +157,7 @@ class RectangularMultiCoil:
         """
         Psi_sole = 0.0
         for coil in self.COILS:
-            Psi_sole += coil.PSI(X)
+            Psi_sole += coil.Psi(X)
         return Psi_sole 
 
     def Br(self,X):
@@ -158,20 +178,49 @@ class RectangularMultiCoil:
             Bz_sole += coil.Bz(X)
         return Bz_sole
     
+    def Plot(self,ax):
+        for coil in self.COILS:
+            ax.add_patch(plt.Circle((coil.X[0],coil.X[1]),dcoil,facecolor=coilcolor,edgecolor='k',linewidth=2))
+        Xe = np.zeros([5,2])
+        Xe[:-1,:] = self.Xe[:4,:]
+        Xe[-1,:] = self.Xe[0,:]
+        ax.plot(Xe[:,0], Xe[:,1], color='black', linewidth=1)
+        ax.text(np.mean(self.Xe[:,0])+0.4,np.mean(self.Xe[:,1])+0.4,self.name)
+        return
 
 
 class QuadrilateralCoil:
     
-    def __init__(self, name, Xvertices, Itotal, ElOrder=2, QuadOrder=4):
+    """ Class defining a tokamak's external magnet with quadrilateral (non-null surface) cross-section. """
+    
+    def __init__(self, name, Itotal, ElOrder = 2, QuadOrder = 4, **kwargs):
         
         self.name = name                    # IDENTIFICATION
-        self.dim = np.shape(Xvertices,0)    # SPATIAL DIMENSION
-        self.Xvertices = Xvertices          # VERTICES COORDINATES MATRIX
-        self.I = Itotal                     # CURRENT
-        self.ElOrder = ElOrder              # ELEMENT ORDER
+        self.I = Itotal                     # TOTAL CURRENT PASSING THOUGH MAGNET CROSS-SECTION
+        self.area = None
+        self.Xvertices = None
+        self.Xcenter = None
         # QUADRILATERAL SHAPED MAGNET
+        self.ElOrder = ElOrder                    # ELEMENT ORDER
         self.ElType = 2                     
         self.numedges = 4
+        
+        # CASE WHERE THE VERTICES COORDINATES ARE GIVEN TO DEFINE CROSS-SECTION
+        if 'Xvertices' in kwargs:
+            self.dim = np.shape(kwargs['Xvertices'])[1]    # SPATIAL DIMENSION
+            self.Xvertices = kwargs['Xvertices']          # VERTICES COORDINATES MATRIX
+            self.Xcenter = np.array([np.mean(self.Xvertices[:,0]),np.mean(self.Xvertices[:,1])])
+        # CASE WHERE THE VERTICES ARE COMPUTED FROM CENTER POINT AND TOTAL AREA (ASSUMED SQUARE CROSS-SECTION)
+        elif 'Xcenter' in kwargs:
+            self.dim = np.shape(kwargs['Xcenter'])[0]    # SPATIAL DIMENSION
+            # COMPUTE QUADRILATERAL MAGNET VERTICES
+            self.Xcenter = kwargs['Xcenter']
+            self.area = kwargs['Area']
+            h = np.sqrt(self.area)/2
+            self.Xvertices = np.array([[self.Xcenter[0] - h, self.Xcenter[1] - h],  # bottom-left
+                                       [self.Xcenter[0] + h, self.Xcenter[1] - h],  # bottom-right
+                                       [self.Xcenter[0] + h, self.Xcenter[1] + h],  # top-right
+                                       [self.Xcenter[0] - h, self.Xcenter[1] + h]])  # top-left       
         
         # NUMERICAL INTEGRATION QUADRATURE
         self.ng = None          # NUMBER OF GAUSS INTEGRATION NODES FOR STANDARD 1D QUADRATURE
@@ -185,9 +234,10 @@ class QuadrilateralCoil:
         self.detJg = None           # MATRIX DETERMINANT OF JACOBIAN OF TRANSFORMATION FROM 2D REFERENCE ELEMENT TO 2D PHYSICAL ELEMENT, EVALUATED AT GAUSS INTEGRATION NODES 
         
         # COMPUTE QUADRILATERAL COIL AREA
-        self.area = compute_quadrilateral_area(self.Xe)
+        if type(self.area) == type(None):
+            self.area = compute_quadrilateral_area(self.Xvertices)
         # COMPUTE QUADRILATERAL HIGH-ORDER NODES
-        self.Xe = self.HO_QUA()
+        self.Xe = self.HO_quadrilateral()
         # COMPUTE NUMERICAL INTEGRATION QUADRATURE
         self.ComputeQuadrature(QuadOrder)
         self.CheckQuadrature()
@@ -213,7 +263,7 @@ class QuadrilateralCoil:
             inode = iedge
             jnode = (iedge+1)%self.numedges
             for k in range(1,self.ElOrder):
-                HOnode = np.array([self.Xvertices[inode,0]+((self.Xvertices[jnode,0]-self.Xvertices[inode,0])/self.ElOrder)*k,self.Xvertices[inode,1]+((self.Xvertices[jnode,1]-self.XeLIN[inode,1])/self.ElOrder)*k])
+                HOnode = np.array([self.Xvertices[inode,0]+((self.Xvertices[jnode,0]-self.Xvertices[inode,0])/self.ElOrder)*k,self.Xvertices[inode,1]+((self.Xvertices[jnode,1]-self.Xvertices[inode,1])/self.ElOrder)*k])
                 XeHO = np.concatenate((XeHO,HOnode.reshape((1,2))), axis=0)
         # INTERIOR HIGH-ORDER NODES:
         if self.ElOrder == 2:
@@ -288,6 +338,12 @@ class QuadrilateralCoil:
         for ig in range(self.ng):
             Br_coil += GreensBz(self.Xg[ig,:],X) * self.detJg[ig] * self.Wg[ig] * self.I/self.area
         return Bz_coil
+    
+    def Plot(self,ax):
+        #ax.add_patch(plt.Rectangle((magnet.Xe[0,0]-dsole,magnet.Xe[0,1]),dsole,magnet.Xe[1,1]-magnet.Xe[0,1],facecolor=self.magnetcolor,edgecolor='k',linewidth=3))
+        ax.add_patch(plt.Polygon(self.Xvertices,closed=True,facecolor=coilcolor,edgecolor='k',linewidth=3))
+        ax.text(self.Xcenter[0]+0.5,self.Xcenter[1], self.name)
+        return
     
 
 

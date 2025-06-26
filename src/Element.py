@@ -887,10 +887,6 @@ class Element:
             for ig in range(SUBELEM.ng):
                 SUBELEM.invJg[ig,:,:], SUBELEM.detJg[ig] = Jacobian(SUBELEM.Xe,dNdxistand2D[ig,:],dNdetastand2D[ig,:])
                 SUBELEM.detJg[ig] = abs(SUBELEM.detJg[ig])
-                
-        # CHECK NUMERICAL QUADRATURE
-        self.CheckQuadrature()
-                
         
         ######### ADAPTED QUADRATURE TO INTEGRATE OVER ELEMENTAL INTERFACE APPROXIMATION (1D)
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
@@ -912,6 +908,9 @@ class Element:
             self.InterfApprox.invJg[ig,:,:], self.InterfApprox.detJg[ig] = Jacobian(self.Xe,self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:])
             self.InterfApprox.detJg1D[ig] = Jacobian1D(self.InterfApprox.Xint,dNdxi1D[ig,:])
             self.InterfApprox.detJg[ig] = abs(self.InterfApprox.detJg[ig])
+            
+         # CHECK NUMERICAL QUADRATURE
+        self.CheckQuadrature()
             
         # COMPUTE OUTWARDS NORMAL VECTORS ON INTEGRATION NODES
         self.InterfaceNormals()

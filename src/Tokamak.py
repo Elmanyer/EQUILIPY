@@ -40,16 +40,9 @@ class Tokamak:
         
         # PLOT EXTERNAL MAGNETS
         if not type(self.MAGNETS) == type(None):
-            dcoil = 0.35
-            dsole = 1.5
             for magnet in self.MAGNETS:
-                if type(magnet) == Coil: 
-                    ax.add_patch(plt.Circle((magnet.X[0],magnet.X[1]),dcoil,facecolor=self.magnetcolor,edgecolor='k',linewidth=2))
-                    ax.text(magnet.X[0]+0.4,magnet.X[1]+0.4,magnet.name)
-                elif type(magnet) == Solenoid:
-                    ax.add_patch(plt.Rectangle((magnet.Xe[0,0]-dsole,magnet.Xe[0,1]),dsole,magnet.Xe[1,1]-magnet.Xe[0,1],facecolor=self.magnetcolor,edgecolor='k',linewidth=3))
-                    ax.text(magnet.Xe[0,0]-dsole+0.1,magnet.Xe[0,1]+(magnet.Xe[1,1]-magnet.Xe[0,1])/2, magnet.name)
-                    
+                magnet.Plot(ax)
+                
         ax.set_xlabel('R (in m)')
         ax.set_ylabel('Z (in m)')
         ax.set_title('Tokamak geometry')
