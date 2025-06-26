@@ -114,6 +114,8 @@ class InitialPlasmaBoundary:
         # PLOT PHI LEVEL-SET BACKGROUND VALUES 
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
+        ax.set_xlim(np.min(self.Xrec[:,0]),np.max(self.Xrec[:,0]))
+        ax.set_ylim(np.min(self.Xrec[:,1]),np.max(self.Xrec[:,1]))
         # Plot low-opacity background (outside plasma region)
         ax.tricontourf(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=30, alpha=0.5)
         # Plot level-set inside computational domain

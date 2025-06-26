@@ -111,7 +111,7 @@ class EquilipyInitialisation:
         print("     -> CLASSIFY ELEMENTS...", end="")
         self.MESH.IdentifyNearestNeighbors()
         self.MESH.IdentifyBoundaries()
-        self.MESH.ClassifyElements()
+        self.PlasmaLS[:,1] = self.MESH.ClassifyElements(self.PlasmaLS[:,1])
         print("Done!")
 
         # COMPUTE PLASMA BOUNDARY APPROXIMATION

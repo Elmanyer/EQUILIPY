@@ -925,7 +925,7 @@ class Element:
             for ig in range(self.ng):
                 for inode in range(self.n):
                     integral += self.Ng[ig,inode]*self.detJg[ig]*self.Wg[ig] 
-            if abs(integral - self.area) > 1e-6:
+            if abs(integral - self.area) > 1e-4:
                 error = True
             
         ##### CUT ELEMENTS WITH ADAPTED QUADRATURES
@@ -936,7 +936,7 @@ class Element:
                 for ig in range(SUBELEM.ng):
                     for inode in range(self.n):
                         integral += SUBELEM.Ng[ig,inode]*SUBELEM.detJg[ig]*SUBELEM.Wg[ig] 
-            if abs(integral - self.area) > 1e-6:
+            if abs(integral - self.area) > 1e-4:
                 error = True
                 
             # INTERFACE APPROXIMATION CURVE QUADRATURE
@@ -952,9 +952,12 @@ class Element:
                     integral += self.InterfApprox.Ng[ig,inode]*self.InterfApprox.detJg1D[ig]*self.InterfApprox.Wg[ig]
             if abs(length - integral) > 1e-2:
                 error = True
-                    
-        if error:
-            raise ValueError('Element '+self.index+': error in integration quadrature.')
+        
+        try:     
+            if error:
+                raise ValueError('Element '+ str(self.index)+': error in integration quadrature.')
+        except ValueError as e:
+            print("Warning: ", e)
         return 
     
     

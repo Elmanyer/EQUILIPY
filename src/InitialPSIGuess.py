@@ -182,6 +182,8 @@ class InitialGuess:
         #### FIGURE
         # PLOT INITIAL PSI GUESS BACKGROUND VALUES
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
+        ax.set_xlim(self.eq.MESH.Rmin-self.eq.dzoom,self.eq.MESH.Rmax+self.eq.dzoom)
+        ax.set_ylim(self.eq.MESH.Zmin-self.eq.dzoom,self.eq.MESH.Zmax+self.eq.dzoom)
         ax.set_aspect('equal')
         contourf = ax.tricontourf(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels=30, cmap=self.plasmacmap)
         contour = ax.tricontour(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels=30, colors='black', linewidths=1)

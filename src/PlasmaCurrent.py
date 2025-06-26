@@ -362,8 +362,8 @@ class CurrentModel:
         #### FIGURE
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        ax.set_xlim(self.eq.MESH.Rmin+0.1,self.eq.MESH.Rmax+0.1)
-        ax.set_ylim(self.eq.MESH.Zmin-0.1,self.eq.MESH.Zmax-0.1)
+        ax.set_xlim(self.eq.MESH.Rmin-self.eq.dzoom,self.eq.MESH.Rmax+self.eq.dzoom)
+        ax.set_ylim(self.eq.MESH.Zmin-self.eq.dzoom,self.eq.MESH.Zmax+self.eq.dzoom)
         
         # Plot low-opacity background (outside plasma region)
         contourf_bg = ax.tricontourf(self.eq.MESH.X[:,0], self.eq.MESH.X[:,1], Jphi, levels=30, alpha=0.8)

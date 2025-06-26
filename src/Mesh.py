@@ -382,7 +382,7 @@ class Mesh:
         return
     
     
-    def ClassifyElements(self):
+    def ClassifyElements(self,PlasmaLS):
         """ 
         Function that separates the elements inside vacuum vessel domain into 3 groups: 
                 - PlasmaElems: elements inside the plasma region 
@@ -440,7 +440,7 @@ class Mesh:
             if DHONplasma:
                 for inode in DHONplasma:  # LOOP OVER LOCAL INDICES 
                     self.Elements[ielem].LSe[inode] *= -1 
-                    self.PlasmaLS[self.Elements[ielem].Te[inode],1] *= -1       
+                    PlasmaLS[self.Elements[ielem].Te[inode]] *= -1       
         
         # DELETE REST OF UNUSED MEMORY
         self.PlasmaElems = self.PlasmaElems[:kplasm]
@@ -455,7 +455,7 @@ class Mesh:
         
         # CLASSIFY NODES ACCORDING TO NEW ELEMENT CLASSIFICATION
         #self.ClassifyNodes()
-        return
+        return PlasmaLS
     
     
     def ObtainClassification(self):

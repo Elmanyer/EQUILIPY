@@ -260,12 +260,12 @@ class EquilipyUpdate:
                 # UPDATE PLASMA REGION LEVEL-SET ELEMENTAL VALUES     
                 self.UpdateElementalPlasmaLevSet()
                 # CLASSIFY ELEMENTS ACCORDING TO NEW LEVEL-SET
-                self.ClassifyElements()
+                self.PlasmaLS[:,1] = self.MESH.ClassifyElements(self.PlasmaLS[:,1])
                 # RECOMPUTE PLASMA BOUNDARY APPROXIMATION and NORMAL VECTORS
-                self.ComputePlasmaBoundaryApproximation()
+                self.MESH.ComputePlasmaBoundaryApproximation()
                 # REIDENTIFY PLASMA BOUNDARY GHOST FACES
                 if self.GhostStabilization:
-                    self.ComputePlasmaBoundaryGhostFaces()
+                    self.MESH.ComputePlasmaBoundaryGhostFaces()
                 
                 ###### RECOMPUTE NUMERICAL INTEGRATION QUADRATURES
                 # COMPUTE STANDARD QUADRATURE ENTITIES FOR NON-CUT ELEMENTS
@@ -275,14 +275,14 @@ class EquilipyUpdate:
                 for ielem in self.MESH.PlasmaBoundElems:
                     self.MESH.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
                 # CHECK NORMAL VECTORS
-                self.CheckPlasmaBoundaryApproximationNormalVectors()
+                self.MESH.CheckPlasmaBoundaryApproximationNormalVectors()
                 # COMPUTE PLASMA BOUNDARY GHOST FACES QUADRATURES
                 if self.GhostStabilization:
                     for ielem in self.MESH.GhostElems: 
                         self.MESH.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
                     
                 # RECOMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION 
-                self.MESH.NnPB = self.ComputePlasmaBoundaryNumberNodes()
+                self.MESH.NnPB = self.MESH.ComputePlasmaBoundaryNumberNodes()
                 
                 # WRITE NEW PLASMA REGION DATA
                 self.writePlasmaBoundaryData()

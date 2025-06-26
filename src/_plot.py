@@ -139,6 +139,8 @@ class EquilipyPlotting:
         AND PSI_NORM IF NORMALISED. """
         
         def subplotfield(self,ax,field,normalised=True):
+            ax.set_xlim(self.MESH.Rmin-self.dzoom,self.MESH.Rmax+self.dzoom)
+            ax.set_ylim(self.MESH.Zmin-self.dzoom,self.MESH.Zmax+self.dzoom)
             if normalised:
                 psisep = self.PSIseparatrix
             else:
