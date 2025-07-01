@@ -84,8 +84,10 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.ext_it = None                  # EXTERNAL LOOP STRUCTURE ITERATIONS NUMBER
         self.int_it = None                  # INTERNAL LOOP STRUCTURE ITERATIONS NUMBER
         self.it_plasma = None               # ITERATION AFTER WHICH THE PLASMA REGION CAN BE UPDATED
+        self.tol_saddle = None              # TOLERANCE FOR DISTANCE BETWEEN CONSECUTIVE ITERATION SADDLE POINTS (LETS PLASMA REGION CHANGE)
         #### BOUNDARY CONSTRAINTS
         self.beta = None                    # NITSCHE'S METHOD PENALTY TERM
+        self.Nconstrainedges = None         # NUMBER OF PLAMA BOUNDARY APPROXIMATION EDGES ON WHICH CONSTRAIN BC
         #### STABILIZATION
         self.PSIrelax = False               # PSI SOLUTION AITKEN RELAXATION SWITCH
         self.lambdaPSI = None               # PHI LEVEL-SET AITKEN RELAXATION PARAMETER 
@@ -121,7 +123,8 @@ class GradShafranovSolver(EquilipyInitialisation,
         
         self.Brzfield = None                # MAGNETIC (R,Z) COMPONENTS FIELD AT INTEGRATION NODES
         
-        self.PSIseparatrix = 1.0
+        self.PSIseparatrix = 0.0            # PSI VALUE ON SEPARATRIX
+        self.PSI_NORMseparatrix = 1.0       # PSI_NORM VALUE ON SEPARATRIX
         
         ###############################
         # WORKING DIRECTORY
@@ -480,7 +483,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         # INTEGRATE OVER THE CUT EDGES IN ELEMENTS CUT BY INTERFACES (ADAPTED QUADRATURES)
         print("     Integrate along cut-elements interface edges...", end="")
         
-        for ielem in self.MESH.PlasmaBoundElems:
+        for ielem in self.MESH.PlasmaBoundActiveElems:
             # ISOLATE ELEMENT 
             ELEMENT = self.MESH.Elements[ielem]
             # COMPUTE ELEMENTAL MATRICES

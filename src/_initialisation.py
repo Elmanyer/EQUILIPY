@@ -20,11 +20,6 @@ class EquilipyInitialisation:
             
         # COMPUTE 1D NUMERICAL QUADRATURE ORDER
         self.QuadratureOrder1D = ceil(0.5*(self.QuadratureOrder2D+1))
-            
-        # INITIALISE CRITICAL POINTS ARRAY
-        self.Xcrit = np.zeros([2,2,3])  # [(iterations n, n+1), (extremum, saddle point), (R_crit,Z_crit,elem_crit)]
-        self.Xcrit[0,0,:-1] = np.array([self.R0_axis,self.Z0_axis])
-        self.Xcrit[0,1,:-1] = np.array([self.R0_saddle,self.Z0_saddle])
         
         # INITIALISE AITKEN'S RELAXATION LAMBDAS
         self.lambdaPSI = np.zeros([2])
@@ -116,6 +111,8 @@ class EquilipyInitialisation:
 
         # COMPUTE PLASMA BOUNDARY APPROXIMATION
         print("     -> APPROXIMATE PLASMA BOUNDARY INTERFACE...", end="")
+        self.MESH.ObtainPlasmaBoundaryElementalPath()
+        self.MESH.ObtainPlasmaBoundaryActiveElements(numelements = self.Nconstrainedges)
         self.MESH.ComputePlasmaBoundaryApproximation()
         print("Done!")
         
@@ -169,10 +166,22 @@ class EquilipyInitialisation:
         print('     -> COMPUTE INITIAL GUESS FOR PSI_NORM...', end="")
         self.PSI_NORM[:,0] = self.initialPSI.PSI0
         self.PSI_NORM[:,1] = self.PSI_NORM[:,0]
+        # INITIALISE CRITICAL POINTS ARRAY
+        self.Xcrit = np.zeros([2,2,3])  # [(iterations n, n+1), (extremum, saddle point), (R_crit,Z_crit,elem_crit)]
+        self.Xcrit[0,0,:-1] = self.initialPSI.Opoint0[0][0]
+        if not self.initialPSI.Xpoint0:
+            self.Xcrit[0,1,:-1] = np.zeros([2])
+        else:
+            self.Xcrit[0,1,:-1] = self.initialPSI.Xpoint0[0][0]
         self.PSI_0 = self.initialPSI.PSI0_0
-        self.PSI_X = self.initialPSI.PSI0_X
+        self.PSI_X = self.initialPSI.PSI0_X 
         # ASSIGN VALUES TO EACH ELEMENT
         self.UpdateElementalPSI()
+        print('Done!')  
+        
+        # ASSIGN PLASMA BOUNDARY VALUES
+        print('     -> ASSIGN INITIAL PLASMA BOUNDARY VALUES...', end="")
+        self.UpdatePlasmaBoundaryValues()
         print('Done!')  
         
         print('Done!') 
@@ -194,13 +203,9 @@ class EquilipyInitialisation:
         self.PSI_B[:,1] = self.PSI_B[:,0]
         print('Done!')
         
-        ####### ASSIGN CONSTRAINT VALUES ON PLASMA BOUNDARY
-        print('     -> ASSIGN INITIAL BOUNDARY VALUES...', end="")
-        # ASSIGN PLASMA BOUNDARY VALUES
-        self.PSI_X = self.PSIseparatrix   # INITIAL CONSTRAINT VALUE ON SEPARATRIX
-        self.UpdatePlasmaBoundaryValues()
+        print('     -> ASSIGN INITIAL VACUUM VESSEL BOUNDARY VALUES...', end="")
         self.UpdateVacuumVesselBoundaryValues()
-        print('Done!')  
+        print('Done!')
         
         print('Done!')  
         return

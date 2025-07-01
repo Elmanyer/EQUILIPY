@@ -107,7 +107,28 @@ class EquilipyCritical:
         else:       # IF INITIAL GUESSES X0 ARE DEFINED
             for x0 in X0:
                 sol = root(gradPSI, x0, args=(Rfine,Zfine,gradPSIfine))
-                if sol.success == True:
+                
+                if not sol.success:
+                    # LOOK IN SMALLER AREA NEAR GUESS WITH MORE RESOLUTION
+                    rfinewindow = np.linspace(x0[0]-0.5, x0[0]+0.5, nr)
+                    zfinewindow = np.linspace(x0[1]-0.5, x0[1]+0.5, nz)
+                    # INTERPOLATE PSI VALUES
+                    Rfinewindow, Zfinewindow = np.meshgrid(rfinewindow,zfinewindow, indexing='ij')
+                    PSIfinewindow = griddata((self.MESH.X[:,0],self.MESH.X[:,1]), PSI, (Rfinewindow, Zfinewindow), method='cubic')
+                    # CORRECT VALUES AT INTERPOLATION POINTS OUTSIDE OF COMPUTATIONAL DOMAIN
+                    for ir in range(nr):
+                        for iz in range(nz):
+                            if np.isnan(PSIfinewindow[ir,iz]):
+                                PSIfinewindow[ir,iz] = 0
+
+                    # 2. DEFINE GRAD(PSI) WITH FINER MESH VALUES USING FINITE DIFFERENCES
+                    drwindow = rfinewindow[1]-rfinewindow[0]
+                    dzwindow = zfinewindow[1]-zfinewindow[0]
+                    gradPSIfinewindow = np.gradient(PSIfinewindow,drwindow,dzwindow)
+        
+                    sol = root(gradPSI, x0, args=(Rfinewindow,Zfinewindow,gradPSIfinewindow))
+                
+                if sol.success:
                     # 4. LOCATE ELEMENT CONTAINING CRITICAL POINT
                     elemcrit = self.SearchElement(sol.x,range(self.MESH.Ne))
                     if type(elemcrit) == type(None):

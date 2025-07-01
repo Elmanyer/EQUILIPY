@@ -123,15 +123,15 @@ class InitialGuess:
         return PSI0
     
     def NormalisePSI(self,PSI,X0=None):
-        self.Opoint, self.Xpoint = self.eq.FindCritical(PSI,X0)
-        if not self.Opoint:
+        self.Opoint0, self.Xpoint0 = self.eq.FindCritical(PSI,X0)
+        if not self.Opoint0:
             raise ValueError("No O-points found!")
         else:
-            self.PSI0_0 = self.Opoint[0][1]
-        if not self.Xpoint:
+            self.PSI0_0 = self.Opoint0[0][1]
+        if not self.Xpoint0:
             self.PSI0_X = 0.0
         else:
-            self.PSI0_X = self.Xpoint[0][1]
+            self.PSI0_X = self.Xpoint0[0][1]
 
         # Calculate normalised psi.
         # 0 = magnetic axis

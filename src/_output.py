@@ -392,7 +392,7 @@ class EquilipyOutput:
         if self.out_plasmaBC:
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaBC.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
-            for ielem in self.MESH.PlasmaBoundElems:
+            for ielem in self.MESH.PlasmaBoundActiveElems:
                 INTAPPROX = self.MESH.Elements[ielem].InterfApprox
                 for ig in range(INTAPPROX.ng):
                     self.file_plasmaBC.write("{:d} {:d} {:d} {:f} {:f} {:f}\n".format(self.MESH.Elements[ielem].index,INTAPPROX.index,ig,INTAPPROX.Xg[ig,0],INTAPPROX.Xg[ig,1],INTAPPROX.PSIg[ig]))
@@ -404,7 +404,7 @@ class EquilipyOutput:
         if self.out_plasmaapprox:
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaapprox.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
-            for ielem in self.MESH.PlasmaBoundElems:
+            for ielem in self.MESH.PlasmaBoundActiveElems:
                 INTAPPROX = self.MESH.Elements[ielem].InterfApprox
                 for inode in range(INTAPPROX.n):
                     self.file_plasmaapprox.write("{:d} {:d} {:d} {:f} {:f}\n".format(self.MESH.Elements[ielem].index,INTAPPROX.index,inode,INTAPPROX.Xint[inode,0],INTAPPROX.Xint[inode,1]))
@@ -412,9 +412,9 @@ class EquilipyOutput:
                 self.file_plasmaapprox.write("END_ITERATION\n")
                 
         if self.out_pickle:
-            plasmaapprox = np.zeros([len(self.MESH.PlasmaBoundElems)*self.MESH.Elements[self.MESH.PlasmaBoundElems[0]].InterfApprox.n, 5])
+            plasmaapprox = np.zeros([len(self.MESH.PlasmaBoundActiveElems)*self.MESH.Elements[self.MESH.PlasmaBoundActiveElems[0]].InterfApprox.n, 5])
             counter = 0
-            for ielem in self.MESH.PlasmaBoundElems:
+            for ielem in self.MESH.PlasmaBoundActiveElems:
                 INTAPPROX = self.MESH.Elements[ielem].InterfApprox
                 for inode in range(INTAPPROX.n):
                     plasmaapprox[counter,0] = self.MESH.Elements[ielem].index

@@ -130,7 +130,7 @@ class EquilipyPlotting:
 
 
     def PlotElementalInterfaceApproximation(self,interface_index):
-        self.MESH.Elements[self.MESH.PlasmaBoundElems[interface_index]].PlotInterfaceApproximation(self.InitialPlasmaLevelSetFunction)
+        self.MESH.Elements[self.MESH.PlasmaBoundActiveElems[interface_index]].PlotInterfaceApproximation(self.InitialPlasmaLevelSetFunction)
         return
 
 
@@ -142,7 +142,7 @@ class EquilipyPlotting:
             ax.set_xlim(self.MESH.Rmin-self.dzoom,self.MESH.Rmax+self.dzoom)
             ax.set_ylim(self.MESH.Zmin-self.dzoom,self.MESH.Zmax+self.dzoom)
             if normalised:
-                psisep = self.PSIseparatrix
+                psisep = self.PSI_NORMseparatrix
             else:
                 psisep = self.PSI_X
             contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], field, levels=50, cmap=self.plasmacmap)
@@ -243,6 +243,32 @@ class EquilipyPlotting:
             plt.show(block=False)
             plt.pause(0.8)
             
+        return
+
+
+    def PlotPlasmaBoundContrainedEdges(self):
+        
+        #### FIGURE
+        # PLOT PHI LEVEL-SET BACKGROUND VALUES 
+        fig, ax = plt.subplots(1, 1, figsize=(5,6))
+        ax.set_aspect('equal')
+        ax.set_xlim(self.MESH.Rmin,self.MESH.Rmax)
+        ax.set_ylim(self.MESH.Zmin,self.MESH.Zmax)
+        ax.set_xlabel('R (in m)')
+        ax.set_ylabel('Z (in m)')
+        # Plot low-opacity background (outside plasma region)
+        ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1],self.PlasmaLS[:,1],levels=30)
+        # PLOT PLASMA BOUNDARY
+        ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1],self.PlasmaLS[:,1],levels=[0],colors='red', linewidths=3)
+        # PLOT CONSTRAINED EDGES
+        for ielem in self.MESH.PlasmaBoundActiveElems:
+            ax.plot([self.MESH.Elements[ielem].InterfApprox.Xint[1,0],self.MESH.Elements[ielem].InterfApprox.Xint[0,0]],
+                    [self.MESH.Elements[ielem].InterfApprox.Xint[1,1],self.MESH.Elements[ielem].InterfApprox.Xint[0,1]],'-o',color = 'green')
+
+        # PLOT MESH BOUNDARY
+        for iboun in range(self.MESH.Nbound):
+            ax.plot(self.MESH.X[self.MESH.Tbound[iboun,:2],0],self.MESH.X[self.MESH.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
+        
         return
 
 

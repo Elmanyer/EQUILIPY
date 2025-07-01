@@ -82,7 +82,7 @@ class EquilipyUpdate:
         """
         Updates the plasma boundary PSI values constraints (PSIgseg) on the interface approximation segments integration points.
         """
-        for ielem in self.MESH.PlasmaBoundElems:
+        for ielem in self.MESH.PlasmaBoundActiveElems:
             INTAPPROX = self.MESH.Elements[ielem].InterfApprox
             # INITIALISE BOUNDARY VALUES
             INTAPPROX.PSIg = np.zeros([INTAPPROX.ng])
@@ -93,8 +93,7 @@ class EquilipyUpdate:
                     INTAPPROX.PSIg[ig] = self.PlasmaCurrent.PSIanalytical(INTAPPROX.Xg[ig,:],NORMALISED=True)
                 # FREE BOUNDARY PROBLEM -> PLASMA BOUNDARY VALUES = SEPARATRIX VALUE
                 else:
-                    INTAPPROX.PSIg[ig] = self.PSI_X
-                    #INTAPPROX.PSIg[ig] = self.PSIseparatrix
+                    INTAPPROX.PSIg[ig] = self.PSIseparatrix
         return
     
     def UpdateVacuumVesselBoundaryValues(self):
@@ -110,11 +109,11 @@ class EquilipyUpdate:
     
 
     
-    def ComputePSILevelSet(self,PSI):
+    def ComputePSILevelSet(self,PSI_NORM):
         
         # OBTAIN POINTS CONFORMING THE NEW PLASMA DOMAIN BOUNDARY
         fig, ax = plt.subplots(figsize=(6, 8))
-        cs = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], PSI-1.0, levels=[self.PSIseparatrix-1.0])
+        cs = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], PSI_NORM, levels=[self.PSI_NORMseparatrix])
 
         paths = list()
 
@@ -194,7 +193,7 @@ class EquilipyUpdate:
         inside = polygon_path.contains_points(self.MESH.X)
 
         # FORCE PLASMA LEVEL-SET SIGN DEPENDING ON REGION
-        PSILevSet = 1.0-PSI.copy()
+        PSILevSet = self.PSI_NORMseparatrix - PSI_NORM.copy()
         for inode in range(self.MESH.Nn):
             if inside[inode]:
                 PSILevSet[inode] = -np.abs(PSILevSet[inode])
@@ -228,7 +227,7 @@ class EquilipyUpdate:
             # IN CASE WHERE THE NEW SADDLE POINT (N+1) CORRESPONDS (CLOSE TO) TO THE OLD SADDLE POINT, THEN THAT MEANS THAT THE PLASMA REGION
             # IS ALREADY WELL DEFINED BY THE OLD LEVEL-SET 
             
-            if self.it >= self.it_plasma and np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]) > 0.2:
+            if self.it >= self.it_plasma and np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]) > self.tol_saddle:
 
                 ###### UPDATE PLASMA REGION LEVEL-SET FUNCTION VALUES ACCORDING TO SOLUTION OBTAINED
                 # . RECALL THAT PLASMA REGION IS DEFINED BY NEGATIVE VALUES OF LEVEL-SET -> NEED TO INVERT SIGN
@@ -262,6 +261,8 @@ class EquilipyUpdate:
                 # CLASSIFY ELEMENTS ACCORDING TO NEW LEVEL-SET
                 self.PlasmaLS[:,1] = self.MESH.ClassifyElements(self.PlasmaLS[:,1])
                 # RECOMPUTE PLASMA BOUNDARY APPROXIMATION and NORMAL VECTORS
+                self.MESH.ObtainPlasmaBoundaryElementalPath()
+                self.MESH.ObtainPlasmaBoundaryActiveElements(numelements = self.Nconstrainedges)
                 self.MESH.ComputePlasmaBoundaryApproximation()
                 # REIDENTIFY PLASMA BOUNDARY GHOST FACES
                 if self.GhostStabilization:
@@ -273,9 +274,10 @@ class EquilipyUpdate:
                     self.MESH.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
                 # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
                 for ielem in self.MESH.PlasmaBoundElems:
-                    self.MESH.Elements[ielem].ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
-                # CHECK NORMAL VECTORS
-                self.MESH.CheckPlasmaBoundaryApproximationNormalVectors()
+                    self.MESH.Elements[ielem].ComputeAdaptedQuadratures2D(self.QuadratureOrder2D)
+                for ielem in self.MESH.PlasmaBoundActiveElems:
+                    self.MESH.Elements[ielem].ComputeAdaptedQuadrature1D(self.QuadratureOrder1D)
+                    
                 # COMPUTE PLASMA BOUNDARY GHOST FACES QUADRATURES
                 if self.GhostStabilization:
                     for ielem in self.MESH.GhostElems: 
@@ -286,7 +288,10 @@ class EquilipyUpdate:
                 
                 # WRITE NEW PLASMA REGION DATA
                 self.writePlasmaBoundaryData()
-            
-            # UPDATE CRITICAL VALUES
-            self.Xcrit[0,:,:] = self.Xcrit[1,:,:]        
+                
+                # UPDATE CRITICAL VALUES
+                self.Xcrit[0,:,:] = self.Xcrit[1,:,:] 
+            else:
+                print("Plasma region unchanged: distance between consecutive saddle points = ", np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]))
+                print(" ")   
             return

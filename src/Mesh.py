@@ -43,6 +43,7 @@ class Mesh:
         self.PlasmaElems = None             # LIST OF ELEMENTS (INDEXES) INSIDE PLASMA REGION
         self.VacuumElems = None             # LIST OF ELEMENTS (INDEXES) OUTSIDE PLASMA REGION (VACUUM REGION)
         self.PlasmaBoundElems = None        # LIST OF CUT ELEMENT'S INDEXES, CONTAINING INTERFACE BETWEEN PLASMA AND VACUUM
+        self.PlasmaBoundActiveElems = None  # LIST OF CUT ELEMENT'S INDEXES, CONTAINING INTERFACE BETWEEN PLASMA AND VACUUM, ON WHICH BC ARE APPLIED
         self.FirstWallElems = None          # LIST OF CUT (OR NOT) ELEMENT'S INDEXES, CONTAINING VACUUM VESSEL FIRST WALL (OR COMPUTATIONAL DOMAIN'S BOUNDARY)
         self.NonCutElems = None             # LIST OF ALL NON CUT ELEMENTS
         self.DirichletElems = None          # LIST OF ALL ELEMENTS POSSESSING A BOUNDARY NODE (NODE ON WHICH APPLY DIRICHLET BC)
@@ -510,12 +511,48 @@ class Mesh:
     ############################### PLASMA BOUNDARY APPROXIMATION ####################################
     ##################################################################################################
     
+    def ObtainPlasmaBoundaryElementalPath(self):
+        self.PlasmaBoundElemPath = list()
+        # INTIALISE PATH LIST
+        self.PlasmaBoundElemPath.append(self.PlasmaBoundElems[0])
+        # CONSTRUCT PATH
+        for ielem in range(len(self.PlasmaBoundElems)-1):
+            # LOOK AT ELEMENT NEIGHBOURS
+            for ineigh in self.Elements[self.PlasmaBoundElemPath[ielem]].neighbours:
+                if ineigh == -1:
+                    pass
+                else:
+                    # IF NEIGHBOUR ELEMENT IS PLASMA BOUNDARY ELEMENT
+                    if self.Elements[ineigh].Dom == 0:
+                        # IF FIRST ITERATION 
+                        if ielem == 0:
+                            self.PlasmaBoundElemPath.append(self.Elements[ineigh].index)
+                            break
+                        else:
+                            # CHECK THAT IS NOT THE PREVIOUS ADJACENT ELEMENT
+                            if ineigh != self.PlasmaBoundElemPath[ielem-1]:
+                                self.PlasmaBoundElemPath.append(self.Elements[ineigh].index)
+                                break
+        return
+    
+    
+    def ObtainPlasmaBoundaryActiveElements(self,numelements = -1):
+        # PLASMA BOUNDARY ACTIVE ELEMS = PLASMA BOUNDARY ELEMS  --> CONSTRAIN BC ON ALL PLASMA BOUNDARY ELEMS
+        if numelements == -1:
+            self.PlasmaBoundActiveElems = self.PlasmaBoundElemPath
+        # SELECT EQUIDISTANT PLASMA BOUNDARY ELEMENTS 
+        else:
+            indices = np.linspace(0, len(self.PlasmaBoundElemPath) - 1, numelements, dtype=int)
+            self.PlasmaBoundActiveElems = np.array(self.PlasmaBoundElemPath)[indices]
+        return
+    
+    
     def ComputePlasmaBoundaryNumberNodes(self):
         """
         Computes the total number of nodes located on the plasma boundary approximation
         """  
         nnodes = 0
-        for ielem in self.PlasmaBoundElems:
+        for ielem in self.PlasmaBoundActiveElems:
             nnodes += self.Elements[ielem].InterfApprox.ng
         return nnodes
     
@@ -530,28 +567,6 @@ class Mesh:
         for inter, ielem in enumerate(self.PlasmaBoundElems):
             # APPROXIMATE PLASMA/VACUUM INTERACE GEOMETRY CUTTING ELEMENT 
             self.Elements[ielem].InterfaceApproximation(inter)
-        return
-    
-    
-    def CheckPlasmaBoundaryApproximationNormalVectors(self):
-        """
-        This function verifies if the normal vectors at the plasma boundary approximation are unitary and orthogonal to 
-        the corresponding interface. It checks the dot product between the segment direction vector and the 
-        normal vector, raising an exception if the dot product is not close to zero (indicating non-orthogonality).
-        """
-
-        for ielem in self.PlasmaBoundElems:
-            for ig, vec in enumerate(self.Elements[ielem].InterfApprox.NormalVec):
-                # CHECK UNIT LENGTH
-                if np.abs(np.linalg.norm(vec)-1) > 1e-6:
-                    raise Exception('Normal vector norm equals',np.linalg.norm(vec), 'for mesh element', ielem, ": Normal vector not unitary")
-                # CHECK ORTHOGONALITY
-                Ngrad = self.Elements[ielem].InterfApprox.invJg[ig,:,:]@np.array([self.Elements[ielem].InterfApprox.dNdxig[ig,:],self.Elements[ielem].InterfApprox.dNdetag[ig,:]])
-                dphidr, dphidz = Ngrad@self.Elements[ielem].LSe
-                tangvec = np.array([-dphidz, dphidr]) 
-                scalarprod = np.dot(tangvec,vec)
-                if scalarprod > 1e-10: 
-                    raise Exception('Dot product equals',scalarprod, 'for mesh element', ielem, ": Normal vector not perpendicular")
         return
     
     
@@ -691,9 +706,10 @@ class Mesh:
             
         # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
         for ielem in self.PlasmaBoundElems:
-            self.Elements[ielem].ComputeAdaptedQuadratures(QuadOrder2D,QuadOrder1D)
-        # CHECK NORMAL VECTORS
-        self.CheckPlasmaBoundaryApproximationNormalVectors()
+            self.Elements[ielem].ComputeAdaptedQuadratures2D(QuadOrder2D)
+            
+        for ielem in self.PlasmaBoundActiveElems:
+            self.Elements[ielem].ComputeAdaptedQuadrature1D(QuadOrder1D)
         return
     
     

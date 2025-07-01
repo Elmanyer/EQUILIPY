@@ -41,7 +41,7 @@ class Element:
     ################################ ELEMENT INITIALISATION ##########################################
     ##################################################################################################
     
-    def __init__(self,index,ElType,ElOrder,Xe,Te,PlasmaLSe):
+    def __init__(self,index,ElType,ElOrder,Xe,Te,PlasmaLSe,interfedge=-1):
         """ 
         Initializes an element object with the specified properties, including its type, order, nodal coordinates, 
         and level-set values for the plasma and vacuum vessel regions. 
@@ -95,8 +95,8 @@ class Element:
         self.GhostFaces = None      # LIST OF SEGMENT OBJECTS CORRESPONDING TO ELEMENTAL EDGES WHICH ARE INTEGRATED AS GHOST PENALTY TERMS
         self.Nesub = None           # NUMBER OF SUBELEMENTS GENERATED IN TESSELLATION
         self.SubElements = None
-        self.interfedge = None
-        
+        self.interfedge = interfedge  # LOCAL INDEX OF EDGE CORRESPONDING TO INTERFACE CUT (interfedge = -1  IF NONCUT ELEMENT)
+                
         self.area, self.length = self.ComputeArea_Length()
         return
     
@@ -107,18 +107,41 @@ class Element:
     def ComputeArea(self):
         match self.ElType:
             case 1:
-                area = compute_triangle_area(self.Xe)
+                # REGULAR TRIANGLE
+                if self.interfedge == -1:  
+                    area = compute_triangle_area(self.Xe)
+                # CUT ELEMENT SUBTRIANGLE
+                else:
+                    Xepoly = np.zeros([3+self.ElOrder-1,2])
+                    ipoint = 0
+                    for iedge in range(self.nedge):
+                        inode = iedge
+                        jnode = int((iedge+1)%self.nedge)
+                        if iedge == 0:
+                            Xepoly[ipoint,:] = self.Xe[inode,:]
+                            Xepoly[ipoint+1,:] = self.Xe[jnode,:]
+                            ipoint += 2
+                        elif iedge == self.interfedge:
+                            inodeHO = self.nedge+(self.ElOrder-1)*inode
+                            Xepoly[ipoint:ipoint+(self.ElOrder-1),:] = self.Xe[inodeHO:inodeHO+(self.ElOrder-1),:]
+                            ipoint += self.ElOrder-1
+                        else:
+                            Xepoly[ipoint,:] = self.Xe[inode,:]
+                            ipoint += 1
+                            
+                    area = polygon_area(Xepoly,self.ElOrder,self.interfedge)
+
             case 2:
                 area = compute_quadrilateral_area(self.Xe)
+                
         return area
     
-    def ComputeArea_Length(self):
+    def ComputeArea_Length(self):  
+        area = self.ComputeArea()
         match self.ElType:
             case 1:
-                area = compute_triangle_area(self.Xe)
                 length = np.sqrt(4*area/np.sqrt(3)) 
             case 2:
-                area = compute_quadrilateral_area(self.Xe)
                 length = np.sqrt(area)
         return area, length
     
@@ -528,6 +551,22 @@ class Element:
                 self.InterfApprox.NormalVec.append(-1*ntest_rz)
                 self.InterfApprox.NormalVecREF.append(-1*ntest_xieta)
         return 
+    
+    
+    def CheckInterfaceNormals(self):
+        
+        for ig, vec in enumerate(self.InterfApprox.NormalVec):
+            # CHECK UNIT LENGTH
+            if np.abs(np.linalg.norm(vec)-1) > 1e-6:
+                raise Exception('Normal vector norm equals',np.linalg.norm(vec), 'for mesh element', self.index, ": Normal vector not unitary")
+            # CHECK ORTHOGONALITY
+            Ngrad = self.InterfApprox.invJg[ig,:,:]@np.array([self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:]])
+            dphidr, dphidz = Ngrad@self.LSe
+            tangvec = np.array([-dphidz, dphidr]) 
+            scalarprod = np.dot(tangvec,vec)
+            if scalarprod > 1e-10: 
+                raise Exception('Dot product equals',scalarprod, 'for mesh element', self.index, ": Normal vector not perpendicular")
+        return
      
     
     def GhostFacesNormals(self):
@@ -816,11 +855,11 @@ class Element:
             self.detJg[ig] = abs(self.detJg[ig])
         
         # CHECK NUMERICAL QUADRATURE
-        self.CheckQuadrature()
+        self.CheckQuadrature2D()
         return    
     
     
-    def ComputeAdaptedQuadratures(self,NumQuadOrder2D,NumQuadOrder1D):
+    def ComputeAdaptedQuadratures2D(self,NumQuadOrder2D):
         """ 
         Computes the numerical integration quadratures for both 2D and 1D elements that are cut by an interface. 
         This function uses an adapted quadrature approach, modifying the standard FEM quadrature method to accommodate 
@@ -840,7 +879,7 @@ class Element:
         
         ######### ADAPTED QUADRATURE TO INTEGRATE OVER ELEMENTAL SUBELEMENTS (2D)
         # TESSELLATE REFERENCE ELEMENT
-        self.Nesub, SubElType, XIeTESSHO, self.interfedge = self.ReferenceElementTessellation()
+        self.Nesub, SubElType, XIeTESSHO, interfedge = self.ReferenceElementTessellation()
         # MAP TESSELLATION TO PHYSICAL SPACE
         XeTESSHO = list()
         for isub in range(self.Nesub):
@@ -855,7 +894,8 @@ class Element:
                                     ElOrder = self.ElOrder,
                                     Xe = XeTESSHO[isubel],
                                     Te = self.Te,
-                                    PlasmaLSe = None) for isubel in range(self.Nesub)]
+                                    PlasmaLSe = None,
+                                    interfedge = interfedge[isubel]) for isubel in range(self.Nesub)]
         
         for isub, SUBELEM in enumerate(self.SubElements):
             #### ASSIGN REFERENCE SPACE TESSELLATION
@@ -888,6 +928,13 @@ class Element:
                 SUBELEM.invJg[ig,:,:], SUBELEM.detJg[ig] = Jacobian(SUBELEM.Xe,dNdxistand2D[ig,:],dNdetastand2D[ig,:])
                 SUBELEM.detJg[ig] = abs(SUBELEM.detJg[ig])
         
+            # CHECK NUMERICAL QUADRATURE
+            SUBELEM.CheckQuadrature2D(elemindex = self.index)
+        return
+    
+    
+    def ComputeAdaptedQuadrature1D(self,NumQuadOrder1D):
+        
         ######### ADAPTED QUADRATURE TO INTEGRATE OVER ELEMENTAL INTERFACE APPROXIMATION (1D)
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
         XIg1Dstand, self.InterfApprox.Wg, self.InterfApprox.ng = GaussQuadrature(0,NumQuadOrder1D)
@@ -909,56 +956,63 @@ class Element:
             self.InterfApprox.detJg1D[ig] = Jacobian1D(self.InterfApprox.Xint,dNdxi1D[ig,:])
             self.InterfApprox.detJg[ig] = abs(self.InterfApprox.detJg[ig])
             
-         # CHECK NUMERICAL QUADRATURE
-        self.CheckQuadrature()
+        # CHECK NUMERICAL QUADRATURE
+        self.CheckQuadrature1D()
             
         # COMPUTE OUTWARDS NORMAL VECTORS ON INTEGRATION NODES
         self.InterfaceNormals()
+        
+        # CHECK ORTHOGONALITY OF NORMAL VECTORS
+        self.CheckInterfaceNormals()
         return
     
-    def CheckQuadrature(self):
+    
+    def CheckQuadrature2D(self, elemindex = -1, tol=1e-4):
         # CHECK NUMERICAL INTEGRATION QUADRATURE BY INTEGRATING AREA
         error = False
-        ##### STANDARD QUADRATURE ELEMENTS
-        if type(self.SubElements) == type(None):
-            integral = 0
-            for ig in range(self.ng):
-                for inode in range(self.n):
-                    integral += self.Ng[ig,inode]*self.detJg[ig]*self.Wg[ig] 
-            if abs(integral - self.area) > 1e-4:
-                error = True
-            
-        ##### CUT ELEMENTS WITH ADAPTED QUADRATURES
-        else:
-            # SUBELEMENTAL SURFACE QUADRATURES
-            integral = 0
-            for SUBELEM in self.SubElements:
-                for ig in range(SUBELEM.ng):
-                    for inode in range(self.n):
-                        integral += SUBELEM.Ng[ig,inode]*SUBELEM.detJg[ig]*SUBELEM.Wg[ig] 
-            if abs(integral - self.area) > 1e-4:
-                error = True
-                
-            # INTERFACE APPROXIMATION CURVE QUADRATURE
-            # PIECE-WISE LINEAR APPROXIMATION
-            length = 0
-            for inode in range(self.ElOrder):
-                lengthi = np.linalg.norm(self.InterfApprox.Xint[self.InterfApprox.Tint[inode+1],:]-self.InterfApprox.Xint[self.InterfApprox.Tint[inode],:])
-                length += lengthi
-            
-            integral = 0
-            for ig in range(self.InterfApprox.ng):
-                for inode in range(self.n):
-                    integral += self.InterfApprox.Ng[ig,inode]*self.InterfApprox.detJg1D[ig]*self.InterfApprox.Wg[ig]
-            if abs(length - integral) > 1e-2:
-                error = True
+        integral = 0
+        for ig in range(self.ng):
+            for inode in range(self.n):
+                integral += self.Ng[ig,inode]*self.detJg[ig]*self.Wg[ig] 
+        if abs(integral - self.area) > tol:
+            error = True
         
         try:     
             if error:
-                raise ValueError('Element '+ str(self.index)+': error in integration quadrature.')
+                if elemindex == -1:
+                    raise ValueError('Element '+ str(self.index)+': surface integration quadrature is not accurate.')
+                else:
+                    raise ValueError('Element '+ str(elemindex)+', subelem '+str(self.index)+': surface integration quadrature is not accurate.')
         except ValueError as e:
             print("Warning: ", e)
         return 
+    
+    
+    def CheckQuadrature1D(self, tol=1e-2):
+        # CHECK CUT ELEMENTS NUMERICAL INTEGRATION QUADRATURE BY INTEGRATING ARC LENGTH
+        error = False
+        
+        # PIECE-WISE LINEAR APPROXIMATION
+        length = 0
+        for inode in range(self.ElOrder):
+            lengthi = np.linalg.norm(self.InterfApprox.Xint[self.InterfApprox.Tint[inode+1],:]-self.InterfApprox.Xint[self.InterfApprox.Tint[inode],:])
+            length += lengthi
+        
+        integral = 0
+        for ig in range(self.InterfApprox.ng):
+            for inode in range(self.n):
+                integral += self.InterfApprox.Ng[ig,inode]*self.InterfApprox.detJg1D[ig]*self.InterfApprox.Wg[ig]
+                
+        if abs(length - integral) > tol:
+            error = True
+                
+        try:     
+            if error:
+                raise ValueError('Element '+ str(self.index)+': arc length integration quadrature is not accurate.')
+        except ValueError as e:
+            print("Warning: ", e)
+            
+        return
     
     
     def ComputeGhostFacesQuadratures(self,NumQuadOrder1D):
@@ -1156,7 +1210,7 @@ class Element:
             for iedge in range(SUBELEM.nedge):
                 inode = iedge
                 jnode = int((iedge+1)%SUBELEM.nedge)
-                if iedge == self.interfedge[isub]:
+                if iedge == SUBELEM.interfedge:
                     inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
                     xcoords = [SUBELEM.XIe[inode,0],SUBELEM.XIe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),0],SUBELEM.XIe[jnode,0]]
                     xcoords = list(chain.from_iterable([x] if not isinstance(x, np.ndarray) else x for x in xcoords))
@@ -1180,7 +1234,7 @@ class Element:
         totalintegral = 0  
         for isub, SUBELEM in enumerate(self.SubElements):
             # COMPUTE AREA ARITHMETICALLY
-            if self.interfedge[isub] == -1:  # REGULAR TRIANGLE
+            if SUBELEM.interfedge == -1:  # REGULAR TRIANGLE
                 area = compute_triangle_area(SUBELEM.XIe)
             else:
                 Xepoly = np.zeros([3+SUBELEM.ElOrder-1,2])
@@ -1192,14 +1246,14 @@ class Element:
                         Xepoly[ipoint,:] = SUBELEM.XIe[inode,:]
                         Xepoly[ipoint+1,:] = SUBELEM.XIe[jnode,:]
                         ipoint += 2
-                    elif iedge == self.interfedge[isub]:
+                    elif iedge == SUBELEM.interfedge:
                         inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
                         Xepoly[ipoint:ipoint+(SUBELEM.ElOrder-1),:] = SUBELEM.XIe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),:]
                         ipoint += SUBELEM.ElOrder-1
                     else:
                         Xepoly[ipoint,:] = SUBELEM.XIe[inode,:]
                         ipoint += 1
-                area = polygon_area(Xepoly,SUBELEM.ElOrder,self.interfedge[isub])
+                area = polygon_area(Xepoly,SUBELEM.ElOrder,SUBELEM.interfedge)
             
             #area = compute_triangle_area(Xesub)
             
@@ -1333,7 +1387,7 @@ class Element:
         totalintegral = 0  
         for isub, SUBELEM in enumerate(self.SubElements):
             # COMPUTE AREA ARITHMETICALLY
-            if self.interfedge[isub] == -1:  # REGULAR TRIANGLE
+            if SUBELEM.interfedge == -1:  # REGULAR TRIANGLE
                 area = compute_triangle_area(SUBELEM.Xe)
             else:
                 Xepoly = np.zeros([3+SUBELEM.ElOrder-1,2])
@@ -1345,14 +1399,14 @@ class Element:
                         Xepoly[ipoint,:] = SUBELEM.Xe[inode,:]
                         Xepoly[ipoint+1,:] = SUBELEM.Xe[jnode,:]
                         ipoint += 2
-                    elif iedge == self.interfedge[isub]:
+                    elif iedge == SUBELEM.interfedge:
                         inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
                         Xepoly[ipoint:ipoint+(SUBELEM.ElOrder-1),:] = SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),:]
                         ipoint += SUBELEM.ElOrder-1
                     else:
                         Xepoly[ipoint,:] = SUBELEM.Xe[inode,:]
                         ipoint += 1
-                area = polygon_area(Xepoly,SUBELEM.ElOrder,self.interfedge[isub])
+                area = polygon_area(Xepoly,SUBELEM.ElOrder,SUBELEM.interfedge)
             
             # COMPUTE INTEGRAL
             integral = 0
