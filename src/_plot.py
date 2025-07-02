@@ -64,6 +64,8 @@ class EquilipyPlotting:
         # PLOT COMPUTATIONAL DOMAIN
         if plotmesh:
             self.MESH.Plot(ax = ax)
+        else:
+            self.MESH.PlotBoundary(ax = ax)
         # PLOT TOKAMAK
         self.TOKAMAK.PlotFirstWall(ax = ax)
         self.TOKAMAK.PlotMagnets(ax = ax)
