@@ -297,6 +297,7 @@ class Mesh:
     def DimensionlessCoordinates(self,R0): 
         for ELEMENT in self.Elements:
             ELEMENT.Xe /= R0
+            ELEMENT.area, ELEMENT.length = ELEMENT.ComputeArea_Length()
         return 
     
     
@@ -512,38 +513,45 @@ class Mesh:
     ##################################################################################################
     
     def ObtainPlasmaBoundaryElementalPath(self):
+        
         self.PlasmaBoundElemPath = list()
-        # INTIALISE PATH LIST
-        self.PlasmaBoundElemPath.append(self.PlasmaBoundElems[0])
-        # CONSTRUCT PATH
-        for ielem in range(len(self.PlasmaBoundElems)-1):
-            # LOOK AT ELEMENT NEIGHBOURS
-            for ineigh in self.Elements[self.PlasmaBoundElemPath[ielem]].neighbours:
-                if ineigh == -1:
-                    pass
-                else:
-                    # IF NEIGHBOUR ELEMENT IS PLASMA BOUNDARY ELEMENT
-                    if self.Elements[ineigh].Dom == 0:
-                        # IF FIRST ITERATION 
-                        if ielem == 0:
-                            self.PlasmaBoundElemPath.append(self.Elements[ineigh].index)
-                            break
-                        else:
-                            # CHECK THAT IS NOT THE PREVIOUS ADJACENT ELEMENT
-                            if ineigh != self.PlasmaBoundElemPath[ielem-1]:
+        
+        if self.PlasmaBoundElems.size != 0:
+            # INTIALISE PATH LIST
+            self.PlasmaBoundElemPath.append(self.PlasmaBoundElems[0])
+            # CONSTRUCT PATH
+            for ielem in range(len(self.PlasmaBoundElems)-1):
+                # LOOK AT ELEMENT NEIGHBOURS
+                for ineigh in self.Elements[self.PlasmaBoundElemPath[ielem]].neighbours:
+                    if ineigh == -1:
+                        pass
+                    else:
+                        # IF NEIGHBOUR ELEMENT IS PLASMA BOUNDARY ELEMENT
+                        if self.Elements[ineigh].Dom == 0:
+                            # IF FIRST ITERATION 
+                            if ielem == 0:
                                 self.PlasmaBoundElemPath.append(self.Elements[ineigh].index)
                                 break
+                            else:
+                                # CHECK THAT IS NOT THE PREVIOUS ADJACENT ELEMENT
+                                if ineigh != self.PlasmaBoundElemPath[ielem-1]:
+                                    self.PlasmaBoundElemPath.append(self.Elements[ineigh].index)
+                                    break
+        
         return
     
     
     def ObtainPlasmaBoundaryActiveElements(self,numelements = -1):
-        # PLASMA BOUNDARY ACTIVE ELEMS = PLASMA BOUNDARY ELEMS  --> CONSTRAIN BC ON ALL PLASMA BOUNDARY ELEMS
-        if numelements == -1:
-            self.PlasmaBoundActiveElems = self.PlasmaBoundElemPath
-        # SELECT EQUIDISTANT PLASMA BOUNDARY ELEMENTS 
+        if self.PlasmaBoundElemPath:
+            # PLASMA BOUNDARY ACTIVE ELEMS = PLASMA BOUNDARY ELEMS  --> CONSTRAIN BC ON ALL PLASMA BOUNDARY ELEMS
+            if numelements == -1:
+                self.PlasmaBoundActiveElems = self.PlasmaBoundElemPath
+            # SELECT EQUIDISTANT PLASMA BOUNDARY ELEMENTS 
+            else:
+                indices = np.linspace(0, len(self.PlasmaBoundElemPath) - 1, numelements, dtype=int)
+                self.PlasmaBoundActiveElems = np.array(self.PlasmaBoundElemPath)[indices]
         else:
-            indices = np.linspace(0, len(self.PlasmaBoundElemPath) - 1, numelements, dtype=int)
-            self.PlasmaBoundActiveElems = np.array(self.PlasmaBoundElemPath)[indices]
+            self.PlasmaBoundActiveElems = list()
         return
     
     

@@ -100,6 +100,18 @@ class Element:
         self.area, self.length = self.ComputeArea_Length()
         return
     
+    
+    def print_all_attributes(self):
+        """
+        Display all attributes of the object and their corresponding values.
+
+        This method iterates over all attributes of the instance and prints
+        them in the format: attribute_name: value.
+        """
+        for attribute, value in vars(self).items():
+            print(f"{attribute}: {value}")
+        return
+    
     ##################################################################################################
     #################################### ELEMENTAL ATTRIBUTES ########################################
     ##################################################################################################
@@ -1320,123 +1332,156 @@ class Element:
         Nr = 40
         Nz = 40
         
-        #### PHYSICAL SPACE
-        # PHYSICAL SUBPLOT GRID
-        xgrid = np.linspace(Rmin,Rmax,Nr)
-        ygrid = np.linspace(Zmin,Zmax,Nz)
-        X = np.zeros([Nr*Nz,2])
-        for ix in range(Nr):
-            for iy in range(Nz):
-                X[ix*Nr+iy,:] = [xgrid[ix],ygrid[iy]]
-        # COMPUTE INTERPOLATED LEVEL-SET FUNCTION IN PHYSICAL SPACE
-        PHIint = np.zeros([Nr*Nz])
-        for i in range(len(X[:,0])):
-            PHIint[i] = self.ElementalInterpolationPHYSICAL(X[i,:],self.LSe)
-        
         colorlist = ['orange','gold','grey','cyan']
-        fig, axs = plt.subplots(1, 2, figsize=(12,5))
-        #### LEFT PLOT: PHYSICAL ELEMENT
-        axs[0].set_ylim([Zmin,Zmax])
-        axs[0].set_xlim([Rmin,Rmax])
-        # PLOT ELEMENT EDGES
-        for iedge in range(self.nedge):
-            axs[0].plot([self.Xe[iedge,0],self.Xe[int((iedge+1)%self.nedge),0]],[self.Xe[iedge,1],self.Xe[int((iedge+1)%self.nedge),1]], color='k', linewidth=2)
-        # PLOT NODES WITH NEGATIVE OR POSITIVE LEVEL-SET VALUES
-        for inode in range(self.n):
-            if self.LSe[inode] < 0:
-                cl = 'blue'
-            else:
-                cl = 'red'
-            axs[0].scatter(self.Xe[inode,0],self.Xe[inode,1],s=60,color=cl,zorder=7)
-        for inode in range(self.n):
-            axs[0].text(self.Xe[inode,0]-dR/6,self.Xe[inode,1]+dZ/6,str(inode),fontsize=12)
-        # PLOT INTERPOLATED INTERFACE
-        axs[0].tricontour(X[:,0],X[:,1],PHIint,levels=[0],colors='violet', linewidths=3)
-        # PLOT INTERSECTION POINTS
-        axs[0].scatter(self.InterfApprox.Xint[:,0],self.InterfApprox.Xint[:,1],s=60,marker='o',color='green',zorder=7)
 
-        #### RIGHT PLOT: TESSELLATED PHYSICAL ELEMENT
-        axs[1].set_ylim([Zmin,Zmax])
-        axs[1].set_xlim([Rmin,Rmax])
-        xtext = [0.05,-0.02,-0.1]
-        ytext = [-0.25,0.08,-0.25]
-        for isub, SUBELEM in enumerate(self.SubElements):
-            # PLOT SUBELEMENT EDGES
-            for iedge in range(SUBELEM.nedge):
-                inode = iedge
-                jnode = int((iedge+1)%SUBELEM.nedge)
-                if iedge == self.interfedge[isub]:
-                    inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
-                    xcoords = [SUBELEM.Xe[inode,0],SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),0],SUBELEM.Xe[jnode,0]]
-                    xcoords = list(chain.from_iterable([x] if not isinstance(x, np.ndarray) else x for x in xcoords))
-                    ycoords = [SUBELEM.Xe[inode,1],SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),1],SUBELEM.Xe[jnode,1]]
-                    ycoords = list(chain.from_iterable([y] if not isinstance(y, np.ndarray) else y for y in ycoords))
-                    axs[1].plot(xcoords,ycoords, color=colorlist[isub], linewidth=3)
+        if self.interfedge == -1:
+            fig, axs = plt.subplots(1, 1, figsize=(5,5))
+            #### LEFT PLOT: PHYSICAL ELEMENT
+            axs.set_ylim([Zmin,Zmax])
+            axs.set_xlim([Rmin,Rmax])
+            # PLOT ELEMENT EDGES
+            for iedge in range(self.nedge):
+                axs.plot([self.Xe[iedge,0],self.Xe[int((iedge+1)%self.nedge),0]],[self.Xe[iedge,1],self.Xe[int((iedge+1)%self.nedge),1]], color='k', linewidth=2)
+            # PLOT NODES WITH NEGATIVE OR POSITIVE LEVEL-SET VALUES
+            for inode in range(self.n):
+                if self.LSe[inode] < 0:
+                    cl = 'blue'
                 else:
-                    axs[1].plot([SUBELEM.Xe[inode,0],SUBELEM.Xe[jnode,0]],[SUBELEM.Xe[inode,1],SUBELEM.Xe[jnode,1]], color=colorlist[isub], linewidth=3)
-            axs[1].scatter(SUBELEM.Xe[:,0],SUBELEM.Xe[:,1],s=60,color=colorlist[isub],zorder=7)
-            axs[1].scatter(SUBELEM.Xg[:,0],SUBELEM.Xg[:,1],s=60,marker='x',color=colorlist[isub],zorder=7)
-            # WRITE NODE NUMBER
-            #for inode in range(SUBELEM.n):
-            #    axs[1].text(SUBELEM.Xe[inode,0]+xtext[isub],SUBELEM.Xe[inode,1]+ytext[isub],str(inode),fontsize=12, color=colorlist[isub])
-        # PLOT REFERENCE INTERFACE APPROXIMATION QUADRATURE
-        axs[1].scatter(self.InterfApprox.Xg[:,0],self.InterfApprox.Xg[:,1,],s=60,marker='x',color='green',zorder=7)
-        
-        # CHECK QUADRATURES
-        totalarea = 0
-        totalintegral = 0  
-        for isub, SUBELEM in enumerate(self.SubElements):
-            # COMPUTE AREA ARITHMETICALLY
-            if SUBELEM.interfedge == -1:  # REGULAR TRIANGLE
-                area = compute_triangle_area(SUBELEM.Xe)
-            else:
-                Xepoly = np.zeros([3+SUBELEM.ElOrder-1,2])
-                ipoint = 0
+                    cl = 'red'
+                axs.scatter(self.Xe[inode,0],self.Xe[inode,1],s=60,color=cl,zorder=7)
+            for inode in range(self.n):
+                axs.text(self.Xe[inode,0]-dR/6,self.Xe[inode,1]+dZ/6,str(inode),fontsize=12)
+            # PLOT QUADRATURE
+            axs.scatter(self.Xg[:,0],self.Xg[:,1],s=60,marker='x',color=colorlist[0],zorder=7)
+            
+            # CHECK QUADRATURES
+            totalarea = compute_triangle_area(self.Xe) 
+            # COMPUTE INTEGRAL
+            integral = 0
+            for ig in range(self.ng):
+                for inode in range(self.n):
+                    integral += self.Ng[ig,inode]*abs(self.detJg[ig])*self.Wg[ig]
+                    
+            print("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
+            print("ELEMENTAL INTEGRAL AREA = ", integral)
+            
+        else: 
+            #### PHYSICAL SPACE
+            # PHYSICAL SUBPLOT GRID
+            xgrid = np.linspace(Rmin,Rmax,Nr)
+            ygrid = np.linspace(Zmin,Zmax,Nz)
+            X = np.zeros([Nr*Nz,2])
+            for ix in range(Nr):
+                for iy in range(Nz):
+                    X[ix*Nr+iy,:] = [xgrid[ix],ygrid[iy]]
+            # COMPUTE INTERPOLATED LEVEL-SET FUNCTION IN PHYSICAL SPACE
+            PHIint = np.zeros([Nr*Nz])
+            for i in range(len(X[:,0])):
+                PHIint[i] = self.ElementalInterpolationPHYSICAL(X[i,:],self.LSe)
+
+            fig, axs = plt.subplots(1, 2, figsize=(12,5))
+            #### LEFT PLOT: PHYSICAL ELEMENT
+            axs[0].set_ylim([Zmin,Zmax])
+            axs[0].set_xlim([Rmin,Rmax])
+            # PLOT ELEMENT EDGES
+            for iedge in range(self.nedge):
+                axs[0].plot([self.Xe[iedge,0],self.Xe[int((iedge+1)%self.nedge),0]],[self.Xe[iedge,1],self.Xe[int((iedge+1)%self.nedge),1]], color='k', linewidth=2)
+            # PLOT NODES WITH NEGATIVE OR POSITIVE LEVEL-SET VALUES
+            for inode in range(self.n):
+                if self.LSe[inode] < 0:
+                    cl = 'blue'
+                else:
+                    cl = 'red'
+                axs[0].scatter(self.Xe[inode,0],self.Xe[inode,1],s=60,color=cl,zorder=7)
+            for inode in range(self.n):
+                axs[0].text(self.Xe[inode,0]-dR/6,self.Xe[inode,1]+dZ/6,str(inode),fontsize=12)
+            # PLOT INTERPOLATED INTERFACE
+            axs[0].tricontour(X[:,0],X[:,1],PHIint,levels=[0],colors='violet', linewidths=3)
+            # PLOT INTERSECTION POINTS
+            axs[0].scatter(self.InterfApprox.Xint[:,0],self.InterfApprox.Xint[:,1],s=60,marker='o',color='green',zorder=7)
+
+            #### RIGHT PLOT: TESSELLATED PHYSICAL ELEMENT
+            axs[1].set_ylim([Zmin,Zmax])
+            axs[1].set_xlim([Rmin,Rmax])
+            xtext = [0.05,-0.02,-0.1]
+            ytext = [-0.25,0.08,-0.25]
+            for isub, SUBELEM in enumerate(self.SubElements):
+                # PLOT SUBELEMENT EDGES
                 for iedge in range(SUBELEM.nedge):
                     inode = iedge
                     jnode = int((iedge+1)%SUBELEM.nedge)
-                    if iedge == 0:
-                        Xepoly[ipoint,:] = SUBELEM.Xe[inode,:]
-                        Xepoly[ipoint+1,:] = SUBELEM.Xe[jnode,:]
-                        ipoint += 2
-                    elif iedge == SUBELEM.interfedge:
+                    if iedge == self.interfedge[isub]:
                         inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
-                        Xepoly[ipoint:ipoint+(SUBELEM.ElOrder-1),:] = SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),:]
-                        ipoint += SUBELEM.ElOrder-1
+                        xcoords = [SUBELEM.Xe[inode,0],SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),0],SUBELEM.Xe[jnode,0]]
+                        xcoords = list(chain.from_iterable([x] if not isinstance(x, np.ndarray) else x for x in xcoords))
+                        ycoords = [SUBELEM.Xe[inode,1],SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),1],SUBELEM.Xe[jnode,1]]
+                        ycoords = list(chain.from_iterable([y] if not isinstance(y, np.ndarray) else y for y in ycoords))
+                        axs[1].plot(xcoords,ycoords, color=colorlist[isub], linewidth=3)
                     else:
-                        Xepoly[ipoint,:] = SUBELEM.Xe[inode,:]
-                        ipoint += 1
-                area = polygon_area(Xepoly,SUBELEM.ElOrder,SUBELEM.interfedge)
-            
-            # COMPUTE INTEGRAL
+                        axs[1].plot([SUBELEM.Xe[inode,0],SUBELEM.Xe[jnode,0]],[SUBELEM.Xe[inode,1],SUBELEM.Xe[jnode,1]], color=colorlist[isub], linewidth=3)
+                axs[1].scatter(SUBELEM.Xe[:,0],SUBELEM.Xe[:,1],s=60,color=colorlist[isub],zorder=7)
+                axs[1].scatter(SUBELEM.Xg[:,0],SUBELEM.Xg[:,1],s=60,marker='x',color=colorlist[isub],zorder=7)
+                # WRITE NODE NUMBER
+                #for inode in range(SUBELEM.n):
+                #    axs[1].text(SUBELEM.Xe[inode,0]+xtext[isub],SUBELEM.Xe[inode,1]+ytext[isub],str(inode),fontsize=12, color=colorlist[isub])
+            # PLOT REFERENCE INTERFACE APPROXIMATION QUADRATURE
+            axs[1].scatter(self.InterfApprox.Xg[:,0],self.InterfApprox.Xg[:,1,],s=60,marker='x',color='green',zorder=7)
+
+            # CHECK QUADRATURES
+            totalarea = 0
+            totalintegral = 0  
+            for isub, SUBELEM in enumerate(self.SubElements):
+                # COMPUTE AREA ARITHMETICALLY
+                if SUBELEM.interfedge == -1:  # REGULAR TRIANGLE
+                    area = compute_triangle_area(SUBELEM.Xe)
+                else:
+                    Xepoly = np.zeros([3+SUBELEM.ElOrder-1,2])
+                    ipoint = 0
+                    for iedge in range(SUBELEM.nedge):
+                        inode = iedge
+                        jnode = int((iedge+1)%SUBELEM.nedge)
+                        if iedge == 0:
+                            Xepoly[ipoint,:] = SUBELEM.Xe[inode,:]
+                            Xepoly[ipoint+1,:] = SUBELEM.Xe[jnode,:]
+                            ipoint += 2
+                        elif iedge == SUBELEM.interfedge:
+                            inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
+                            Xepoly[ipoint:ipoint+(SUBELEM.ElOrder-1),:] = SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),:]
+                            ipoint += SUBELEM.ElOrder-1
+                        else:
+                            Xepoly[ipoint,:] = SUBELEM.Xe[inode,:]
+                            ipoint += 1
+                    area = polygon_area(Xepoly,SUBELEM.ElOrder,SUBELEM.interfedge)
+                
+                # COMPUTE INTEGRAL
+                integral = 0
+                for ig in range(SUBELEM.ng):
+                    for inode in range(SUBELEM.n):
+                        integral += SUBELEM.Ng[ig,inode]*abs(SUBELEM.detJg[ig])*SUBELEM.Wg[ig]
+                        
+                print("SUBELEMENT ,", isub," POLYGONAL DECOMPOSITION AREA = ", area)
+                totalarea += area
+                print("SUBELEMENT ,", isub," INTEGRAL AREA = ", integral)
+                totalintegral += abs(integral)
+                
+            trianglearea = compute_triangle_area(self.Xe)
+            print("ELEMENT AREA = ", trianglearea)
+            print("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
+            print("ELEMENTAL INTEGRAL AREA = ", totalintegral)
+
+            # LINE INTEGRATION QUADRATURES
+            # PIECE-WISE LINEAR APPROXIMATION
+            length = 0
+            for inode in range(self.ElOrder):
+                lengthi = np.linalg.norm(self.InterfApprox.Xint[self.InterfApprox.Tint[inode+1],:]-self.InterfApprox.Xint[self.InterfApprox.Tint[inode],:])
+                length += lengthi
+            print('PIECE-WISE LINEAR INTERFACE ARC LENGTH APPROXIMATION = ', length)
+
             integral = 0
-            for ig in range(SUBELEM.ng):
-                for inode in range(SUBELEM.n):
-                    integral += SUBELEM.Ng[ig,inode]*abs(SUBELEM.detJg[ig])*SUBELEM.Wg[ig]
-                    
-            print("SUBELEMENT ,", isub," POLYGONAL DECOMPOSITION AREA = ", area)
-            totalarea += area
-            print("SUBELEMENT ,", isub," INTEGRAL AREA = ", integral)
-            totalintegral += abs(integral)
-            
-        trianglearea = compute_triangle_area(self.Xe)
-        print("ELEMENT AREA = ", trianglearea)
-        print("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
-        print("ELEMENTAL INTEGRAL AREA = ", totalintegral)
-        
-        # LINE INTEGRATION QUADRATURES
-        # PIECE-WISE LINEAR APPROXIMATION
-        length = 0
-        for inode in range(self.ElOrder):
-            lengthi = np.linalg.norm(self.InterfApprox.Xint[self.InterfApprox.Tint[inode+1],:]-self.InterfApprox.Xint[self.InterfApprox.Tint[inode],:])
-            length += lengthi
-        print('PIECE-WISE LINEAR INTERFACE ARC LENGTH APPROXIMATION = ', length)
-        
-        integral = 0
-        for ig in range(self.InterfApprox.ng):
-            for inode in range(self.n):
-                integral += self.InterfApprox.Ng[ig,inode]*self.InterfApprox.detJg1D[ig]*self.InterfApprox.Wg[ig]
-        print('ISOPARAMETRIC INTERFACE ARC LENGTH APPROXIMATION = ', integral)
+            for ig in range(self.InterfApprox.ng):
+                for inode in range(self.n):
+                    integral += self.InterfApprox.Ng[ig,inode]*self.InterfApprox.detJg1D[ig]*self.InterfApprox.Wg[ig]
+            print('ISOPARAMETRIC INTERFACE ARC LENGTH APPROXIMATION = ', integral)
         return
     
     ##################################################################################################

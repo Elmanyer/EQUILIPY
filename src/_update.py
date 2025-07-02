@@ -75,7 +75,7 @@ class EquilipyUpdate:
         Function to update the elemental PSI values, respect to PSI_NORM.
         """
         for ELEMENT in self.MESH.Elements:
-            ELEMENT.PSIe = self.PSI_NORM[ELEMENT.Te,0]  # TAKE VALUES OF ITERATION N
+            ELEMENT.PSIe = self.PSI_NORM[ELEMENT.Te,1]  # TAKE VALUES OF ITERATION N
         return
     
     def UpdatePlasmaBoundaryValues(self):

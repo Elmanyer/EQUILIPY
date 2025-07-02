@@ -168,7 +168,10 @@ class EquilipyInitialisation:
         self.PSI_NORM[:,1] = self.PSI_NORM[:,0]
         # INITIALISE CRITICAL POINTS ARRAY
         self.Xcrit = np.zeros([2,2,3])  # [(iterations n, n+1), (extremum, saddle point), (R_crit,Z_crit,elem_crit)]
-        self.Xcrit[0,0,:-1] = self.initialPSI.Opoint0[0][0]
+        if not self.initialPSI.Opoint0:
+            self.Xcrit[0,0,:-1] = np.zeros([2])
+        else:
+            self.Xcrit[0,0,:-1] = self.initialPSI.Opoint0[0][0]
         if not self.initialPSI.Xpoint0:
             self.Xcrit[0,1,:-1] = np.zeros([2])
         else:
