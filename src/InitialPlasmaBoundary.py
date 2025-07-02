@@ -2,19 +2,12 @@
 from weakref import proxy
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.tri as tri
-from matplotlib.path import Path
 from matplotlib.patches import PathPatch
 from AnalyticalSolutions import *
 from functools import partial
+import _plot as eqplot
 
 class InitialPlasmaBoundary:
-    
-    plasmacmap = plt.get_cmap('jet')
-    #plasmacmap = plt.get_cmap('winter_r')
-    plasmabouncolor = 'green'
-    vacvesswallcolor = 'gray'
-    magneticaxiscolor = 'red'
     
     def __init__(self,EQUILIBRIUM,GEOMETRY,**kwargs):
         # IMPORT PROBLEM DATA
@@ -114,25 +107,34 @@ class InitialPlasmaBoundary:
         # PLOT PHI LEVEL-SET BACKGROUND VALUES 
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        ax.set_xlim(np.min(self.Xrec[:,0]),np.max(self.Xrec[:,0]))
-        ax.set_ylim(np.min(self.Xrec[:,1]),np.max(self.Xrec[:,1]))
+        ax.set_xlim(np.min(self.Xrec[:,0])-eqplot.padx, np.max(self.Xrec[:,0])+eqplot.padx)
+        ax.set_ylim(np.min(self.Xrec[:,1])-eqplot.pady, np.max(self.Xrec[:,1])+eqplot.pady)
+        ax.set_xlabel('R (in m)')
+        ax.set_ylabel('Z (in m)')
+        ax.set_title('Initial plasma domain')
+        
         # Plot low-opacity background (outside plasma region)
-        ax.tricontourf(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=30, alpha=0.5)
+        ax.tricontourf(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,cmap = eqplot.phicmap, levels=eqplot.Nphilevels, alpha=0.5)
         # Plot level-set inside computational domain
-        contourf = ax.tricontourf(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=30)
+        contourf = ax.tricontourf(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,cmap = eqplot.phicmap, levels=eqplot.Nphilevels)
         
         patch = PathPatch(self.eq.MESH.boundary_path, transform=ax.transData)
         for coll in contourf.collections:
             coll.set_clip_path(patch)
         
-        # PLOT MESH BOUNDARY
-        for iboun in range(self.eq.MESH.Nbound):
-            ax.plot(self.eq.MESH.X[self.eq.MESH.Tbound[iboun,:2],0],self.eq.MESH.X[self.eq.MESH.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
         # PLOT LEVEL-SET CONTOURS
-        ax.tricontour(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=30,colors='black', linewidths=1)
+        ax.tricontour(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,
+                      levels=eqplot.Nphilevels,
+                      colors='black', 
+                      linewidths=1)
         # PLOT INITIAL PLASMA BOUNDARY
-        ax.tricontour(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,levels=[0],colors='red', linewidths=3)
-        ax.set_xlabel('R (in m)')
-        ax.set_ylabel('Z (in m)')
-        ax.set_title('Initial plasma domain')
+        ax.tricontour(self.Xrec[:,0],self.Xrec[:,1],self.PHI0rec,
+                      levels=[0],
+                      colors=eqplot.plasmabouncolor, 
+                      linewidths=eqplot.plasmabounlinewidth)
+        
+        # PLOT MESH BOUNDARY
+        self.eq.MESH.PlotBoundary(ax = ax)
+        # PLOT TOKAMAK FIRST WALL
+        self.eq.TOKAMAK.PlotFirstWall(ax = ax)
         return

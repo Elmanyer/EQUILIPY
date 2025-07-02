@@ -3,17 +3,11 @@ import numpy as np
 from random import random
 import matplotlib.pyplot as plt
 from matplotlib.patches import PathPatch
-from matplotlib.path import Path
 from AnalyticalSolutions import *
 from functools import partial
+import _plot as eqplot
 
 class InitialGuess:
-    
-    plasmacmap = plt.get_cmap('jet')
-    #plasmacmap = plt.get_cmap('winter_r')
-    plasmabouncolor = 'green'
-    vacvesswallcolor = 'gray'
-    magneticaxiscolor = 'red'
     
     def __init__(self,EQUILIBRIUM,PSI_GUESS,NORMALISE=False,NOISE=False,**kwargs):
         # IMPORT PROBLEM DATA
@@ -182,12 +176,22 @@ class InitialGuess:
         #### FIGURE
         # PLOT INITIAL PSI GUESS BACKGROUND VALUES
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
-        ax.set_xlim(self.eq.MESH.Rmin-self.eq.dzoom,self.eq.MESH.Rmax+self.eq.dzoom)
-        ax.set_ylim(self.eq.MESH.Zmin-self.eq.dzoom,self.eq.MESH.Zmax+self.eq.dzoom)
+        ax.set_xlim(self.eq.MESH.Rmin-eqplot.padx,self.eq.MESH.Rmax+eqplot.padx)
+        ax.set_ylim(self.eq.MESH.Zmin-eqplot.pady,self.eq.MESH.Zmax+eqplot.pady)
         ax.set_aspect('equal')
-        contourf = ax.tricontourf(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels=30, cmap=self.plasmacmap)
-        contour = ax.tricontour(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels=30, colors='black', linewidths=1)
-        contour0 = ax.tricontour(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels=[klevel], colors=self.plasmabouncolor, linewidths=3)
+        ax.set_xlabel('R (in m)')
+        ax.set_ylabel('Z (in m)')
+        ax.set_title('Initial poloidal magnetic flux guess')
+        
+        # PLOT INITIAL PSI GUESS
+        contourf = ax.tricontourf(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels = eqplot.Npsilevels, 
+                                  cmap=eqplot.plasmacmap)
+        contour = ax.tricontour(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels = eqplot.Npsilevels, 
+                                colors='black', 
+                                linewidths=1)
+        contour0 = ax.tricontour(self.eq.MESH.X[:,0],self.eq.MESH.X[:,1], self.PSI0, levels=[klevel], 
+                                 colors=eqplot.plasmabouncolor, 
+                                 linewidths=eqplot.plasmabounlinewidth)
         
         patch = PathPatch(self.eq.MESH.boundary_path, transform=ax.transData)
         for cont in [contourf,contour,contour0]:
@@ -195,12 +199,11 @@ class InitialGuess:
                 coll.set_clip_path(patch)
             
         # PLOT MESH BOUNDARY
-        for iboun in range(self.eq.MESH.Nbound):
-            ax.plot(self.eq.MESH.X[self.eq.MESH.Tbound[iboun,:2],0],self.eq.MESH.X[self.eq.MESH.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
+        self.eq.MESH.PlotBoundary(ax = ax)
+        # PLOT TOKAMAK FIRST WALL
+        self.eq.TOKAMAK.PlotFirstWall(ax = ax)
+        
         # PLOT COLORBAR
         plt.colorbar(contourf, ax=ax)
-        ax.set_xlabel('R (in m)')
-        ax.set_ylabel('Z (in m)')
-        ax.set_title('Initial poloidal magnetic flux guess')
         return
 

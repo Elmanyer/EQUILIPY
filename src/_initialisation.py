@@ -8,6 +8,7 @@ class EquilipyInitialisation:
     
     def InitialiseParameters(self):
         
+        print("INITIALISE SIMULATION PARAMETERS...", end="")
         # OVERRIDE CRITICAL POINT OPTIMIZATION OUTPUT WHEN FIXED-BOUNDARY PROBLEM
         if self.FIXED_BOUNDARY:
             self.out_PSIcrit = False
@@ -18,14 +19,16 @@ class EquilipyInitialisation:
         if not self.GhostStabilization:
             self.out_ghostfaces = False
             
-        # COMPUTE 1D NUMERICAL QUADRATURE ORDER
-        self.QuadratureOrder1D = ceil(0.5*(self.QuadratureOrder2D+1))
+        # COMPUTE 1D NUMERICAL QUADRATURE ORDER (IF NOT SPECIFIED)
+        if type(self.QuadratureOrder1D) == type(None):
+            self.QuadratureOrder1D = ceil(0.5*(self.QuadratureOrder2D+1))
         
         # INITIALISE AITKEN'S RELAXATION LAMBDAS
         self.lambdaPSI = np.zeros([2])
         self.lambdaPSI[0] = self.lambda0           # INITIAL LAMBDA PARAMETER
         self.lambdamax = 0.95
         self.lambdamin = 0.0
+        print('Done!')
         return
     
     
@@ -61,32 +64,7 @@ class EquilipyInitialisation:
         return 
     
     
-    def InitialiseMESH(self,mesh_name):
-        """
-        Initializes all mesh related elements and preprocess mesh data for simulation:
-            - Initializes some simulation parameters.
-            - Initializes python pickle lists for direct output.
-            - Initializes the level-set function for plasma and vacuum vessel boundaries.
-            - Initializes the elements in the computational domain.
-            - Classifies elements and writes their classification.
-            - Approximates the plasma boundary interface.
-            - Finds ghost faces if necessary
-            - Computes elemental numerical integration quadratures.
-        """
-        
-        print("INITIALISE MESH...")
-        path_to_mesh = self.pwd + '/MESHES/' + mesh_name
-        self.MESH = Mesh(path_to_mesh)
-        
-        print("     -> READ MESH FILES...", end="")
-        self.MESH.ReadMeshFile()
-        self.MESH.ReadFixFile()
-        self.dim = self.MESH.dim
-        print('Done!')
-        return
-    
-    
-    def Ini(self):
+    def InitialiseDomainDiscretisation(self):
         
         print('INITIALISE ELEMENTAL DISCRETISATION...')
         

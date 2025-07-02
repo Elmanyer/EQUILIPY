@@ -2,15 +2,22 @@ import numpy as np
 from os.path import basename
 from Element import *
 from matplotlib.path import Path
+import os
+import _plot as eqplot
 
 class Mesh:
     
-    def __init__(self,path_to_folder):
+    def __init__(self,mesh_name):
         
-        self.name = basename(path_to_folder)
+        pwd = os.getcwd()
+        self.pwd = pwd[:-6]   # -6 CORRESPONDS TO 6 CHARACTERS IN '/TESTs'
+        path_to_folder = self.pwd + '/MESHES/' + mesh_name
+        self.name = mesh_name
         self.directory = path_to_folder
         
-        # ATTRIBUTES
+        print('Mesh folder: ' + path_to_folder)
+        
+        # INITIALISE ATTRIBUTES
         self.ElTypeALYA = None              # TYPE OF ELEMENTS CONSTITUTING THE MESH, USING ALYA NOTATION
         self.ElType = None                  # TYPE OF ELEMENTS CONSTITUTING THE MESH: 1: TRIANGLES,  2: QUADRILATERALS
         self.ElOrder = None                 # ORDER OF MESH ELEMENTS: 1: LINEAR,   2: QUADRATIC,   3: CUBIC
@@ -54,6 +61,12 @@ class Mesh:
         
         self.GhostFaces = None              # LIST OF PLASMA BOUNDARY GHOST FACES
         self.GhostElems = None              # LIST OF ELEMENTS CONTAINING PLASMA BOUNDARY FACES
+        
+        # READ MESH FILES
+        print("READ MESH FILES...", end="")
+        self.ReadMeshFile()
+        self.ReadFixFile()
+        print('Done!')
         return
     
     
@@ -749,6 +762,86 @@ class Mesh:
             self.Xg = np.zeros([self.Ne*self.nge,self.dim])
             for ielem, ELEMENT in enumerate(self.Elements):
                 self.Xg[ielem*self.nge:(ielem+1)*self.nge,:] = ELEMENT.Xg
+        return
+    
+    
+    ##################################################################################################
+    ######################################### REPRESENTATION #########################################
+    ##################################################################################################
+    
+    def PlotBoundary(self,ax=None):
+        # GENERATE FIGURE IF NON EXISTENT
+        if type(ax) == type(None):
+            fig, ax = plt.subplots(1, 1, figsize=(5,6))
+            ax.set_aspect('equal')
+            ax.set_xlim(self.Rmin-self.padx,self.Rmax+self.padx)
+            ax.set_ylim(self.Zmin-self.pady,self.Zmax+self.pady)
+            ax.set_xlabel('R (in m)')
+            ax.set_ylabel('Z (in m)')
+            ax.set_title("Computational domain's boundary")
+        # PLOT MESH BOUNDARY
+        for iboun in range(self.Nbound):
+            ax.plot(self.X[self.Tbound[iboun,:2],0],self.X[self.Tbound[iboun,:2],1],
+                    linewidth = eqplot.compbounlinewidth, 
+                    color = eqplot.compbouncolor)
+        return
+    
+    def Plot(self,ax=None):
+        # GENERATE FIGURE IF NON EXISTENT
+        if type(ax) == type(None):
+            fig, ax = plt.subplots(1, 1, figsize=(5,6))
+            ax.set_aspect('equal')
+            ax.set_xlim(self.Rmin-self.padx,self.Rmax+self.padx)
+            ax.set_ylim(self.Zmin-self.pady,self.Zmax+self.pady)
+            ax.set_xlabel('R (in m)')
+            ax.set_ylabel('Z (in m)')
+            ax.set_title("Computational domain's mesh")
+        # PLOT MESH
+        for ielem in range(self.Ne):
+            Xe = np.zeros([self.numedges+1,2])
+            Xe[:-1,:] = self.X[self.T[ielem,:self.numedges],:]
+            Xe[-1,:] = Xe[0,:]
+            ax.plot(Xe[:,0], Xe[:,1], 
+                     color = eqplot.meshcolor, 
+                     linewidth = eqplot.meshlinewidth)
+        # PLOT BOUNDARY
+        self.PlotBoundary(ax = ax)
+        return
+    
+    
+    def PlotClassifiedElements(self,PlasmaLS = None, GHOSTFACES=False,**kwargs):
+        fig, ax = plt.subplots(1, 1, figsize=(5,6))
+        ax.set_aspect('equal')
+        ax.set_xlabel('R (in m)')
+        ax.set_ylabel('Z (in m)')
+        ax.set_title("Classified mesh elements")
+        if not kwargs:
+            ax.set_xlim(self.Rmin-self.padx,self.Rmax+self.padx)
+            ax.set_ylim(self.Zmin-self.pady,self.Zmax+self.pady)
+        else: 
+            ax.set_ylim(kwargs['zmin'],kwargs['zmax'])
+            ax.set_xlim(kwargs['rmin'],kwargs['rmax'])
+        
+        # PLOT PLASMA REGION ELEMENTS
+        for ELEMENT in self.Elements:
+            Xe = np.zeros([ELEMENT.numedges+1,2])
+            Xe[:-1,:] = ELEMENT.Xe[:self.numedges,:]
+            Xe[-1,:] = ELEMENT.Xe[0,:]
+            ax.plot(Xe[:,0], Xe[:,1], color=eqplot.Black, linewidth=1)
+            ax.fill(Xe[:,0], Xe[:,1], color = ELEMENT.Color())
+           
+        # PLOT PLASMA BOUNDARY  
+        if type(PlasmaLS) != type(None):
+            ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], 
+                        colors = eqplot.plasmabouncolor,
+                        linewidths = eqplot.plasmabounlinewidth)
+                
+        # PLOT GHOSTFACES 
+        if GHOSTFACES:
+            for ghostface in self.GhostFaces:
+                ax.plot(self.X[ghostface[0][:2],0],self.X[ghostface[0][:2],1],
+                         linewidth=2,
+                         color=eqplot.ghostfacescolor)
         return
     
     

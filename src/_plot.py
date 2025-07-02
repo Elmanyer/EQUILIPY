@@ -11,126 +11,191 @@ from itertools import chain
 ############################### RENDERING AND REPRESENTATION #####################################
 ##################################################################################################
 
+dzoom = 0.1
+Vermillion = '#D55E00'
+Blue = '#0072B2'
+BluishGreen = '#009E73'
+Orange = '#E69F00'
+SkyBlue = '#56B4E9'
+ReddishPurple = '#CC79A7'
+Yellow = '#F0E442'
+Black = '#000000'
+Grey = '#BBBBBB'
+White = '#FFFFFF'
+colorlist = [Blue, Vermillion, BluishGreen, Black,Grey, Orange, ReddishPurple, Yellow, SkyBlue]
+markerlist = ['o','^', '<', '>', 'v', 's','p','*','D']
+
+meshcolor = Black
+nodescolor = Blue
+nodesize = 1
+compbouncolor = Orange
+compbounlinewidth = 5
+meshlinewidth = 0.5
+
+plasmacmap = plt.get_cmap('jet_r')
+Npsilevels = 30
+plasmabouncolor = 'green'
+plasmabounlinewidth = 3
+firstwallcolor = 'gray'
+firstwalllinewidth = 5
+magneticaxiscolor = 'red'
+saddlepointcolor = BluishGreen
+magnetcolor = SkyBlue
+padx = 0.1
+pady = 0.1
+
+Nphilevels = 30
+phicmap = 'viridis'
+
+currentcmap = 'viridis'
+
+ghostfacescolor = Blue
+
 class EquilipyPlotting:
     
-    dzoom = 0.1
-    Vermillion = '#D55E00'
-    Blue = '#0072B2'
-    BluishGreen = '#009E73'
-    Orange = '#E69F00'
-    SkyBlue = '#56B4E9'
-    ReddishPurple = '#CC79A7'
-    Yellow = '#F0E442'
-    Black = '#000000'
-    Grey = '#BBBBBB'
-    White = '#FFFFFF'
-    # exec(open("./colourMaps.py").read()) # load colour map
-    # VermBlue = CBWcm['VeBu']             # Vermillion (-) White (0) Blue (+)
-    # BlueVerm = CBWcm['BuVe']             # Blue (-) White (0) Vermillion (+)
-    colorlist = [Blue, Vermillion, BluishGreen, Black,Grey, Orange, ReddishPurple, Yellow, SkyBlue]
-    markerlist = ['o','^', '<', '>', 'v', 's','p','*','D']
-
-    plasmacmap = plt.get_cmap('jet_r')
-    plasmabouncolor = 'green'
-    vacvesswallcolor = 'gray'
-    magneticaxiscolor = 'red'
-    saddlepointcolor = BluishGreen
-    magnetcolor = SkyBlue
+    def PlotLayout(self,plotmesh=True):
+        
+        fig, ax = plt.subplots(1, 1, figsize=(5,6))
+        ax.set_aspect('equal')
+        ax.set_xlabel('R (in m)')
+        ax.set_ylabel('Z (in m)')
+        ax.set_title('Simulation layout')
+        
+        # PLOT COMPUTATIONAL DOMAIN
+        if plotmesh:
+            self.MESH.Plot(ax = ax)
+        # PLOT TOKAMAK
+        self.TOKAMAK.PlotFirstWall(ax = ax)
+        self.TOKAMAK.PlotMagnets(ax = ax)
+        plt.show()
+        return
+    
+    
+    def PlotField(self,FIELD):
+        
+        fig, ax = plt.subplots(1, 1, figsize=(5,5))
+        ax.set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
+        ax.set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
+        ax.set_xlabel('R (in m)')
+        ax.set_ylabel('Z (in m)')
+        
+        contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], FIELD, levels=Npsilevels)
+        contour1 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], FIELD, levels=[0], colors = 'black')
+        contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
+                      colors = plasmabouncolor,
+                      linewidths = plasmabounlinewidth)
+        
+        # PATH FIELD OUTSIDE COMPUTATIONAL DOMAIN'S BOUNDARY 
+        patch = PathPatch(self.MESH.boundary_path, transform=ax.transData)
+        for cont in [contourf,contour1,contour2]:
+            for coll in cont.collections:
+                coll.set_clip_path(patch)
+                
+        # PLOT COMPUTATIONAL DOMAIN
+        self.MESH.Plot(ax = ax)
+        # PLOT TOKAMAK
+        self.TOKAMAK.PlotFirstWall(ax = ax)
+                
+        plt.colorbar(contourf, ax=ax)
+        plt.show()
+        return
+    
 
     def PlotPSI(self):
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        ax.set_xlim(self.MESH.Rmin-self.dzoom,self.MESH.Rmax+self.dzoom)
-        ax.set_ylim(self.MESH.Zmin-self.dzoom,self.MESH.Zmax+self.dzoom)
-        contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI[:,0], levels=30, cmap = self.plasmacmap)
-        contour1 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI[:,0], levels=[self.PSI_X], colors = 'black')
-        contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], colors = self.plasmabouncolor)
+        ax.set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
+        ax.set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
+        ax.set_xlabel('R (in m)')
+        ax.set_ylabel('Z (in m)')
+        ax.set_title('PSI')
         
-        # Mask solution outside computational domain's boundary 
-        compboundary = np.zeros([len(self.MESH.BoundaryVertices)+1,2])
-        compboundary[:-1,:] = self.MESH.X[self.MESH.BoundaryVertices,:]
-        # Close path
-        compboundary[-1,:] = compboundary[0,:]
-        clip_path = Path(compboundary)
-        patch = PathPatch(clip_path, transform=ax.transData)
+        contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI[:,0], levels = Npsilevels, cmap = plasmacmap)
+        contour1 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI[:,0], levels=[self.PSI_X], colors = 'black')
+        contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
+                                 colors = plasmabouncolor,
+                                 linewidths = plasmabounlinewidth)
+        
+        # PATH FIELD OUTSIDE COMPUTATIONAL DOMAIN'S BOUNDARY 
+        patch = PathPatch(self.MESH.boundary_path, transform=ax.transData)
         for cont in [contourf,contour1,contour2]:
             for coll in cont.collections:
                 coll.set_clip_path(patch)
-        # Plot computational domain's boundary
-        for iboun in range(self.MESH.Nbound):
-            ax.plot(self.MESH.X[self.MESH.Tbound[iboun,:2],0],self.MESH.X[self.MESH.Tbound[iboun,:2],1],linewidth = 3, color = 'grey')
+        
+        # PLOT MESH BOUNDARY
+        self.MESH.PlotBoundary(ax = ax)
+        # PLOT TOKAMAK FIRST WALL
+        self.TOKAMAK.PlotFirstWall(ax = ax)
                 
         plt.colorbar(contourf, ax=ax)
         plt.show()
         return
 
 
-    def PlotFIELD(self,FIELD,plotnodes):
-        
-        fig, ax = plt.subplots(1, 1, figsize=(5,5))
-        ax.set_xlim(self.MESH.Rmin-self.dzoom,self.MESH.Rmax+self.dzoom)
-        ax.set_ylim(self.MESH.Zmin-self.dzoom,self.MESH.Zmax+self.dzoom)
-        a = ax.tricontourf(self.MESH.X[plotnodes,0],self.MESH.X[plotnodes,1], FIELD[plotnodes], levels=30)
-        ax.tricontour(self.MESH.X[plotnodes,0],self.MESH.X[plotnodes,1], FIELD[plotnodes], levels=[0], colors = 'black')
-        ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], colors = 'red')
-        plt.colorbar(a, ax=ax)
-        plt.show()
-        
-        return
+    
 
     def PlotError(self,RelativeError = False):
-        
-        AnaliticalNorm = np.zeros([self.MESH.Nn])
-        for inode in range(self.MESH.Nn):
-            AnaliticalNorm[inode] = self.PlasmaCurrent.PSIanalytical(self.MESH.X[inode,:])
+        if self.FIXED_BOUNDARY:
+            AnaliticalNorm = np.zeros([self.MESH.Nn])
+            for inode in range(self.MESH.Nn):
+                AnaliticalNorm[inode] = self.PlasmaCurrent.PSIanalytical(self.MESH.X[inode,:])
+                
+            print('||PSIerror||_L2 = ', self.ErrorL2norm)
+            print('relative ||PSIerror||_L2 = ', self.RelErrorL2norm)
+            print('||PSIerror|| = ',np.linalg.norm(self.PSIerror))
+            print('||PSIerror||/node = ',np.linalg.norm(self.PSIerror)/self.MESH.Nn)
+            print('relative ||PSIerror|| = ',np.linalg.norm(self.PSIrelerror))
+                
+            # Compute global min and max across both datasets
+            vmin = min(AnaliticalNorm)
+            vmax = max(AnaliticalNorm)  
+                
+            fig, axs = plt.subplots(1, 4, figsize=(16,5),gridspec_kw={'width_ratios': [1,1,0.25,1]})
             
-        print('||PSIerror||_L2 = ', self.ErrorL2norm)
-        print('relative ||PSIerror||_L2 = ', self.RelErrorL2norm)
-        print('plasma boundary subelements ||PSIerror||_L2 = ', self.ErrorL2normPlasmaBound)
-        print('plasma boundary subelements relative ||PSIerror||_L2 = ', self.RelErrorL2normPlasmaBound)
-        print('interface ||PSIerror||_L2 = ', self.ErrorL2normINT)
-        print('interface relative ||PSIerror||_L2 = ', self.RelErrorL2normINT)
-        print('||PSIerror|| = ',np.linalg.norm(self.PSIerror))
-        print('||PSIerror||/node = ',np.linalg.norm(self.PSIerror)/self.MESH.Nn)
-        print('relative ||PSIerror|| = ',np.linalg.norm(self.PSIrelerror))
-        print('||jump(grad)||_L2 = ', self.InterfGradJumpErrorL2norm)
+            # LEFT PLOT: ANALYTICAL SOLUTION
+            axs[0].set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
+            axs[0].set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
+            axs[0].set_xlabel('R (in m)')
+            axs[0].set_ylabel('Z (in m)')
+            axs[0].set_title('PSI exact')
+            a1 = axs[0].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], AnaliticalNorm, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
+            axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
+                              colors = plasmabouncolor, 
+                              linewidths=plasmabounlinewidth)
+            axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], AnaliticalNorm, levels=[0], colors = 'black')
+            self.MESH.PlotBoundary(ax = axs[0])
+
+            # CENTRAL PLOT: NUMERICAL SOLUTION
+            axs[1].set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
+            axs[1].set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
+            axs[1].set_xlabel('R (in m)')
+            axs[1].set_title('PSI numeric')
+            axs[1].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
+            axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
+                              colors = plasmabouncolor, 
+                              linewidths=plasmabounlinewidth)
+            axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=[0], colors = 'black')
+            self.MESH.PlotBoundary(ax = axs[1])
+            # COLORBAR
+            fig.colorbar(a1, ax=axs[2], orientation="vertical", fraction=0.8, pad=-0.7)
             
-        # Compute global min and max across both datasets
-        vmin = min(AnaliticalNorm)
-        vmax = max(AnaliticalNorm)  
+            # RIGHT PLOT: ERROR
+            axs[3].axis('off')
+            axs[3].set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
+            axs[3].set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
+            axs[3].set_xlabel('R (in m)')
+            if RelativeError:
+                errorfield = self.PSIrelerror
+                axs[3].set_title('PSI relative error')
+            else:
+                errorfield = self.PSIerror
+                axs[3].set_title('PSI error')
+            vmax = max(np.log(errorfield))
+            a = axs[3].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], np.log(errorfield), levels=Npsilevels, vmax=vmax,vmin=-20)
+            self.MESH.PlotBoundary(ax = axs[3])
             
-        fig, axs = plt.subplots(1, 4, figsize=(16,5),gridspec_kw={'width_ratios': [1,1,0.25,1]})
-        axs[0].set_xlim(self.MESH.Rmin-self.dzoom,self.MESH.Rmax+self.dzoom)
-        axs[0].set_ylim(self.MESH.Zmin-self.dzoom,self.MESH.Zmax+self.dzoom)
-        a1 = axs[0].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], AnaliticalNorm, levels=30, vmin=vmin, vmax=vmax)
-        axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], colors = 'red')
-        axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], AnaliticalNorm, levels=[0], colors = 'black')
-
-        axs[1].set_xlim(self.MESH.Rmin-self.dzoom,self.MESH.Rmax+self.dzoom)
-        axs[1].set_ylim(self.MESH.Zmin-self.dzoom,self.MESH.Zmax+self.dzoom)
-        a2 = axs[1].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=30, vmin=vmin, vmax=vmax)
-        axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], colors = 'red')
-        axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=[0], colors = 'black')
-
-        fig.colorbar(a1, ax=axs[2], orientation="vertical", fraction=0.8, pad=-0.7)
-        axs[2].axis('off')
-        
-        axs[2].set_xlim(self.MESH.Rmin-self.dzoom,self.MESH.Rmax+self.dzoom)
-        axs[2].set_ylim(self.MESH.Zmin-self.dzoom,self.MESH.Zmax+self.dzoom)
-        if RelativeError:
-            errorfield = self.PSIrelerror
-        else:
-            errorfield = self.PSIerror
-        vmax = max(np.log(errorfield))
-        a = axs[3].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], np.log(errorfield), levels=30 , vmax=vmax,vmin=-20)
-        plt.colorbar(a, ax=axs[3])
-
-        plt.show()
-        return
-
-
-    def PlotElementalInterfaceApproximation(self,interface_index):
-        self.MESH.Elements[self.MESH.PlasmaBoundActiveElems[interface_index]].PlotInterfaceApproximation(self.InitialPlasmaLevelSetFunction)
+            plt.colorbar(a, ax=axs[3])
+            plt.show()
         return
 
 
@@ -139,30 +204,33 @@ class EquilipyPlotting:
         AND PSI_NORM IF NORMALISED. """
         
         def subplotfield(self,ax,field,normalised=True):
-            ax.set_xlim(self.MESH.Rmin-self.dzoom,self.MESH.Rmax+self.dzoom)
-            ax.set_ylim(self.MESH.Zmin-self.dzoom,self.MESH.Zmax+self.dzoom)
+            ax.set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
+            ax.set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
+            ax.set_xlabel('R (in m)')
+            ax.set_ylabel('Z (in m)')
+            
+            # PLOT PSI FIELD
             if normalised:
                 psisep = self.PSI_NORMseparatrix
             else:
                 psisep = self.PSI_X
-            contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], field, levels=50, cmap=self.plasmacmap)
+            contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], field, levels=Npsilevels, cmap=plasmacmap)
             contour1 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], field, levels=[psisep], colors = 'black',linewidths=2)
-            contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], colors = self.plasmabouncolor, linewidths=3)
+            contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
+                                     colors = plasmabouncolor, 
+                                     linewidths=plasmabounlinewidth)
+            
             # Mask solution outside computational domain's boundary 
-            compboundary = np.zeros([len(self.MESH.BoundaryVertices)+1,2])
-            compboundary[:-1,:] = self.MESH.X[self.MESH.BoundaryVertices,:]
-            # Close path
-            compboundary[-1,:] = compboundary[0,:]
-            clip_path = Path(compboundary)
-            patch = PathPatch(clip_path, transform=ax.transData)
+            patch = PathPatch(self.MESH.boundary_path, transform=ax.transData)
             for cont in [contourf,contour1,contour2]:
                 for coll in cont.collections:
                     coll.set_clip_path(patch)
-            # Plot computational domain's boundary
-            for iboun in range(self.MESH.Nbound):
-                ax.plot(self.MESH.X[self.MESH.Tbound[iboun,:2],0],self.MESH.X[self.MESH.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
-            ax.set_xlim(self.MESH.Rmin-self.dzoom,self.MESH.Rmax+self.dzoom)
-            ax.set_ylim(self.MESH.Zmin-self.dzoom,self.MESH.Zmax+self.dzoom)
+                    
+            # PLOT MESH BOUNDARY
+            self.MESH.PlotBoundary(ax = ax)
+            # PLOT TOKAMAK FIRST WALL
+            self.TOKAMAK.PlotFirstWall(ax = ax)
+        
             plt.colorbar(contourf, ax=ax)
             return
         
@@ -201,9 +269,9 @@ class EquilipyPlotting:
                 ## PLOT LOCATION OF CRITICAL POINTS
                 for i in range(2):
                     # LOCAL EXTREMUM
-                    axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=self.magneticaxiscolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
+                    axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=magneticaxiscolor, edgecolor=Black, s = 100, linewidths = 1.5,zorder=5)
                     # SADDLE POINT
-                    axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=self.saddlepointcolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
+                    axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=saddlepointcolor, edgecolor=Black, s = 100, linewidths = 1.5,zorder=5)
                 plt.suptitle("Iteration n = "+str(self.it))
                 plt.show(block=False)
                 plt.pause(0.8)
@@ -227,9 +295,9 @@ class EquilipyPlotting:
                 ## PLOT LOCATION OF CRITICAL POINTS
                 for i in range(2):
                     # LOCAL EXTREMUM
-                    axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=self.magneticaxiscolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
+                    axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=magneticaxiscolor, edgecolor=Black, s = 100, linewidths = 1.5,zorder=5)
                     # SADDLE POINT
-                    axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=self.saddlepointcolor, edgecolor='k', s = 100, linewidths = 1.5,zorder=5)
+                    axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=saddlepointcolor, edgecolor=Black, s = 100, linewidths = 1.5,zorder=5)
                 plt.suptitle("Iteration n = "+str(self.it))
                 plt.show(block=False)
                 plt.pause(0.8)
@@ -246,30 +314,38 @@ class EquilipyPlotting:
         return
 
 
+
     def PlotPlasmaBoundContrainedEdges(self):
         
         #### FIGURE
         # PLOT PHI LEVEL-SET BACKGROUND VALUES 
         fig, ax = plt.subplots(1, 1, figsize=(5,6))
         ax.set_aspect('equal')
-        ax.set_xlim(self.MESH.Rmin,self.MESH.Rmax)
-        ax.set_ylim(self.MESH.Zmin,self.MESH.Zmax)
+        ax.set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
+        ax.set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady) 
         ax.set_xlabel('R (in m)')
         ax.set_ylabel('Z (in m)')
         # Plot low-opacity background (outside plasma region)
-        ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1],self.PlasmaLS[:,1],levels=30)
+        ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1],self.PlasmaLS[:,1],levels=Nphilevels)
         # PLOT PLASMA BOUNDARY
-        ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1],self.PlasmaLS[:,1],levels=[0],colors='red', linewidths=3)
+        ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1],self.PlasmaLS[:,1],levels=[0],
+                      colors=plasmabouncolor, 
+                      linewidths=plasmabounlinewidth)
+        
         # PLOT CONSTRAINED EDGES
         for ielem in self.MESH.PlasmaBoundActiveElems:
             ax.plot([self.MESH.Elements[ielem].InterfApprox.Xint[1,0],self.MESH.Elements[ielem].InterfApprox.Xint[0,0]],
-                    [self.MESH.Elements[ielem].InterfApprox.Xint[1,1],self.MESH.Elements[ielem].InterfApprox.Xint[0,1]],'-o',color = 'green')
+                    [self.MESH.Elements[ielem].InterfApprox.Xint[1,1],self.MESH.Elements[ielem].InterfApprox.Xint[0,1]],'-o',
+                    color = ReddishPurple,
+                    linewidth = 2)
 
         # PLOT MESH BOUNDARY
-        for iboun in range(self.MESH.Nbound):
-            ax.plot(self.MESH.X[self.MESH.Tbound[iboun,:2],0],self.MESH.X[self.MESH.Tbound[iboun,:2],1],linewidth = 4, color = self.vacvesswallcolor)
-        
+        self.MESH.PlotBoundary(ax = ax)
+        # PLOT TOKAMAK FIRST WALL
+        self.TOKAMAK.PlotFirstWall(ax = ax)
         return
+
+
 
 
     def PlotMagneticField(self):
@@ -298,6 +374,51 @@ class EquilipyPlotting:
         """
         
         return
+
+
+    def PlotNormalVectors(self):
+        fig, axs = plt.subplots(1, 2, figsize=(10,5))
+        axs[0].set_xlim(self.MESH.Rmin-0.5,self.MESH.Rmax+0.5)
+        axs[0].set_ylim(self.MESH.Zmin-0.5,self.MESH.Zmax+0.5)
+        axs[1].set_xlim(6.5,7)
+        if self.FIXED_BOUNDARY:
+            axs[1].set_ylim(1.6,2)
+        else:
+            axs[1].set_ylim(2.2,2.6)
+
+        for i in range(2):
+            # PLOT PLASMA/VACUUM INTERFACE
+            axs[i].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], colors='green',linewidths=6)
+            # PLOT NORMAL VECTORS
+            for ielem in self.MESH.PlasmaBoundElems:
+                ELEMENT = self.MESH.Elements[ielem]
+                if i == 0:
+                    dl = 5
+                else:
+                    dl = 10
+                for j in range(ELEMENT.n):
+                    plt.plot([ELEMENT.Xe[j,0], ELEMENT.Xe[int((j+1)%ELEMENT.n),0]], 
+                            [ELEMENT.Xe[j,1], ELEMENT.Xe[int((j+1)%ELEMENT.n),1]], color='k', linewidth=1)
+                INTAPPROX = ELEMENT.InterfApprox
+                # PLOT INTERFACE APPROXIMATIONS
+                for inode in range(INTAPPROX.n-1):
+                    axs[0].plot(INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],0],INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],1], linestyle='-', color = 'red', linewidth = 2)
+                    axs[1].plot(INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],0],INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],1], linestyle='-', marker='o',color = 'red', linewidth = 2)
+                # PLOT NORMAL VECTORS
+                for ig, vec in enumerate(INTAPPROX.NormalVec):
+                    axs[i].arrow(INTAPPROX.Xg[ig,0],INTAPPROX.Xg[ig,1],vec[0]/dl,vec[1]/dl,width=0.005)
+                
+        axs[1].set_aspect('equal')
+        plt.show()
+        return
+
+
+
+
+
+
+
+####################################################   
 
     def InspectElement(self,element_index,BOUNDARY,PSI,TESSELLATION,GHOSTFACES,NORMALS,QUADRATURE):
         ELEMENT = self.MESH.Elements[element_index]
@@ -431,136 +552,7 @@ class EquilipyPlotting:
             axs.text(FACES[1].Xg[inode,0]-0.03,FACES[1].Xg[inode,1],str(inode),fontsize=12, color=colorlist[1])
             
         return
-
-
-    def PlotLevelSetEvolution(self,Zlow,Rleft):
-        
-        fig, axs = plt.subplots(1, 2, figsize=(10,5))
-        axs[0].set_xlim(self.MESH.Rmin,self.MESH.Rmax)
-        axs[0].set_ylim(self.MESH.Zmin,self.MESH.Zmax)
-        a = axs[0].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_NORM[:,1], levels=30)
-        axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_NORM[:,1], levels=[0], colors = 'black')
-        plt.colorbar(a, ax=axs[0])
-
-        axs[1].set_xlim(self.MESH.Rmin,self.MESH.Rmax)
-        axs[1].set_ylim(self.MESH.Zmin,self.MESH.Zmax)
-        a = axs[1].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], np.sign(self.PlasmaLS), levels=30)
-        axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_NORM[:,1], levels=[0], colors = 'black',linewidths = 3)
-        axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], colors = 'red',linestyles = 'dashed')
-        axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS_ALL[:,self.it-1], levels=[0], colors = 'orange',linestyles = 'dashed')
-        axs[1].plot([self.MESH.Rmin,self.MESH.Rmax],[Zlow,Zlow],color = 'green')
-        axs[1].plot([Rleft,Rleft],[self.MESH.Zmin,self.MESH.Zmax],color = 'green')
-
-        plt.show()
-        
-        return
-
-
-    def PlotMesh(self):
-        plt.figure(figsize=(7,10))
-        plt.ylim(np.min(self.MESH.X[:,1]),np.max(self.MESH.X[:,1]))
-        plt.xlim(np.min(self.MESH.X[:,0]),np.max(self.MESH.X[:,0]))
-        # Plot nodes
-        plt.plot(self.MESH.X[:,0],self.MESH.X[:,1],'.')
-        # Plot element edges
-        for e in range(self.MESH.Ne):
-            for i in range(self.MESH.numedges):
-                plt.plot([self.MESH.X[self.MESH.T[e,i],0], self.MESH.X[self.MESH.T[e,int((i+1)%self.MESH.n)],0]], 
-                        [self.MESH.X[self.MESH.T[e,i],1], self.MESH.X[self.MESH.T[e,int((i+1)%self.MESH.n)],1]], color='black', linewidth=1)
-        plt.show()
-        return
-
-    def PlotClassifiedElements(self,GHOSTFACES,**kwargs):
-        plt.figure(figsize=(5,6))
-        if not kwargs:
-            plt.ylim(self.MESH.Zmin-0.25,self.MESH.Zmax+0.25)
-            plt.xlim(self.MESH.Rmin-0.25,self.MESH.Rmax+0.25)
-        else: 
-            plt.ylim(kwargs['zmin'],kwargs['zmax'])
-            plt.xlim(kwargs['rmin'],kwargs['rmax'])
-        
-        # PLOT PLASMA REGION ELEMENTS
-        for elem in self.MESH.PlasmaElems:
-            ELEMENT = self.MESH.Elements[elem]
-            Xe = np.zeros([ELEMENT.numedges+1,2])
-            Xe[:-1,:] = ELEMENT.Xe[:self.MESH.numedges,:]
-            Xe[-1,:] = ELEMENT.Xe[0,:]
-            plt.plot(Xe[:,0], Xe[:,1], color='black', linewidth=1)
-            plt.fill(Xe[:,0], Xe[:,1], color = 'red')
-        # PLOT VACCUM ELEMENTS
-        for elem in self.MESH.VacuumElems:
-            ELEMENT = self.MESH.Elements[elem]
-            Xe = np.zeros([ELEMENT.numedges+1,2])
-            Xe[:-1,:] = ELEMENT.Xe[:self.MESH.numedges,:]
-            Xe[-1,:] = ELEMENT.Xe[0,:]
-            plt.plot(Xe[:,0], Xe[:,1], color='black', linewidth=1)
-            plt.fill(Xe[:,0], Xe[:,1], color = 'gray')
-        # PLOT PLASMA BOUNDARY ELEMENTS
-        for elem in self.MESH.PlasmaBoundElems:
-            ELEMENT = self.MESH.Elements[elem]
-            Xe = np.zeros([ELEMENT.numedges+1,2])
-            Xe[:-1,:] = ELEMENT.Xe[:self.MESH.numedges,:]
-            Xe[-1,:] = ELEMENT.Xe[0,:]
-            plt.plot(Xe[:,0], Xe[:,1], color='black', linewidth=1)
-            plt.fill(Xe[:,0], Xe[:,1], color = 'gold')
-        # PLOT VACUUM VESSEL FIRST WALL ELEMENTS
-        for elem in self.MESH.FirstWallElems:
-            ELEMENT = self.MESH.Elements[elem]
-            Xe = np.zeros([ELEMENT.numedges+1,2])
-            Xe[:-1,:] = ELEMENT.Xe[:self.MESH.numedges,:]
-            Xe[-1,:] = ELEMENT.Xe[0,:]
-            plt.plot(Xe[:,0], Xe[:,1], color='black', linewidth=1)
-            plt.fill(Xe[:,0], Xe[:,1], color = 'cyan')
-            
-        # PLOT PLASMA BOUNDARY  
-        plt.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], colors='green',linewidths=3)
-                
-        # PLOT GHOSTFACES 
-        if GHOSTFACES:
-            for ghostface in self.MESH.GhostFaces:
-                plt.plot(self.MESH.X[ghostface[0][:2],0],self.MESH.X[ghostface[0][:2],1],linewidth=2,color='#56B4E9')
-            
-        #colorlist = ['#009E73','#D55E00','#CC79A7','#56B4E9']
-        plt.show()
-        return
-        
-
-    def PlotNormalVectors(self):
-        fig, axs = plt.subplots(1, 2, figsize=(10,5))
-        axs[0].set_xlim(self.MESH.Rmin-0.5,self.MESH.Rmax+0.5)
-        axs[0].set_ylim(self.MESH.Zmin-0.5,self.MESH.Zmax+0.5)
-        axs[1].set_xlim(6.5,7)
-        if self.FIXED_BOUNDARY:
-            axs[1].set_ylim(1.6,2)
-        else:
-            axs[1].set_ylim(2.2,2.6)
-
-        for i in range(2):
-            # PLOT PLASMA/VACUUM INTERFACE
-            axs[i].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], colors='green',linewidths=6)
-            # PLOT NORMAL VECTORS
-            for ielem in self.MESH.PlasmaBoundElems:
-                ELEMENT = self.MESH.Elements[ielem]
-                if i == 0:
-                    dl = 5
-                else:
-                    dl = 10
-                for j in range(ELEMENT.n):
-                    plt.plot([ELEMENT.Xe[j,0], ELEMENT.Xe[int((j+1)%ELEMENT.n),0]], 
-                            [ELEMENT.Xe[j,1], ELEMENT.Xe[int((j+1)%ELEMENT.n),1]], color='k', linewidth=1)
-                INTAPPROX = ELEMENT.InterfApprox
-                # PLOT INTERFACE APPROXIMATIONS
-                for inode in range(INTAPPROX.n-1):
-                    axs[0].plot(INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],0],INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],1], linestyle='-', color = 'red', linewidth = 2)
-                    axs[1].plot(INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],0],INTAPPROX.Xint[INTAPPROX.Tint[inode:inode+1],1], linestyle='-', marker='o',color = 'red', linewidth = 2)
-                # PLOT NORMAL VECTORS
-                for ig, vec in enumerate(INTAPPROX.NormalVec):
-                    axs[i].arrow(INTAPPROX.Xg[ig,0],INTAPPROX.Xg[ig,1],vec[0]/dl,vec[1]/dl,width=0.005)
-                
-        axs[1].set_aspect('equal')
-        plt.show()
-        return
-
+    
 
     def PlotInterfaceValues(self):
         """ Function which plots the values PSIgseg at the interface edges, for both the plasma/vacuum interface and the vacuum vessel first wall. """
@@ -745,19 +737,6 @@ class EquilipyPlotting:
         return
 
 
-    @staticmethod
-    def ElementColor(dom):
-        if dom == -1:
-            color = 'red'
-        elif dom == 0:
-            color = 'gold'
-        elif dom == 1:
-            color = 'grey'
-        elif dom == 2:
-            color = 'cyan'
-        elif dom == 3:
-            color = 'black'
-        return color
 
     def PlotREFERENCE_PHYSICALelement(self,element_index,TESSELLATION,BOUNDARY,NORMALS,QUADRATURE):
         ELEMENT = self.MESH.Elements[element_index]

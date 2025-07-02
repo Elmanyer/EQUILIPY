@@ -41,7 +41,7 @@ from _plot import *
 from InitialPlasmaBoundary import *
 from InitialPSIGuess import *
 from PlasmaCurrent import *
-from mpi4py import MPI
+#from mpi4py import MPI
 
 class GradShafranovSolver(EquilipyInitialisation,
                           EquilipyCritical,
@@ -129,12 +129,12 @@ class GradShafranovSolver(EquilipyInitialisation,
         ###############################
         # WORKING DIRECTORY
         pwd = os.getcwd()
-        self.pwd = pwd[:-6]
+        self.pwd = pwd[:-6]    # -6 CORRESPONDS TO 6 CHARACTERS IN '/TESTs'
         print('Working directory: ' + self.pwd)
         
         # INITIALISE PARALLEL PROCESSING COMMUNICATOR AND ARRAYS
-        if self.PARALLEL:
-            self.comm = MPI.COMM_WORLD
+        #if self.PARALLEL:
+            #self.comm = MPI.COMM_WORLD
         return
     
     
