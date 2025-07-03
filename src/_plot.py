@@ -157,6 +157,7 @@ class EquilipyPlotting:
             # LEFT PLOT: ANALYTICAL SOLUTION
             axs[0].set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
             axs[0].set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
+            axs[0].set_aspect('equal')
             axs[0].set_xlabel('R (in m)')
             axs[0].set_ylabel('Z (in m)')
             axs[0].set_title('PSI exact')
@@ -171,6 +172,7 @@ class EquilipyPlotting:
             axs[1].set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
             axs[1].set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
             axs[1].set_xlabel('R (in m)')
+            axs[1].set_aspect('equal')
             axs[1].set_title('PSI numeric')
             axs[1].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
             axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
@@ -183,6 +185,7 @@ class EquilipyPlotting:
             
             # RIGHT PLOT: ERROR
             axs[3].axis('off')
+            axs[3].set_aspect('equal')
             axs[3].set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
             axs[3].set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
             axs[3].set_xlabel('R (in m)')
