@@ -3,7 +3,7 @@ sys.path.append('../src/')
 
 from GradShafranovSolver import *
 
-MESH = 'TRI03-COARSE-LINEAR'
+MESH = 'TRI10-ULTRAFINE-LINEAR'
 
 ##############################################################
 
@@ -40,7 +40,7 @@ Equilibrium.int_maxiter = 10           # INTERNAL LOOP (PHI_NORM) MAXIMUM ITERAT
 Equilibrium.int_tol = 1.0e-4           # INTERNAL LOOP (PHI_NORM) CONVERGENCE TOLERANCE
 Equilibrium.it_plasma = 0              # ITERATION AFTER WHICH THE PLASMA REGION CAN BE UPDATED
 Equilibrium.tol_saddle = 0.1           # TOLERANCE FOR DISTANCE BETWEEN CONSECUTIVE ITERATION SADDLE POINTS (LETS PLASMA REGION CHANGE)
-Equilibrium.beta = 1.0e6               # NITSCHE'S METHOD PENALTY PARAMETER
+Equilibrium.beta = 1.0e4               # NITSCHE'S METHOD PENALTY PARAMETER
 Equilibrium.Nconstrainedges = -1       # NUMBER OF PLAMA BOUNDARY APPROXIMATION EDGES ON WHICH CONSTRAIN BC
 Equilibrium.zeta = 1.0e-2              # GHOST PENALTY PARAMETER
 Equilibrium.PSIrelax = False           # PSI SOLUTION AITKEN RELAXATION SWITCH
@@ -62,7 +62,7 @@ Equilibrium.InitialisePickleLists()
 Equilibrium.MESH = Mesh(MESH)
 
 # TOKAMAK WALL MESH
-TOKmesh = Mesh(MESH)
+TOKmesh = Mesh('TRI03-MEGAFINE-LINEAR-REDUCED')
 Equilibrium.TOKAMAK = Tokamak(WALL_MESH = TOKmesh)
 
 ### DEFINE INITIAL PLASMA BOUNDARY

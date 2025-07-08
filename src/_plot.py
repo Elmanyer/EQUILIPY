@@ -92,8 +92,8 @@ class EquilipyPlotting:
             for coll in cont.collections:
                 coll.set_clip_path(patch)
                 
-        # PLOT COMPUTATIONAL DOMAIN
-        self.MESH.Plot(ax = ax)
+        # PLOT COMPUTATIONAL DOMAIN BOUNDARY
+        self.MESH.PlotBoundary(ax = ax)
         # PLOT TOKAMAK
         self.TOKAMAK.PlotFirstWall(ax = ax)
                 

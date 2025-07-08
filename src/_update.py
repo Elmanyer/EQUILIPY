@@ -130,7 +130,7 @@ class EquilipyUpdate:
                     # COMPUTE DISTANCE TO COMPUTATIONAL BOUNDARY NODES
                     dist_bound = np.sqrt((self.MESH.X[self.MESH.BoundaryNodes,0]-point[0])**2+(self.MESH.X[self.MESH.BoundaryNodes,1]-point[1])**2)
                     # CHECK IF CONTOUR CONTAINS SADDLE POINT
-                    if  dist_saddle < 0.1:
+                    if  dist_saddle < 0.2:
                         path_dict['saddlepoint'] = True
                         # CHECK IF CONTOUR CONTAINS COMPUTATIONAL DOMAIN BOUNDARY POINTS
                     elif np.any(dist_bound <= 0.1):
@@ -166,7 +166,7 @@ class EquilipyUpdate:
                 secondpass = False
                 counter = 0
                 for point in paths[0]['coords']:
-                    if np.linalg.norm(point-self.Xcrit[1,1,0:2]) < 0.1 and firstpass:
+                    if np.linalg.norm(point-self.Xcrit[1,1,0:2]) < 0.3 and firstpass:
                         oncontour = True 
                         firstpass = False
                         plasmaboundary.append(point)
@@ -175,7 +175,7 @@ class EquilipyUpdate:
                         counter += 1
                     if counter > 50:
                         secondpass = True
-                    if np.linalg.norm(point-self.Xcrit[1,1,0:2]) < 0.1 and secondpass: 
+                    if np.linalg.norm(point-self.Xcrit[1,1,0:2]) < 0.3 and secondpass: 
                         oncontour = False 
                                 
                 plasmaboundary.append(plasmaboundary[0])
@@ -194,6 +194,9 @@ class EquilipyUpdate:
                 indices = np.linspace(0, len(plasmaboundary[:,0]) - 1, maxnumpoints, dtype=int)
                 plasmaboundary = plasmaboundary[indices,:]
         
+        """
+        ### ACTIVATE FOR ULTRAFINE MESHES
+        
         # CHECK RESULTING CURVE FOR ABRUPT DIRECTIONAL CHANGES
         smooth = True
         smoothplasmaboun = list()
@@ -208,9 +211,9 @@ class EquilipyUpdate:
             if np.dot(vect0,vect1) < 0:
                 smooth = not smooth
             if smooth:
-                smoothplasmaboun.append(plasmaboundary[inode,:])
-                
+                smoothplasmaboun.append(plasmaboundary[inode,:]) 
         plasmaboundary = np.array(smoothplasmaboun)
+        """
 
         # Create a Path object for the new plasma domain
         polygon_path = Path(plasmaboundary)

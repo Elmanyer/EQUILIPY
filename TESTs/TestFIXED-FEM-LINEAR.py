@@ -3,7 +3,7 @@ sys.path.append('../src/')
 
 from GradShafranovSolver import *
 
-MESH = 'TRI06-ULTRAFINE-LINEAR-REDUCED'
+MESH = 'QUA09-ULTRAFINE-LINEAR-REDUCED'
 
 ##############################################################
 
@@ -32,8 +32,8 @@ Equilibrium.out_pickle = True          # OUTPUT SWITCH FOR SIMULATION DATA PYTHO
 
 # DEFINE NUMERICAL_TREATMENT PARAMETERS  
 Equilibrium.dim = 2                    # PROBLEM SPATIAL DIMENSION
-Equilibrium.QuadratureOrder2D = 8      # ORDER OF SURFACE NUMERICAL INTEGRATION QUADRATURES 
-Equilibrium.QuadratureOrder1D = 5      # ORDER OF LENGTH NUMERICAL INTEGRATION QUADRATURES 
+Equilibrium.QuadratureOrder2D = 5      # ORDER OF SURFACE NUMERICAL INTEGRATION QUADRATURES 
+Equilibrium.QuadratureOrder1D = 4      # ORDER OF LENGTH NUMERICAL INTEGRATION QUADRATURES 
 Equilibrium.ext_maxiter = 5            # EXTERNAL LOOP (PHI_B) MAXIMUM ITERATIONS
 Equilibrium.ext_tol = 1.0e-3           # EXTERNAL LOOP (PHI_B) CONVERGENCE TOLERANCE
 Equilibrium.int_maxiter = 10           # INTERNAL LOOP (PHI_NORM) MAXIMUM ITERATIONS
