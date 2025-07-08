@@ -816,8 +816,8 @@ class Mesh:
         ax.set_ylabel('Z (in m)')
         ax.set_title("Classified mesh elements")
         if not kwargs:
-            ax.set_xlim(self.Rmin-self.padx,self.Rmax+self.padx)
-            ax.set_ylim(self.Zmin-self.pady,self.Zmax+self.pady)
+            ax.set_xlim(self.Rmin-eqplot.padx,self.Rmax+eqplot.padx)
+            ax.set_ylim(self.Zmin-eqplot.pady,self.Zmax+eqplot.pady)
         else: 
             ax.set_ylim(kwargs['zmin'],kwargs['zmax'])
             ax.set_xlim(kwargs['rmin'],kwargs['rmax'])
@@ -832,7 +832,7 @@ class Mesh:
            
         # PLOT PLASMA BOUNDARY  
         if type(PlasmaLS) != type(None):
-            ax.tricontour(self.X[:,0],self.X[:,1], self.PlasmaLS, levels=[0], 
+            ax.tricontour(self.X[:,0],self.X[:,1], PlasmaLS, levels=[0], 
                         colors = eqplot.plasmabouncolor,
                         linewidths = eqplot.plasmabounlinewidth)
                 

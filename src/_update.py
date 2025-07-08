@@ -166,7 +166,7 @@ class EquilipyUpdate:
                 secondpass = False
                 counter = 0
                 for point in paths[0]['coords']:
-                    if np.linalg.norm(point-self.Xcrit[1,1,0:2]) < 0.3 and firstpass:
+                    if np.linalg.norm(point-self.Xcrit[1,1,0:2]) < 0.1 and firstpass:
                         oncontour = True 
                         firstpass = False
                         plasmaboundary.append(point)
@@ -175,7 +175,7 @@ class EquilipyUpdate:
                         counter += 1
                     if counter > 50:
                         secondpass = True
-                    if np.linalg.norm(point-self.Xcrit[1,1,0:2]) < 0.3 and secondpass: 
+                    if np.linalg.norm(point-self.Xcrit[1,1,0:2]) < 0.1 and secondpass: 
                         oncontour = False 
                                 
                 plasmaboundary.append(plasmaboundary[0])
@@ -186,6 +186,31 @@ class EquilipyUpdate:
 
         fig.clear()
         plt.close(fig)
+        
+        # IF PLASMA BOUNDARY CURVE ABOVE maxnumpoints POINTS, BRING IT DOWN 
+        maxnumpoints = 300
+        for path in paths:
+            if len(plasmaboundary[:,0]) > maxnumpoints:
+                indices = np.linspace(0, len(plasmaboundary[:,0]) - 1, maxnumpoints, dtype=int)
+                plasmaboundary = plasmaboundary[indices,:]
+        
+        # CHECK RESULTING CURVE FOR ABRUPT DIRECTIONAL CHANGES
+        smooth = True
+        smoothplasmaboun = list()
+        smoothplasmaboun.append(plasmaboundary[0,:])
+        smoothplasmaboun.append(plasmaboundary[1,:])
+        for inode in range(2,len(plasmaboundary[:,0])):
+            # CHECK TANGENT VECTORS
+            vect0 = plasmaboundary[inode,:] - plasmaboundary[inode-1,:]
+            vect1 = plasmaboundary[inode-1,:] - plasmaboundary[inode-2,:]
+            vect0 /= np.linalg.norm(vect0)
+            vect1 /= np.linalg.norm(vect1) 
+            if np.dot(vect0,vect1) < 0:
+                smooth = not smooth
+            if smooth:
+                smoothplasmaboun.append(plasmaboundary[inode,:])
+                
+        plasmaboundary = np.array(smoothplasmaboun)
 
         # Create a Path object for the new plasma domain
         polygon_path = Path(plasmaboundary)

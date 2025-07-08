@@ -340,7 +340,6 @@ class QuadrilateralCoil:
         return Bz_coil
     
     def Plot(self,ax):
-        #ax.add_patch(plt.Rectangle((magnet.Xe[0,0]-dsole,magnet.Xe[0,1]),dsole,magnet.Xe[1,1]-magnet.Xe[0,1],facecolor=self.magnetcolor,edgecolor='k',linewidth=3))
         ax.add_patch(plt.Polygon(self.Xvertices,closed=True,facecolor=coilcolor,edgecolor='k',linewidth=3))
         ax.text(self.Xcenter[0]+0.5,self.Xcenter[1], self.name)
         return

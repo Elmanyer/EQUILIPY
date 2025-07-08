@@ -2,7 +2,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import PathPatch
-from matplotlib.path import Path
 from Element import ReferenceElementCoordinates
 from itertools import chain
 

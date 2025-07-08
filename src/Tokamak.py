@@ -15,6 +15,11 @@ class Tokamak:
         self.Xwall = WALL_MESH.X[self.nodes,:]       # FIRST WALL VERTICES COORDINATES MATRIX
         self.wall_path = WALL_MESH.boundary_path     # FIRST WALL PATH (FOR PATCHING)
                 
+        # OBTAIN COMPUTATIONAL MESH LIMITS
+        self.Rmax = np.max(self.Xwall[:,0])
+        self.Rmin = np.min(self.Xwall[:,0])
+        self.Zmax = np.max(self.Xwall[:,1])
+        self.Zmin = np.min(self.Xwall[:,1])
         return
     
     
