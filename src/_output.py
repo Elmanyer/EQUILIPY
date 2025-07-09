@@ -46,7 +46,11 @@ class EquilipyOutput:
     def InitialiseOutput(self):
         
         # Check if the directory exists
-        self.outputdir = self.pwd + '/../RESULTS/' + self.CASE + '-' + self.MESH.name
+        if self.FIXED_BOUNDARY:
+            bound = 'FIXED_BOUNDARY'
+        else:
+            bound = 'FREE_BOUNDARY'
+        self.outputdir = self.pwd + '/../RESULTS/'+bound+'/' + self.CASE + '-' + self.MESH.name
         if not os.path.exists(self.outputdir):
             # Create the directory
             os.makedirs(self.outputdir)
