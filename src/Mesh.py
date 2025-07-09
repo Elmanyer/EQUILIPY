@@ -323,7 +323,7 @@ class Mesh:
                                     ElOrder = self.ElOrder,
                                     Xe = self.X[self.T[e,:],:],
                                     Te = self.T[e,:],
-                                    PlasmaLSe = PlasmaLS[self.T[e,:],1]) for e in range(self.Ne)]
+                                    PlasmaLSe = PlasmaLS[self.T[e,:]]) for e in range(self.Ne)]
         
         # COMPUTE MESH MEAN SIZE
         self.meanArea, self.meanLength = self.ComputeMeshElementsMeanSize()
@@ -501,7 +501,7 @@ class Mesh:
                 self.VacuumNodes.add(node)    
         for ielem in self.PlasmaBoundElems:
             for node in self.T[ielem,:]:
-                if self.PlasmaLS[node,1] < 0:
+                if self.PlasmaLS[node] < 0:
                     self.PlasmaNodes.add(node)
                 else:
                     self.VacuumNodes.add(node)
@@ -568,16 +568,6 @@ class Mesh:
         return
     
     
-    def ComputePlasmaBoundaryNumberNodes(self):
-        """
-        Computes the total number of nodes located on the plasma boundary approximation
-        """  
-        nnodes = 0
-        for ielem in self.PlasmaBoundActiveElems:
-            nnodes += self.Elements[ielem].InterfApprox.ng
-        return nnodes
-    
-    
     def ComputePlasmaBoundaryApproximation(self):
         """ 
         Computes the elemental cutting segments conforming to the plasma boundary approximation.
@@ -589,6 +579,16 @@ class Mesh:
             # APPROXIMATE PLASMA/VACUUM INTERACE GEOMETRY CUTTING ELEMENT 
             self.Elements[ielem].InterfaceApproximation(inter)
         return
+    
+    
+    def ComputePlasmaBoundaryNumberNodes(self):
+        """
+        Computes the total number of nodes located on the plasma boundary approximation
+        """  
+        nnodes = 0
+        for ielem in self.PlasmaBoundActiveElems:
+            nnodes += self.Elements[ielem].InterfApprox.ng
+        return nnodes
     
     
     ##################################################################################################
@@ -713,52 +713,46 @@ class Mesh:
     ############################# NUMERICAL INTEGRATION QUADRATURES ##################################
     ##################################################################################################
     
-    def ComputeIntegrationQuadratures(self,QuadOrder2D,QuadOrder1D):
+    def ComputeStandardQuadratures(self,QuadOrder2D):
         """
-        Computes the numerical integration quadratures for different types of elements and, if needed, ghost faces.
+        Computes the STANDARD FEM numerical integration QUADRATURES for ALL MESH ELEMENTS.
         """
         
         # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR NON-CUT ELEMENTS 
-        for ielem in self.NonCutElems:
-            self.Elements[ielem].ComputeStandardQuadrature2D(QuadOrder2D)
+        for ELEMENT in self.Elements:
+            ELEMENT.ComputeStandardQuadrature2D(QuadOrder2D)
             
         # DEFINE STANDARD SURFACE QUADRATURE NUMBER OF INTEGRATION NODES
-        self.nge = self.Elements[self.NonCutElems[0]].ng
-            
+        self.nge = self.Elements[0].ng
+        return
+    
+    def ComputeAdaptedQuadratures(self,QuadOrder2D,QuadOrder1D):
+        """
+        Computes the ADAPTED CutFEM numerical integration QUADRATURES for CUT ELEMENTS.
+        """
         # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
         for ielem in self.PlasmaBoundElems:
             self.Elements[ielem].ComputeAdaptedQuadratures2D(QuadOrder2D)
             
         for ielem in self.PlasmaBoundActiveElems:
             self.Elements[ielem].ComputeAdaptedQuadrature1D(QuadOrder1D)
+            
+        # COMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION
+        self.NnPB = self.ComputePlasmaBoundaryNumberNodes()
         return
     
-    
     def ComputeGhostFacesQuadratures(self,QuadOrder1D):
+        """
+        Computes the ELEMENTAL FACES numerical integration QUADRATURES for GHOST ELEMENTS.
+        """
         # COMPUTE QUADRATURES FOR GHOST FACES ON PLASMA BOUNDARY ELEMENTS
         for ielem in self.GhostElems:
             self.Elements[ielem].ComputeGhostFacesQuadratures(QuadOrder1D)
         return
-    
-    
-    def ComputePlasmaBoundStandardQuadratures(self,QuadOrder2D):
-        if len(self.PlasmaBoundElems) == 0:
-            return
-        else:
-            if self.FIXED_BOUNDARY:
-                if type(self.Elements[self.PlasmaBoundElems[0]].Xg) == type(None):
-                    for ielem in self.PlasmaBoundElems:
-                        self.Elements[ielem].ComputeStandardQuadrature2D(QuadOrder2D)
-            else:
-                for ielem in self.PlasmaBoundElems:
-                    if type(self.Elements[ielem].Xg) == type(None):
-                        self.Elements[ielem].ComputeStandardQuadrature2D(QuadOrder2D)
-            return
         
         
     def IntegrationNodesMesh(self):
         if type(self.Xg) == type(None):
-            self.ComputePlasmaBoundStandardQuadratures()
             self.Xg = np.zeros([self.Ne*self.nge,self.dim])
             for ielem, ELEMENT in enumerate(self.Elements):
                 self.Xg[ielem*self.nge:(ielem+1)*self.nge,:] = ELEMENT.Xg

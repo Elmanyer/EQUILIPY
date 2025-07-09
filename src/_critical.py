@@ -231,11 +231,10 @@ class EquilipyCritical:
         """
         if not self.FIXED_BOUNDARY:
             for i in range(self.MESH.Nn):
-                #self.PSI_NORMstar[i,1] = (self.PSI_X-self.PSI[i])/(self.PSI_X-self.PSI_0)
-                self.PSI_NORMstar[i,1] = (self.PSI[i]-self.PSI_0)/(self.PSI_X-self.PSI_0)
+                self.PSI_NORM[i,1] = (self.PSI[i]-self.PSI_0)/(self.PSI_X-self.PSI_0)
         else: 
             for i in range(self.MESH.Nn):
-                self.PSI_NORMstar[i,1] = self.PSI[i]
+                self.PSI_NORM[i,1] = self.PSI[i]
         return 
     
     

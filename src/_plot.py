@@ -82,7 +82,7 @@ class EquilipyPlotting:
         
         contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], FIELD, levels=Npsilevels)
         contour1 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], FIELD, levels=[0], colors = 'black')
-        contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
+        contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], 
                       colors = plasmabouncolor,
                       linewidths = plasmabounlinewidth)
         
@@ -113,7 +113,7 @@ class EquilipyPlotting:
         
         contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI[:,0], levels = Npsilevels, cmap = plasmacmap)
         contour1 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI[:,0], levels=[self.PSI_X], colors = 'black')
-        contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
+        contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], 
                                  colors = plasmabouncolor,
                                  linewidths = plasmabounlinewidth)
         
@@ -161,7 +161,7 @@ class EquilipyPlotting:
             axs[0].set_ylabel('Z (in m)')
             axs[0].set_title('PSI exact')
             a1 = axs[0].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], AnaliticalNorm, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
-            axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
+            axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], 
                               colors = plasmabouncolor, 
                               linewidths=plasmabounlinewidth)
             axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], AnaliticalNorm, levels=[0], colors = 'black')
@@ -174,7 +174,7 @@ class EquilipyPlotting:
             axs[1].set_aspect('equal')
             axs[1].set_title('PSI numeric')
             axs[1].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
-            axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
+            axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], 
                               colors = plasmabouncolor, 
                               linewidths=plasmabounlinewidth)
             axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=[0], colors = 'black')
@@ -220,7 +220,7 @@ class EquilipyPlotting:
                 psisep = self.PSI_X
             contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], field, levels=Npsilevels, cmap=plasmacmap)
             contour1 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], field, levels=[psisep], colors = 'black',linewidths=2)
-            contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS[:,1], levels=[0], 
+            contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], 
                                      colors = plasmabouncolor, 
                                      linewidths=plasmabounlinewidth)
             
@@ -330,9 +330,9 @@ class EquilipyPlotting:
         ax.set_xlabel('R (in m)')
         ax.set_ylabel('Z (in m)')
         # Plot low-opacity background (outside plasma region)
-        ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1],self.PlasmaLS[:,1],levels=Nphilevels)
+        ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1],self.PlasmaLS,levels=Nphilevels)
         # PLOT PLASMA BOUNDARY
-        ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1],self.PlasmaLS[:,1],levels=[0],
+        ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1],self.PlasmaLS,levels=[0],
                       colors=plasmabouncolor, 
                       linewidths=plasmabounlinewidth)
         

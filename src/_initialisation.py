@@ -23,11 +23,6 @@ class EquilipyInitialisation:
         if type(self.QuadratureOrder1D) == type(None):
             self.QuadratureOrder1D = ceil(0.5*(self.QuadratureOrder2D+1))
         
-        # INITIALISE AITKEN'S RELAXATION LAMBDAS
-        self.lambdaPSI = np.zeros([2])
-        self.lambdaPSI[0] = self.lambda0           # INITIAL LAMBDA PARAMETER
-        self.lambdamax = 0.95
-        self.lambdamin = 0.0
         print('Done!')
         return
     
@@ -56,65 +51,8 @@ class EquilipyInitialisation:
         """
         Computes the initial level-set function values describing the plasma boundary. Negative values represent inside the plasma region.
         """ 
-        
-        self.PlasmaLS = np.zeros([self.MESH.Nn,2])
-        self.PlasmaLSstar = np.zeros([self.MESH.Nn,2])
-        self.PlasmaLS[:,0] = self.initialPHI.PHI0
-        self.PlasmaLS[:,1] = self.PlasmaLS[:,0]
+        self.PlasmaLS = self.initialPHI.PHI0
         return 
-    
-    
-    def InitialiseDomainDiscretisation(self):
-        
-        print('INITIALISE ELEMENTAL DISCRETISATION...')
-        
-        # INITIALISE LEVEL-SET FUNCTION
-        print("     -> INITIALISE LEVEL-SET...", end="")
-        self.InitialisePlasmaLevelSet()
-        print('Done!')
-        
-        # INITIALISE ELEMENTS 
-        print("     -> INITIALISE ELEMENTS...")
-        self.MESH.InitialiseElements(self.PlasmaLS)
-        if type(self.PlasmaCurrent) != type(None) and self.PlasmaCurrent.DIMENSIONLESS:
-            self.MESH.DimensionlessCoordinates(self.PlasmaCurrent.R0)
-        print('     Done!')
-        
-        # CLASSIFY ELEMENTS   
-        print("     -> CLASSIFY ELEMENTS...", end="")
-        self.MESH.IdentifyNearestNeighbors()
-        self.MESH.IdentifyBoundaries()
-        self.PlasmaLS[:,1] = self.MESH.ClassifyElements(self.PlasmaLS[:,1])
-        print("Done!")
-
-        # COMPUTE PLASMA BOUNDARY APPROXIMATION
-        print("     -> APPROXIMATE PLASMA BOUNDARY INTERFACE...", end="")
-        self.MESH.ObtainPlasmaBoundaryElementalPath()
-        self.MESH.ObtainPlasmaBoundaryActiveElements(numelements = self.Nconstrainedges)
-        self.MESH.ComputePlasmaBoundaryApproximation()
-        print("Done!")
-        
-        # IDENTIFY GHOST FACES 
-        if self.GhostStabilization:
-            print("     -> IDENTIFY GHOST FACES...", end="")
-            self.MESH.ComputePlasmaBoundaryGhostFaces()
-            print("Done!")
-        
-        # COMPUTE NUMERICAL INTEGRATION QUADRATURES
-        print('     -> COMPUTE NUMERICAL INTEGRATION QUADRATURES...', end="")
-        # MESH ELEMENTS' QUADRATURES
-        self.MESH.ComputeIntegrationQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
-        if self.GhostStabilization:
-            self.MESH.ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
-                    
-        print('Done!')
-        
-        # COMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION
-        self.MESH.NnPB = self.MESH.ComputePlasmaBoundaryNumberNodes()
-        
-        print('Done!')
-        return  
-    
     
     
     def InitialisePSI(self):  
@@ -134,8 +72,7 @@ class EquilipyInitialisation:
         print('     -> INITIALISE PSI ARRAYS...', end="")
         # INITIALISE ITERATIVE UPDATED ARRAYS
         self.PSI = np.zeros([self.MESH.Nn],dtype=float)            # SOLUTION FROM SOLVING CutFEM SYSTEM OF EQUATIONS (INTERNAL LOOP)       
-        self.PSI_NORMstar = np.zeros([self.MESH.Nn,2],dtype=float) # UNRELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)
-        self.PSI_NORM = np.zeros([self.MESH.Nn,2],dtype=float)     # RELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)
+        self.PSI_NORM = np.zeros([self.MESH.Nn,2],dtype=float)     # NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)
         self.PSI_CONV = np.zeros([self.MESH.Nn],dtype=float)       # CONVERGED SOLUTION FIELD
         print('Done!')
         

@@ -28,11 +28,15 @@ class EquilipyUpdate:
                     L2residu = np.linalg.norm(self.PSI_NORM[:,1] - self.PSI_NORM[:,0])/np.linalg.norm(self.PSI_NORM[:,1])
                 else: 
                     L2residu = np.linalg.norm(self.PSI_NORM[:,1] - self.PSI_NORM[:,0])
+                    
+                # CHECK CONVERGENCE
                 if L2residu < self.int_tol:
                     self.int_cvg = True   # STOP INTERNAL WHILE LOOP 
                 else:
                     self.int_cvg = False
-                    
+                
+                # UPDATE VALUES
+                
                 self.int_residu = L2residu
                 print("Internal iteration = ",self.int_it,", PSI_NORM residu = ", L2residu)
                 print(" ")
@@ -58,13 +62,19 @@ class EquilipyUpdate:
                 print(" ")
         return 
     
+    def UpdatePSI_NORM(self):
+        # UPDATE NORMALISED SOLUTION ARRAY
+        self.PSI_NORM[:,0] = self.PSI_NORM[:,1]
+        # UPDATE CRITICAL VALUES
+        self.Xcrit[0,:,:] = self.Xcrit[1,:,:]
+        return
+    
     def UpdatePSI_B(self):
         """
         Updates the PSI_B arrays.
         """
         if self.ext_cvg == False:
             self.PSI_B[:,0] = self.PSI_B[:,1]
-            self.PSI_NORMstar[:,0] = self.PSI_NORMstar[:,1]
             self.PSI_NORM[:,0] = self.PSI_NORM[:,1]
         elif self.ext_cvg == True:
             self.PSI_CONV = self.PSI_NORM[:,1]
@@ -109,11 +119,16 @@ class EquilipyUpdate:
     
 
     
-    def ComputePSILevelSet(self,PSI_NORM):
+    def ComputePSILevelSet(self,PSI_NORM=None):
+        
+        if type(PSI_NORM) == type(None):
+            psinorm = self.PSI_NORM[:,1]
+        else:
+            psinorm = PSI_NORM
         
         # OBTAIN POINTS CONFORMING THE NEW PLASMA DOMAIN BOUNDARY
         fig, ax = plt.subplots(figsize=(6, 8))
-        cs = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], PSI_NORM, levels=[self.PSI_NORMseparatrix])
+        cs = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], psinorm, levels=[self.PSI_NORMseparatrix])
 
         paths = list()
 
@@ -221,105 +236,19 @@ class EquilipyUpdate:
         inside = polygon_path.contains_points(self.MESH.X)
 
         # FORCE PLASMA LEVEL-SET SIGN DEPENDING ON REGION
-        PSILevSet = self.PSI_NORMseparatrix - PSI_NORM.copy()
+        self.PlasmaLS = self.PSI_NORMseparatrix - psinorm.copy()
         for inode in range(self.MESH.Nn):
             if inside[inode]:
-                PSILevSet[inode] = -np.abs(PSILevSet[inode])
+                self.PlasmaLS[inode] = -np.abs(self.PlasmaLS[inode])
             else:
-                PSILevSet[inode] = np.abs(PSILevSet[inode])
-    
-        return PSILevSet
-    
+                self.PlasmaLS[inode] = np.abs(self.PlasmaLS[inode])
+
+        return 
     
     
     def UpdateElementalPlasmaLevSet(self):
         for ELEMENT in self.MESH.Elements:
-            ELEMENT.LSe = self.PlasmaLS[self.MESH.T[ELEMENT.index,:],1]
+            ELEMENT.LSe = self.PlasmaLS[self.MESH.T[ELEMENT.index,:]]
         return
     
     
-    def UpdatePlasmaRegion(self,RELAXATION=False):
-        """
-        If necessary, the level-set function is updated according to the new normalised solution's 0-level contour.
-        If the new saddle point is close enough to the old one, the function exits early, assuming the plasma region is already well-defined.
-        
-        On the contrary, it updates the following:
-            1. Plasma boundary level-set function values.
-            2. Plasma region classification.
-            3. Plasma boundary approximation and normal vectors.
-            4. Numerical integration quadratures for the plasma and vacuum elements.
-            5. Updates nodes on the plasma boundary approximation.
-        """
-                
-        if not self.FIXED_BOUNDARY:
-            # IN CASE WHERE THE NEW SADDLE POINT (N+1) CORRESPONDS (CLOSE TO) TO THE OLD SADDLE POINT, THEN THAT MEANS THAT THE PLASMA REGION
-            # IS ALREADY WELL DEFINED BY THE OLD LEVEL-SET 
-            
-            if self.it >= self.it_plasma and np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]) > self.tol_saddle:
-
-                ###### UPDATE PLASMA REGION LEVEL-SET FUNCTION VALUES ACCORDING TO SOLUTION OBTAINED
-                # . RECALL THAT PLASMA REGION IS DEFINED BY NEGATIVE VALUES OF LEVEL-SET -> NEED TO INVERT SIGN
-                # . CLOSED GEOMETRY DEFINED BY 0-LEVEL CONTOUR BENEATH ACTIVE SADDLE POINT (DIVERTOR REGION) NEEDS TO BE
-                #   DISCARTED BECAUSE THE LEVEL-SET DESCRIBES ONLY THE PLASMA REGION GEOMETRY -> NEED TO POST-PROCESS CUTFEM
-                #   SOLUTION IN ORDER TO TAKE ITS 0-LEVEL CONTOUR ENCLOSING ONLY THE PLASMA REGION.  
-                
-                self.PlasmaLSstar[:,1] = self.ComputePSILevelSet(self.PSI_NORM[:,1])
-                
-                # AITKEN RELAXATION FOR PLASMA REGION EVOLUTION
-                if RELAXATION:
-                    residual1 = self.PlasmaLSstar[:,1] - self.PlasmaLS[:,1] 
-                    if self.it > 2:
-                        residual0 = self.PlasmaLSstar[:,0] - self.PlasmaLS[:,0]
-                        self.alphaPHI = - (residual1-residual0)@residual1/np.linalg.norm(residual1-residual0)
-                    newPlasmaLS = self.PlasmaLS[:,1] + self.alphaPHI*residual1
-                    
-                    # SHOULD THE CRITICAL POINT BE IN AGREEMENT WITH THE RELAXED PLASMA REGION?
-                    
-                else:
-                    newPlasmaLS = self.PlasmaLSstar[:,1]
-                
-                # UPDATE PLASMA LS
-                self.PlasmaLSstar[:,0] = self.PlasmaLSstar[:,1]
-                self.PlasmaLS[:,0] = self.PlasmaLS[:,1]
-                self.PlasmaLS[:,1] = newPlasmaLS
-                
-                ###### RECOMPUTE ALL PLASMA BOUNDARY ELEMENTS ATTRIBUTES
-                # UPDATE PLASMA REGION LEVEL-SET ELEMENTAL VALUES     
-                self.UpdateElementalPlasmaLevSet()
-                # CLASSIFY ELEMENTS ACCORDING TO NEW LEVEL-SET
-                self.PlasmaLS[:,1] = self.MESH.ClassifyElements(self.PlasmaLS[:,1])
-                # RECOMPUTE PLASMA BOUNDARY APPROXIMATION and NORMAL VECTORS
-                self.MESH.ObtainPlasmaBoundaryElementalPath()
-                self.MESH.ObtainPlasmaBoundaryActiveElements(numelements = self.Nconstrainedges)
-                self.MESH.ComputePlasmaBoundaryApproximation()
-                # REIDENTIFY PLASMA BOUNDARY GHOST FACES
-                if self.GhostStabilization:
-                    self.MESH.ComputePlasmaBoundaryGhostFaces()
-                
-                ###### RECOMPUTE NUMERICAL INTEGRATION QUADRATURES
-                # COMPUTE STANDARD QUADRATURE ENTITIES FOR NON-CUT ELEMENTS
-                for ielem in np.concatenate((self.MESH.PlasmaElems, self.MESH.VacuumElems), axis = 0):
-                    self.MESH.Elements[ielem].ComputeStandardQuadrature2D(self.QuadratureOrder2D)
-                # COMPUTE ADAPTED QUADRATURE ENTITIES FOR INTERFACE ELEMENTS
-                for ielem in self.MESH.PlasmaBoundElems:
-                    self.MESH.Elements[ielem].ComputeAdaptedQuadratures2D(self.QuadratureOrder2D)
-                for ielem in self.MESH.PlasmaBoundActiveElems:
-                    self.MESH.Elements[ielem].ComputeAdaptedQuadrature1D(self.QuadratureOrder1D)
-                    
-                # COMPUTE PLASMA BOUNDARY GHOST FACES QUADRATURES
-                if self.GhostStabilization:
-                    for ielem in self.MESH.GhostElems: 
-                        self.MESH.Elements[ielem].ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
-                    
-                # RECOMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION 
-                self.MESH.NnPB = self.MESH.ComputePlasmaBoundaryNumberNodes()
-                
-                # WRITE NEW PLASMA REGION DATA
-                self.writePlasmaBoundaryData()
-                
-                # UPDATE CRITICAL VALUES
-                self.Xcrit[0,:,:] = self.Xcrit[1,:,:] 
-            else:
-                print("Plasma region unchanged: distance between consecutive saddle points = ", np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1]))
-                print(" ")   
-            return

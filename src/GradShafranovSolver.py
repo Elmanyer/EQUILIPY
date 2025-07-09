@@ -83,19 +83,11 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.int_cvg = None                 # INTERNAL LOOP STRUCTURE CONVERGENCE FLAG
         self.ext_it = None                  # EXTERNAL LOOP STRUCTURE ITERATIONS NUMBER
         self.int_it = None                  # INTERNAL LOOP STRUCTURE ITERATIONS NUMBER
-        self.it_plasma = None               # ITERATION AFTER WHICH THE PLASMA REGION CAN BE UPDATED
         self.tol_saddle = None              # TOLERANCE FOR DISTANCE BETWEEN CONSECUTIVE ITERATION SADDLE POINTS (LETS PLASMA REGION CHANGE)
         #### BOUNDARY CONSTRAINTS
         self.beta = None                    # NITSCHE'S METHOD PENALTY TERM
         self.Nconstrainedges = None         # NUMBER OF PLAMA BOUNDARY APPROXIMATION EDGES ON WHICH CONSTRAIN BC
         #### STABILIZATION
-        self.PSIrelax = False               # PSI SOLUTION AITKEN RELAXATION SWITCH
-        self.lambdaPSI = None               # PHI LEVEL-SET AITKEN RELAXATION PARAMETER 
-        self.lambdamin = None               # PHI LEVEL-SET AITKEN RELAXATION PARAMETER MINIMAL VALUE
-        self.lambdamax = None               # PHI LEVEL-SET AITKEN RELAXATION PARAMETER MAXIMAL VALUE 
-        self.lambda0 = None                 # INITIAL AIKTEN'S SCHEME RELAXATION CONSTANT  (alpha0 = 1 - lambda0)
-        self.PHIrelax = False               # PHI LEVEL-SET AITKEN RELAXATION SWITCH
-        self.alphaPHI = None                # PHI LEVEL-SET AITKEN RELAXATION INITIAL PARAMETER
         self.zeta = None                    # GHOST PENALTY PARAMETER
         #### OPTIMIZATION OF CRITICAL POINTS
         self.R0_axis = None                 # MAGNETIC AXIS OPTIMIZATION INITIAL GUESS R COORDINATE
@@ -108,14 +100,12 @@ class GradShafranovSolver(EquilipyInitialisation,
         # ARRAYS
         self.LHS = None                     # GLOBAL SYSTEM LEFT-HAND-SIDE MATRIX
         self.RHS = None                     # GLOBAL SYSTEM RIGHT-HAND-SIDE VECTOR
-        self.PlasmaLS = None                # PLASMA REGION GEOMETRY LEVEL-SET FUNCTION NODAL VALUES AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
-        self.PlasmaLSstar = None            # UNRELAXED PLASMA REGION GEOMETRY LEVEL-SET FUNCTION NODAL VALUES
+        self.PlasmaLS = None                # PLASMA REGION GEOMETRY LEVEL-SET FUNCTION NODAL VALUES 
         self.PSI = None                     # PSI SOLUTION FIELD OBTAINED BY SOLVING CutFEM SYSTEM
         self.Xcrit = None                   # COORDINATES MATRIX FOR CRITICAL PSI POINTS
         self.PSI_0 = None                   # PSI VALUE AT MAGNETIC AXIS MINIMA
         self.PSI_X = None                   # PSI VALUE AT SADDLE POINT (PLASMA SEPARATRIX)
-        self.PSI_NORMstar = None            # UNRELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
-        self.PSI_NORM = None                # RELAXED NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
+        self.PSI_NORM = None                # NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
         self.PSI_B = None                   # VACUUM VESSEL WALL PSI VALUES (EXTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
         self.PSI_CONV = None                # CONVERGED NORMALISED PSI SOLUTION FIELD 
         self.int_residu = None              # INTERNAL LOOP RESIDU
@@ -215,30 +205,79 @@ class GradShafranovSolver(EquilipyInitialisation,
     
     
     ##################################################################################################
-    ####################################### AITKEN RELAXATION ########################################
+    #################################### DOMAIN DISCRETISATION #######################################
     ##################################################################################################
 
-    def AitkenRelaxation(self,RELAXATION = False):
-        if RELAXATION:
-            if self.it == 1: 
-                alpha = 1 - self.lambdaPSI[0]
-            else:
-                residual0 = self.PSI_NORM[:,0] - self.PSI_NORMstar[:,0]
-                residual1 = self.PSI_NORM[:,1] - self.PSI_NORMstar[:,1]
-                self.lambdaPSI[1] = self.lambdaPSI[0] + (self.lambdaPSI[0] - 1)*(residual0-residual1)@residual1/np.linalg.norm(residual0-residual1)
-                alpha = 1 - max(min(self.lambdaPSI[1], self.lambdamax), self.lambdamin)
-                # UPDATE lambda
-                self.lambdaPSI[0] = self.lambdaPSI[1]
-                
-            print("AITKEN'S RELAXATION PARAMETER (alpha) = ", alpha)
-            newPSI = (1-alpha)*self.PSI_NORM[:,1] + alpha*self.PSI_NORMstar[:,1]
-        else:
-            newPSI = self.PSI_NORMstar[:,1]
+    def DomainDiscretisation(self,INITIALISATION = False):
+        
+        print('PERFORM DOMAIN DISCRETISATION...')
+        
+        ####################### INITIALISATION TASKS ########################
+        
+        # THE FOLLOWING COMMANDS ARE ONLY EXECUTED WHEN INITIALISING THE SIMULATION
+        if INITIALISATION:
+            print('INITIALISATION TASKS...')
+        
+            # INITIALISE LEVEL-SET FUNCTION
+            print("     -> INITIALISE LEVEL-SET...", end="")
+            self.InitialisePlasmaLevelSet()
+            print('Done!')
             
-        # UPDATE ARRAYS
-        self.PSI_NORMstar[:,0] = self.PSI_NORMstar[:,1]
-        self.PSI_NORM[:,0] = self.PSI_NORM[:,1]
-        self.PSI_NORM[:,1] = newPSI
+            # INITIALISE ELEMENTS 
+            print("     -> INITIALISE ELEMENTS...")
+            self.MESH.InitialiseElements(self.PlasmaLS)
+            if type(self.PlasmaCurrent) != type(None) and self.PlasmaCurrent.DIMENSIONLESS:
+                self.MESH.DimensionlessCoordinates(self.PlasmaCurrent.R0)
+            print('     Done!')
+            
+            # IDENTIFY ELEMENTS MESH RELATION   
+            print("     -> IDENTIFY ELEMENTS MESH RELATION...", end="")
+            self.MESH.IdentifyNearestNeighbors()
+            self.MESH.IdentifyBoundaries()
+            print("Done!")
+            
+            # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR ALL ELEMENTS 
+            print('     -> COMPUTE STANDARD NUMERICAL INTEGRATION QUADRATURES...', end="")
+            self.MESH.ComputeStandardQuadratures(self.QuadratureOrder2D)
+            print("Done!")
+                
+            # DEFINE STANDARD SURFACE QUADRATURE NUMBER OF INTEGRATION NODES
+            self.nge = self.MESH.Elements[0].ng
+            
+            print("Done!")
+            
+        #####################################################################
+        ################# RUN-TIME DOMAIN DISCRETISATION ####################
+        
+        # CLASSIFY ELEMENTS   
+        print("     -> CLASSIFY ELEMENTS...", end="")
+        self.PlasmaLS = self.MESH.ClassifyElements(self.PlasmaLS)
+        print("Done!")
+
+        # COMPUTE PLASMA BOUNDARY APPROXIMATION
+        print("     -> APPROXIMATE PLASMA BOUNDARY INTERFACE...", end="")
+        self.MESH.ObtainPlasmaBoundaryElementalPath()
+        self.MESH.ObtainPlasmaBoundaryActiveElements(numelements = self.Nconstrainedges)
+        self.MESH.ComputePlasmaBoundaryApproximation()
+        print("Done!")
+        
+        # COMPUTE ADAPTED QUADRATURE ENTITIES FOR CUT ELEMENTS
+        print('     -> COMPUTE PLASMA BOUNDARY APPROXIMATION QUADRATURES...', end="")
+        self.MESH.ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
+        print("Done!")
+            
+        # CUT ELEMENTS GHOST FACES 
+        if self.GhostStabilization:
+            # IDENTIFY GHOST FACES
+            print("     -> IDENTIFY GHOST FACES...", end="")
+            self.MESH.ComputePlasmaBoundaryGhostFaces()
+            print("Done!")
+            # COMPUTE QUADRATURES FOR GHOST FACES ON PLASMA BOUNDARY ELEMENTS
+            print("     -> COMPUTE GHOST FACES QUADRATURES...", end="")
+            self.MESH.ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
+            print("Done!")
+      
+        print('Done!')
         return
         
     
@@ -619,26 +658,35 @@ class GradShafranovSolver(EquilipyInitialisation,
                 if self.plotelemsClas:
                     self.PlotClassifiedElements(GHOSTFACES=self.GhostStabilization)
                     
-                # INNER LOOP ALGORITHM: SOLVING GRAD-SHAFRANOV BVP WITH CutFEM
-                self.AssembleGlobalSystem()                 # 0. ASSEMBLE CUTFEM SYSTEM
-                self.SolveSystem()                          # 1. SOLVE CutFEM SYSTEM  ->> PSI
+                # INNER LOOP ALGORITHM: SOLVING GRAD-SHAFRANOV BVP
+                self.AssembleGlobalSystem()                 # 1. ASSEMBLE SYSTEM
+                self.SolveSystem()                          # 2. SOLVE SYSTEM  ->> PSI
                 if not self.FIXED_BOUNDARY:
-                    self.ComputeCriticalPSI()               # 2. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
-                    self.writePSIcrit()                     #    WRITE CRITICAL POINTS
-                self.NormalisePSI()                         # 3. NORMALISE PSI RESPECT TO CRITICAL VALUES  ->> PSI_NORM 
-                self.AitkenRelaxation(RELAXATION = self.PSIrelax)
-                
-                self.writePSI()                             #    WRITE SOLUTION             
+                    self.ComputeCriticalPSI()               # 3. COMPUTE CRITICAL VALUES   PSI_0 AND PSI_X
+                    self.writePSIcrit()                     #       -> WRITE CRITICAL POINTS
+                self.NormalisePSI()                         # 4. NORMALISE PSI RESPECT TO CRITICAL VALUES  ->> PSI_NORM[:,1] 
+                self.writePSI()                             #       -> WRITE NEW SOLUTION PSI_NORM[:,1]         
                 if self.plotPSI:
-                    self.PlotSolutionPSI()                  #    PLOT SOLUTION AND NORMALISED SOLUTION
-                self.CheckConvergence('PSI_NORM')           # 4. CHECK CONVERGENCE OF PSI_NORM FIELD
-                self.writeresidu("INTERNAL")                #    WRITE INTERNAL LOOP RESIDU
+                    self.PlotSolutionPSI()                  #       -> PLOT SOLUTION AND NORMALISED SOLUTION
+                self.CheckConvergence('PSI_NORM')           # 5. CHECK CONVERGENCE OF PSI_NORM FIELD
+                self.writeresidu("INTERNAL")                #       -> WRITE INTERNAL LOOP RESIDU
                 
-                self.UpdatePlasmaRegion(RELAXATION = self.PHIrelax)                   # 5. UPDATE MESH ELEMENTS CLASSIFACTION RESPECT TO NEW PLASMA BOUNDARY LEVEL-SET
+                                                            # 6. UPDATE PLASMA REGION IF:  
+                if not self.FIXED_BOUNDARY:                 #                                       - FREE-BOUNDARY PROBLEM
+                    self.SADDLE_dist = np.linalg.norm(self.Xcrit[1,1,:-1]-self.Xcrit[0,1,:-1])    # - DISTANCE BETWEEN SADDLE POINTS < tol_saddle
+                    if self.SADDLE_dist > self.tol_saddle:
+                        self.ComputePSILevelSet()           #       -> COMPUTE NEW PLASMA BOUNDARY LEVEL-SET
+                        self.UpdateElementalPlasmaLevSet()  #       -> UPDATE ELEMENTAL PLASMA LEVEL-SET VALUES 
+                        self.DomainDiscretisation()         #       -> DISCRETISE DOMAIN ACCORDING TO NEW PLASMA REGION
+                        self.writePlasmaBoundaryData()      #       -> WRITE NEW PLASMA REGION DATA
+                    else:
+                        print("Plasma region unchanged: distance between consecutive saddle points = ", self.SADDLE_dist)
+                        print(" ")   
                 
-                self.UpdateElementalPSI()                   # 7. UPDATE PSI_NORM VALUES IN CORRESPONDING ELEMENTS (ELEMENT.PSIe = PSI_NORM[ELEMENT.Te,0])
-                self.UpdatePlasmaBoundaryValues()           # 8. UPDATE ELEMENTAL CONSTRAINT VALUES PSIgseg FOR PLASMA/VACUUM INTERFACE
-                self.PlasmaCurrent.Normalise()
+                self.UpdatePSI_NORM()                       # 7. UPDATE PSI_NORM ARRAY
+                self.UpdateElementalPSI()                   # 8. UPDATE PSI_NORM VALUES IN CORRESPONDING ELEMENTS 
+                self.UpdatePlasmaBoundaryValues()           # 9. UPDATE ELEMENTAL CONSTRAINT VALUES PSIgseg FOR PLASMA/VACUUM INTERFACE
+                self.PlasmaCurrent.Normalise()              # 10.COMPUTE PLASMA CURRENT NORMALISATION FACTOR ACCORDING TO NEW PLASMA REGION
                 
                 #######################################################
                 ################ END INTERNAL LOOP ####################
@@ -651,9 +699,9 @@ class GradShafranovSolver(EquilipyInitialisation,
             self.writePSI_B()
             print('Done!')
             
-            self.CheckConvergence('PSI_B')            # CHECK CONVERGENCE OF VACUUM VESSEL FIEST WALL PSI VALUES  (PSI_B)
-            self.writeresidu("EXTERNAL")              # WRITE EXTERNAL LOOP RESIDU 
-            self.UpdatePSI_B()                   # UPDATE PSI_NORM AND PSI_B VALUES 
+            self.CheckConvergence('PSI_B')                  # CHECK CONVERGENCE OF VACUUM VESSEL FIEST WALL PSI VALUES  (PSI_B)
+            self.writeresidu("EXTERNAL")                    # WRITE EXTERNAL LOOP RESIDU 
+            self.UpdatePSI_B()                              # UPDATE PSI_B VALUES 
             
             #######################################################
             ################ END EXTERNAL LOOP ####################

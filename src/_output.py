@@ -278,7 +278,6 @@ class EquilipyOutput:
             self.file_proparams.write("    int_tol = {:e}\n".format(self.int_tol))
             self.file_proparams.write("    Beta = {:f}\n".format(self.beta))
             self.file_proparams.write("    Zeta = {:f}\n".format(self.zeta))
-            self.file_proparams.write("    Lambda0 = {:f}\n".format(self.lambda0))
             self.file_proparams.write("    R0_axis = {:f}\n".format(self.R0_axis))
             self.file_proparams.write("    Z0_axis = {:f}\n".format(self.Z0_axis))
             self.file_proparams.write("    R0_saddle = {:f}\n".format(self.R0_saddle))
@@ -383,12 +382,12 @@ class EquilipyOutput:
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaLS.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
             for inode in range(self.MESH.Nn):
-                self.file_plasmaLS.write("{:d} {:e}\n".format(inode+1,self.PlasmaLS[inode,1]))
+                self.file_plasmaLS.write("{:d} {:e}\n".format(inode+1,self.PlasmaLS[inode]))
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaLS.write('END_ITERATION\n')
                 
         if self.out_pickle:
-            self.PlasmaLS_sim.append(self.PlasmaLS[:,1].copy())
+            self.PlasmaLS_sim.append(self.PlasmaLS.copy())
             self.PlasmaUpdateIt_sim.append(self.it)
         return
 
