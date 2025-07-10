@@ -1,4 +1,4 @@
-# **PYTHON GRAD-SHAFRANOV SOLVER BASED ON CUTFEM**
+# **PYTHON GRAD-SHAFRANOV CutFEM SOLVER**
 
 ## *PROBLEM DESCRIPTION:*
 
@@ -8,14 +8,62 @@ Solving the equation yields the plasma equilibrium cross-section configuration.
 The problem is tackle as a free-boundary problem, where the plasma cross-section geometry is free to evolve and deform towards the equilibrium state. 
 In order to deal with such configuration, the solver is based on a CutFEM numerical scheme, a non-conforming mesh Finite Element Method where the geometry is embedded in the mesh. 
 
-The input files *.equ.dat* and meshes available in the repository have been designed according to the ITER tokamak cross-section geometry.
-In order to launch simulations with other geometries, the user shall change the geometrical parameters for the vacuum vessel and the external coils and solenoids from the input file *.equ.dat*.
+Additionally, the code is equiped with a fixed-boundary solver, for which several analytical cases have been implemented and tested in order to validate the complex numering scheme. 
+
+## *CONTENT:*
+
+The user may find in the repository the following items:
+- folder **MESHES**: contains the folders containing different example meshes. 
+- folder **TESTs**: contains the test-suites, in both *.py* and *.ipynb* format, for the different standard problem cases, and the main test files in *.ipynb*
+- folder **src**: contains the source code.
+- file **requirements.txt**: lists the Python packages and their versions on which EQUILIPY depends.
 
 ## *CODE:*
 
-The EQUILIPY_CutFEM solver is built on a CutFEM numerical scheme, where the plasma cross-section geometry is free to deform and evolve towards the equilibrium configuration. 
-Both the plasma region and the tokamak's vacuum vessel wall geometries are parametrised using two distinct level-set functions, both domains being embedded in a larger uncomforming mesh.
-Hence, both the initial plasma cross-section and the fixed vacuum vessel wall geometries can be arbitrarily defined as inputs by the user.
+The EQUILIPY solver is built on a CutFEM numerical scheme, where the plasma cross-section geometry is free to deform and evolve towards the equilibrium configuration. 
+In a first instance, the user shall provide several numerical parameters which define the problem's nature and the solver's convergence. 
+
+- **FIXED_BOUNDARY**: Enable/disable fixed boundary conditions (bool).  
+- **GhostStabilization**: Enable/disable ghost penalty stabilization (bool).  
+- **PARALLEL**: Enable/disable parallel computation (bool). (THIS OPTION IS STILL NOT IMPLEMENTED!!)  
+
+- **plotelemsClas**: Plot element classification each iteration (bool).  
+- **plotPSI**: Plot PSI solution each iteration (bool).  
+- **out_proparams**: Output simulation parameters file (bool).  
+- **out_elemsClas**: Output mesh element classification file (bool).  
+- **out_plasmaLS**: Output plasma boundary level-set values (bool).  
+- **out_plasmaBC**: Output plasma boundary condition values (bool).  
+- **out_plasmaapprox**: Output plasma boundary approximation data (bool).  
+- **out_ghostfaces**: Output ghost stabilization face data (bool).  
+- **out_elemsys**: Output elemental matrices (bool).  
+- **out_pickle**: Enable simulation data pickling (bool).  
+
+- **dim**: Problem spatial dimension (int).  
+- **QuadratureOrder2D**: Surface numerical integration order (int).  
+- **QuadratureOrder1D**: Length numerical integration order (int).  
+- **ext_maxiter**: Max iterations for external loop (int).  
+- **ext_tol**: Convergence tolerance for external loop (float).  
+- **int_maxiter**: Max iterations for internal loop (int).  
+- **int_tol**: Convergence tolerance for internal loop (float).  
+- **it_plasma**: Iteration to update plasma region (int).  
+- **tol_saddle**: Tolerance for saddle point update (float).  
+- **beta**: Nitsche’s method penalty parameter (float).  
+- **Nconstrainedges**: Number of plasma boundary edges with constrained BC (int).  
+- **zeta**: Ghost penalty parameter (float).  
+
+- **PSIrelax**: Enable PSI Aitken relaxation (bool).  
+- **lambda0**: Initial Aitken relaxation parameter (float).  
+- **PHIrelax**: Enable PHI level-set Aitken relaxation (bool).  
+- **alphaPHI**: Initial PHI Aitken relaxation parameter (float).  
+
+- **R0_axis**, **Z0_axis**: Initial guess coordinates for magnetic axis optimization (float).  
+- **R0_saddle**, **Z0_saddle**: Initial guess coordinates for saddle point optimization (float).  
+- **opti_maxiter**: Max iterations for critical points optimization (int).  
+- **opti_tol**: Convergence tolerance for optimization (float).  
+
+
+Embedded in a larger uncomforming mesh, the plasma region geometry is parametrised using a level-set function. 
+Hence, the initial plasma cross-section can be arbitrarily defined by the user.
 
 Under such circumstances, both plasma boundary and vacuum vessel wall generate cut-elements on which the FE methodology is adapted: 
 - **Standard high-order approach adapted numerical integration quadratures** to integrate on each subdomain composing the cut-element
@@ -32,11 +80,6 @@ Analytical solutions can be obtained by selecting the adequate source term funct
 In this case, the magnetic confinement is projected onto the vacuum vessel wall using a Green's function formalism, thus providing the corresponding BC so that the plasma domain converges towards the equilibrium state iteratively. 
 Adequate tolerances and maximal iteration thresholds shall be specified as inputs for both loops: internal loop, responsible of converging the poloidal magnetic field solution; external loop, responsible for converging the projected BC poloidal magnetic values.   
 
-## *CONTENT:*
-- folder **src**: contains the source code
-- folder **CASES**: contains the input files *.equ.dat* for the different problem cases
-- folder **MESHES**: contains the files describing different meshes
-- folder **TESTs**: contains the test-suites, in both *.py* and *.ipynb* format, for the different standard problem cases, and the main test files in *.ipynb*
 
 ## *EXECUTION:*
 
@@ -50,20 +93,8 @@ Inside the **TESTs** folder, the user may find the test-suites *TS-* files, both
 
     $ python TS-CASE.py
 
-The mesh used for the simulation may be changed by commenting and uncommenting the adequate lines. These test-suites represent the simulations corresponding to the *FIXED*-boundary analytical cases, for the *LINEAR*, *NONLINEAR* and *ZHENG* plasma current models, and the *FREE*-boundary problem with *JARDIN* plasma current model.
+The mesh used for the simulation may be changed by commenting and uncommenting the adequate lines. These test-suites represent the simulations corresponding to the *FIXED*-boundary analytical cases, for the *LINEAR* and *NONLINEAR* plasma current models, and the *FREE*-boundary problem with *APEC* plasma current model.
 
-To launch other simulations, the user may use testing files *MainTestEquilipyFIXED.ipynb* and *MainTestEquilipyFREE.ipynb*, where all available meshes have been included. For fixed-boundary problem simulations, meshes can be adjusted to the fixed plasma cross-section (*-REDUCED* meshes); on the other hand, for free-boundary problem simulations larger meshes should be used, preparing for plasma cross-ection deformations. 
 
-## *INPUT FILE*
 
-Input files *.equ.dat* in folder **CASES** contain the simulation parameters for different configurations, defining the problem case, the different parametrised geometries and the numerical treatment. The parameters are organised according to the following blocks:
-
-- **PHYSICAL PROBLEM:**
-    - **PROBLEM CASE PARAMETERS:** parameters controlling the simulation problem case (*PLASB*, *PLASG*, *PLASC*, *VACVE*).
-    - **VACUUM VESSEL GEOMETRY:** dimensionless parameters characterising the tokamak's vacuum vessel cross-section.
-    - **PLASMA REGION GEOMETRY:** initial/free plasma cross-section parameters for the parametrised case (*PLASG* = PARAM).   
-    - **PARAMETERS FOR PRESSURE AND TOROIDAL FUNCTION JARDIN**: *JARDIN* plasma current model parameters.
-    - **PARAMETERS FOR EXTERNAL COILS AND SOLENOIDS:** tokamak's external magnets positions and currents. 
-
-- **NUMERICAL TREATMENT:** parameters involved in the numerical scheme (tolerances, maximum iterations...) and numerical processes (initial guess, tolerances...).
 
