@@ -1,3 +1,24 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Author: Pau Manyer Fuertes
+# Email: pau.manyer@bsc.es
+# Date: July 2025
+# Institution: Barcelona Supercomputing Center (BSC)
+# Department: Computer Applications in Science and Engineering (CASE)
+# Research Group: Nuclear Fusion  
+
+
 import numpy as np
 from math import ceil
 from Element import *
@@ -7,6 +28,14 @@ from Magnet import *
 class EquilipyInitialisation:
     
     def InitialiseParameters(self):
+        """
+        Initialize simulation parameters based on current object settings.
+
+        - Disables critical point output if fixed-boundary problem is set.
+        - Disables ghost face output if ghost stabilization is turned off.
+        - Computes default 1D quadrature order if not already specified,
+        based on 2D quadrature order.
+        """
         
         print("INITIALISE SIMULATION PARAMETERS...", end="")
         # OVERRIDE CRITICAL POINT OPTIMIZATION OUTPUT WHEN FIXED-BOUNDARY PROBLEM
@@ -28,6 +57,9 @@ class EquilipyInitialisation:
     
     
     def InitialisePickleLists(self):
+        """
+        Initialize lists to store simulation data for pickling.
+        """
         # INITIALISE FULL SIMULATION DATA LISTS
         if self.out_pickle:
             self.PlasmaLS_sim = list()
@@ -49,7 +81,7 @@ class EquilipyInitialisation:
     
     def InitialisePlasmaLevelSet(self):
         """
-        Computes the initial level-set function values describing the plasma boundary. Negative values represent inside the plasma region.
+        Initialises the solver's plasma boundary level-set function values. Negative values represent inside the plasma region.
         """ 
         self.PlasmaLS = self.initialPHI.PHI0
         return 
@@ -57,14 +89,13 @@ class EquilipyInitialisation:
     
     def InitialisePSI(self):  
         """
-        Initializes the PSI vectors used for storing iterative solutions during the simulation and computes the initial guess.
+        Initialize PSI vectors and compute the initial guess for the simulation.
 
-        This function:
-            - Computes the number of nodes on boundary approximations for the plasma boundary and vacuum vessel first wall.
+        Tasks:
             - Initializes PSI solution arrays.
-            - Computes an initial guess for the normalized PSI values and assigns them to the corresponding elements.
-            - Computes initial vacuum vessel first wall PSI values and stores them for the first iteration.
-            - Assigns boundary constraint values for both the plasma and vacuum vessel boundaries.
+            - Assigns initial guess to PSI arrays.
+            - Assigns initial PSI to the corresponding elements.
+            - Assigns plasma boundary constraint values.
         """
         print('INITIALISE PSI...')
         
@@ -97,32 +128,35 @@ class EquilipyInitialisation:
         self.UpdateElementalPSI()
         print('Done!')  
         
-        # ASSIGN PLASMA BOUNDARY VALUES
-        print('     -> ASSIGN INITIAL PLASMA BOUNDARY VALUES...', end="")
-        self.UpdatePlasmaBoundaryValues()
-        print('Done!')  
-        
         print('Done!') 
         return
     
         
     def InitialisePSI_B(self):
+        """
+        Initialize and compute the PSI_B vector for computational domain's boundary PSI values.
+
+        Tasks:
+            - Initializes PSI_B array.
+            - Computes initial computational domain's boundary PSI values and assigns them to the PSI_B array.
+            - Updates the computational domain's boundary values based on the computed PSI_B.
+        """
         
         print('INITIALISE PSI_B...')
         
         ####### INITIALISE PSI BOUNDARY VECTOR
-        self.PSI_B = np.zeros([self.MESH.Nnbound,2],dtype=float)   # VACUUM VESSEL FIRST WALL PSI VALUES (EXTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)    
+        self.PSI_B = np.zeros([self.MESH.Nnbound,2],dtype=float)   # COMPUTATIONAL DOMAIN BOUNDARY PSI VALUES (EXTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)    
         
-        ####### COMPUTE INITIAL VACUUM VESSEL BOUNDARY VALUES PSI_B AND STORE THEM IN ARRAY FOR N=0
-        print('     -> COMPUTE INITIAL VACUUM VESSEL BOUNDARY VALUES PSI_B...', end="")
+        ####### COMPUTE INITIAL COMPUTATIONAL DOMAIN BOUNDARY VALUES PSI_B AND STORE THEM IN ARRAY FOR N=0
+        print('     -> COMPUTE INITIAL COMPUTATIONAL DOMAIN BOUNDARY VALUES PSI_B...', end="")
         # COMPUTE INITIAL TOTAL PLASMA CURRENT CORRECTION FACTOR
         #self.ComputeTotalPlasmaCurrentNormalization()
         self.PSI_B[:,0] = self.ComputeBoundaryPSI()
         self.PSI_B[:,1] = self.PSI_B[:,0]
         print('Done!')
         
-        print('     -> ASSIGN INITIAL VACUUM VESSEL BOUNDARY VALUES...', end="")
-        self.UpdateVacuumVesselBoundaryValues()
+        print('     -> ASSIGN INITIAL COMPUTATIONAL DOMAIN BOUNDARY VALUES...', end="")
+        self.UpdateElementalPSI_B()
         print('Done!')
         
         print('Done!')  

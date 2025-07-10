@@ -1,3 +1,23 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Author: Pau Manyer Fuertes
+# Email: pau.manyer@bsc.es
+# Date: July 2025
+# Institution: Barcelona Supercomputing Center (BSC)
+# Department: Computer Applications in Science and Engineering (CASE)
+# Research Group: Nuclear Fusion  
+
 
 import numpy as np
 
@@ -41,7 +61,9 @@ def PSIanalyticalLINEAR(X,R0,coeffs,NORMALISED=False):
 ##################################################################################################
     
 def ComputeZhengSolutionCoefficients(R0,epsilon,kappa,delta):
-    """ Computes the coefficients for the Grad-Shafranov equation analytical solution proposed in ZHENG paper. """
+    """ 
+    Computes the coefficients for the Grad-Shafranov equation analytical solution proposed in ZHENG paper. 
+    """
     Ri = R0*(1-epsilon)  # PLASMA SHAPE EQUATORIAL INNERMOST POINT R COORDINATE
     Ro = R0*(1+epsilon)  # PLASMA SHAPE EQUATORIAL OUTERMOST POINT R COORDINATE
     a = (Ro-Ri)/2                  # PLASMA MINOR RADIUS
@@ -87,6 +109,19 @@ def PSIanalyticalZHENG(X,coeffs):
 ##################################################################################################
 
 def PSIanalyticalNONLINEAR(X,R0,coeffs,NORMALISED=False):
+    """
+    Computes the analytical nonlinear solution for PSI at given coordinates.
+
+    Input:
+        - X (array-like): Coordinate vector [R, Z] where PSI is evaluated.
+        - R0 (float): Reference radius for normalization.
+        - coeffs (list or array): Coefficients [k_r, k_z, phase_shift] for the solution.
+        - NORMALISED (bool, optional): If True, input coordinates X are assumed normalized by R0.
+                                    If False (default), X will be normalized internally.
+
+    Returns:
+        PSIexact (float): The analytical PSI value at the given coordinate.
+    """
     # DIMENSIONLESS COORDINATES
     Xstar = X
     if not NORMALISED:

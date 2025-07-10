@@ -1,3 +1,24 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Author: Pau Manyer Fuertes
+# Email: pau.manyer@bsc.es
+# Date: July 2025
+# Institution: Barcelona Supercomputing Center (BSC)
+# Department: Computer Applications in Science and Engineering (CASE)
+# Research Group: Nuclear Fusion  
+
+
 
 from weakref import proxy
 import numpy as np
@@ -9,7 +30,45 @@ import _plot as eqplot
 
 class InitialPlasmaBoundary:
     
+    """
+    Represents the initial plasma boundary configuration using a level-set function
+    defined over the computational and extended domains.
+
+    Purpose:
+        - Constructs and evaluates an analytical or parametrized level-set function
+          describing the initial guess for the plasma boundary shape.
+
+    Supports:
+        - LINEAR: Analytically defined plasma shape based on aspect ratio, elongation, and triangularity.
+        - ZHENG: Parametrized model from Zheng's solution.
+        - F4E: Hamiltonian-based parametrization used in EUROfusion designs.
+        - OTHER: Custom user-provided level-set function.
+    """
+    
     def __init__(self,EQUILIBRIUM,GEOMETRY,**kwargs):
+        """
+        Initializes the plasma boundary using a predefined geometry model or a custom function.
+
+        Input:
+            - EQUILIBRIUM : Object containing the mesh and problem configuration.
+            - GEOMETRY (str): Identifier string specifying the geometry model:
+                * 'LINEAR' — Analytic linear model with elongation and triangularity.
+                * 'ZHENG' — Parametrization from Zheng's analytic solution.
+                * 'F4E' — EUROfusion Hamiltonian-based parametrization.
+                * 'OTHER' — User-specified level-set function via keyword argument.
+            - kwargs: Additional parameters required by the specific geometry model:
+                * For 'LINEAR' and 'ZHENG': R0, epsilon, kappa, delta
+                * For 'F4E': Xsaddle, Xleft, Xright, Xtop
+                * For 'OTHER': PHI0 (callable level-set function)
+
+        Sets:
+            - self.PHI0fun : Chosen level-set function defining the initial boundary.
+            - self.PHI0 : Level-set field over the computational mesh.
+            - self.PHI0rec : Level-set field over an extended rectangular mesh.
+            - self.Xrec : Coordinates of the rectangular mesh used for visualization or debugging.
+            - self.coeffs : Coefficients for the selected model, if applicable.
+        """
+
         # IMPORT PROBLEM DATA
         self.eq = proxy(EQUILIBRIUM)
         # INITIAL BOUNDARY PREDEFINED MODELS
@@ -92,6 +151,15 @@ class InitialPlasmaBoundary:
 ##################################################################################################
     
     def ComputeField(self,X):
+        """
+        Compute the initial level-set field values at given points.
+
+        Input:
+            - X (ndarray): Array of points of shape (N, 2), where each row is [R, Z].
+
+        Output:
+            PHI0 (ndarray): Array of computed field values at each input point.
+        """
         PHI0 = np.zeros([np.shape(X)[0]])
         for inode in range(np.shape(X)[0]):
             PHI0[inode] = self.PHI0fun(X[inode,:])

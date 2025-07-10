@@ -1,3 +1,24 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Author: Pau Manyer Fuertes
+# Email: pau.manyer@bsc.es
+# Date: July 2025
+# Institution: Barcelona Supercomputing Center (BSC)
+# Department: Computer Applications in Science and Engineering (CASE)
+# Research Group: Nuclear Fusion  
+
+
 import numpy as np
 from scipy.interpolate import griddata
 from scipy.optimize import root
@@ -30,6 +51,27 @@ class EquilipyCritical:
             
 
     def FindCritical(self,PSI, X0 = None, nr=45, nz=65, tolbound=0.1):
+        """
+        Finds critical points (O-points and X-points) of the poloidal flux (PSI) on a plasma mesh.
+
+        Inputs:
+            - PSI (array): Poloidal flux values at mesh nodes.
+            - X0 (list of arrays, optional): Initial guess points for critical points. If None, searches entire domain.
+            - nr (int, optional): Number of radial points for finer grid interpolation (default 45).
+            - nz (int, optional): Number of vertical points for finer grid interpolation (default 65).
+            - tolbound (float, optional): Tolerance distance to computational boundary to exclude points (default 0.1).
+
+        Outputs:
+            - Opoint (list): List of tuples (coordinates, PSI value, element index) for O-points (local minima of Bp²).
+            - Xpoint (list): List of tuples (coordinates, PSI value, element index) for X-points (saddle points).
+
+        Tasks:
+            - Interpolates PSI on a finer structured mesh.
+            - Computes gradient and searches for local minima of poloidal magnetic field squared Bp².
+            - Uses nonlinear root finding to refine critical point locations.
+            - Filters points outside computational domain and close to boundary.
+            - Removes duplicates from found points.
+        """
             
         # 1. INTERPOLATE PSI VALUES ON A FINER STRUCTURED MESH USING PSI ON NODES
         # DEFINE FINER STRUCTURED MESH
@@ -189,6 +231,15 @@ class EquilipyCritical:
     
     
     def ComputeCriticalPSI(self):
+        """
+        Computes and updates the critical points (O-point and X-point) of the poloidal flux PSI.
+
+        Tasks:
+            - Defines initial guess points based on iteration count.
+            - Calls FindCritical() with initial guesses to locate critical points.
+            - Updates internal state variables with found critical points and their PSI values.
+            - If the saddle point (X-point) is not found and boundary is not fixed, it reuses previous solution.
+        """
         # DEFINE INITIAL GUESSES
         X0 = list()
         if self.it == 1:
@@ -200,8 +251,6 @@ class EquilipyCritical:
             X0.append(self.Xcrit[0,1,:-1])
         
         Opoint, Xpoint = self.FindCritical(self.PSI.T[0], X0)   
-        #print('Opoint = ', Opoint)
-        #print('Xpoint = ', Xpoint)
         # O-point
         self.Xcrit[1,0,:-1] = Opoint[0][0] 
         self.PSI_0 = Opoint[0][1]
@@ -240,13 +289,39 @@ class EquilipyCritical:
     
 # INTERPOLATION OF GRAD(PSI)
 def gradPSI(X,Rfine,Zfine,gradPSIfine):
+    """
+    Interpolates the gradient of PSI at point X using cubic interpolation.
+
+    Inputs:
+        - X (array-like): Coordinates [r, z] where gradient is evaluated.
+        - Rfine, Zfine (2D arrays): Coordinates of the fine interpolation grid.
+        - gradPSIfine (list of 2D arrays): Gradient components of PSI on the fine grid [dPSIdr, dPSIdz].
+
+    Returns:
+        - GRAD (np.array): Interpolated gradient vector [dPSIdr, dPSIdz] at X.
+    """
     dPSIdr = griddata((Rfine.flatten(),Zfine.flatten()), gradPSIfine[0].flatten(), (X[0],X[1]), method='cubic')
     dPSIdz = griddata((Rfine.flatten(),Zfine.flatten()), gradPSIfine[1].flatten(), (X[0],X[1]), method='cubic')
     GRAD = np.array([dPSIdr,dPSIdz])
     return GRAD
 
+
 # INTERPOLATION OF HESSIAN(PSI)
 def hessianPSI(X,gradPSIfine,Rfine,Zfine,dr,dz):
+    """
+    Computes interpolated Hessian components of PSI at point X using cubic interpolation.
+
+    Inputs:
+        - X (array-like): Coordinates [r, z] where Hessian is evaluated.
+        - gradPSIfine (list of 2D arrays): Gradient components of PSI on fine mesh.
+        - Rfine, Zfine (2D arrays): Coordinates of the fine interpolation grid.
+        - dr, dz (floats): Grid spacing in r and z directions.
+
+    Returns:
+        - dPSIdrdr (float): ∂²PSI/∂r² at X.
+        - dPSIdzdr (float): ∂²PSI/∂z∂r at X.
+        - dPSIdzdz (float): ∂²PSI/∂z² at X.
+    """
     # compute second derivatives on fine mesh
     dgradPSIdrfine = np.gradient(gradPSIfine[0],dr,dz)
     dgradPSIdzfine = np.gradient(gradPSIfine[1],dr,dz)

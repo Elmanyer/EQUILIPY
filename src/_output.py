@@ -1,3 +1,24 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Author: Pau Manyer Fuertes
+# Email: pau.manyer@bsc.es
+# Date: July 2025
+# Institution: Barcelona Supercomputing Center (BSC)
+# Department: Computer Applications in Science and Engineering (CASE)
+# Research Group: Nuclear Fusion  
+
+
 import numpy as np
 import os
 from shutil import copy2
@@ -453,23 +474,13 @@ class EquilipyOutput:
 
     def writeerror(self):
         self.file_L2error = open(self.outputdir+'/PSIerror.dat', 'w')
-        
-        AnaliticalNorm = np.zeros([self.MESH.Nn])
-        self.PSIerror = np.zeros([self.MESH.Nn])
-        self.PSIrelerror = np.zeros([self.MESH.Nn])
-        for inode in range(self.MESH.Nn):
-            AnaliticalNorm[inode] = self.PlasmaCurrent.PSIanalytical(self.MESH.X[inode,:])
-            self.PSIerror[inode] = abs(AnaliticalNorm[inode]-self.PSI_CONV[inode])
-            self.PSIrelerror[inode] = self.PSIerror[inode]/abs(AnaliticalNorm[inode])
-            if self.PSIerror[inode] < 1e-16:
-                self.PSIerror[inode] = 1e-16
-                self.PSIrelerror[inode] = 1e-16
                 
         self.file_L2error.write('PSI_ERROR_FIELD\n')
         for inode in range(self.MESH.Nn):
             self.file_L2error.write("{:d} {:e}\n".format(inode+1,self.PSIerror[inode])) 
         self.file_L2error.write('END_PSI_ERROR_FIELD\n')
         
+        self.file_L2error.write("EUCLIDEAN_ERROR = {:e}".format(self.ErrorEuclinorm))
         self.file_L2error.write("L2ERROR = {:e}".format(self.ErrorL2norm))
 
         self.file_L2error.close()

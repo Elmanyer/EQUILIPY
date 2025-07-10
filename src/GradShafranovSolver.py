@@ -13,7 +13,7 @@
 
 # Author: Pau Manyer Fuertes
 # Email: pau.manyer@bsc.es
-# Date: October 2024
+# Date: July 2025
 # Institution: Barcelona Supercomputing Center (BSC)
 # Department: Computer Applications in Science and Engineering (CASE)
 # Research Group: Nuclear Fusion 
@@ -83,6 +83,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.int_cvg = None                 # INTERNAL LOOP STRUCTURE CONVERGENCE FLAG
         self.ext_it = None                  # EXTERNAL LOOP STRUCTURE ITERATIONS NUMBER
         self.int_it = None                  # INTERNAL LOOP STRUCTURE ITERATIONS NUMBER
+        self.SADDLE_dist = None             # DISTANCE BETWEEN CONSECUTIVE SADDLE POINTS
         self.tol_saddle = None              # TOLERANCE FOR DISTANCE BETWEEN CONSECUTIVE ITERATION SADDLE POINTS (LETS PLASMA REGION CHANGE)
         #### BOUNDARY CONSTRAINTS
         self.beta = None                    # NITSCHE'S METHOD PENALTY TERM
@@ -106,7 +107,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.PSI_0 = None                   # PSI VALUE AT MAGNETIC AXIS MINIMA
         self.PSI_X = None                   # PSI VALUE AT SADDLE POINT (PLASMA SEPARATRIX)
         self.PSI_NORM = None                # NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
-        self.PSI_B = None                   # VACUUM VESSEL WALL PSI VALUES (EXTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
+        self.PSI_B = None                   # COMPUTATIONAL DOMAIN'S BOUNDARY PSI VALUES (EXTERNAL LOOP) AT ITERATION N (COLUMN 0) AND N+1 (COLUMN 1) 
         self.PSI_CONV = None                # CONVERGED NORMALISED PSI SOLUTION FIELD 
         self.int_residu = None              # INTERNAL LOOP RESIDU
         self.ext_residu = None              # EXTERNAL LOOP RESIDU
@@ -209,6 +210,24 @@ class GradShafranovSolver(EquilipyInitialisation,
     ##################################################################################################
 
     def DomainDiscretisation(self,INITIALISATION = False):
+        """
+        Performs the full domain discretization process for the simulation, including both 
+        initialization steps and runtime classification of elements and boundary approximations.
+
+        Tasks:
+            - (If INITIALISATION=True)
+                - Initializes the plasma level-set function.
+                - Initializes finite elements with level-set data.
+                - Converts mesh coordinates to dimensionless form (if enabled).
+                - Identifies nearest neighbors and mesh boundaries.
+                - Computes standard 2D quadrature rules for volume integration.
+            - (Always)
+                - Classifies mesh elements based on the level-set function.
+                - Approximates the plasma boundary using cut elements.
+                - Computes adapted quadratures over cut elements and interfaces.
+                - Assigns Dirichlet constraints along the approximated plasma boundary.
+                - Identifies ghost faces and computes associated quadrature rules (if enabled).
+        """
         
         print('PERFORM DOMAIN DISCRETISATION...')
         
@@ -265,6 +284,11 @@ class GradShafranovSolver(EquilipyInitialisation,
         print('     -> COMPUTE PLASMA BOUNDARY APPROXIMATION QUADRATURES...', end="")
         self.MESH.ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
         print("Done!")
+        
+        # FIXED CONSTRAINTS PSI_P ON PLASMA BOUNDARY
+        print('     -> ASSIGN PLASMA BOUNDARY CONSTRAINT VALUES...', end="") 
+        self.FixElementalPSI_P()     
+        print('Done!')          
             
         # CUT ELEMENTS GHOST FACES 
         if self.GhostStabilization:
@@ -286,7 +310,9 @@ class GradShafranovSolver(EquilipyInitialisation,
     ##################################################################################################
     
     def IntegratePlasmaDomain(self,fun,PSIdependent=True):
-        """ Function that integrates function fun over the plasma domain. """ 
+        """ 
+        Function that integrates function fun over the plasma region. 
+        """ 
         
         integral = 0
         if PSIdependent:
@@ -337,9 +363,23 @@ class GradShafranovSolver(EquilipyInitialisation,
         return integral
     
     
-    
     def IntegrateGhostStabilizationTerms(self):
-        
+        """
+        Integrates ghost stabilization terms across internal ghost faces between elements to
+        stabilize the numerical solution in high-order finite element methods (e.g., CutFEM).
+
+        Process:
+            - Iterates over all ghost faces defined in the mesh (`self.MESH.GhostFaces`).
+            - For each ghost face, retrieves adjacent elements and the associated face information.
+            - Constructs the local stabilization matrix (`LHSe`) and RHS vector (`RHSe`) across both elements.
+            - Computes ghost penalty contributions using gradient jumps across shared faces.
+            - Applies Dirichlet boundary conditions if any boundary nodes are present.
+            - Assembles the local contributions into the global system matrices `self.LHS` and `self.RHS`.
+
+        Stabilization:
+            - Uses gradient jump terms weighted by a user-defined penalty parameter `zeta`.
+            - Alternative option (commented) allows stabilization based on solution jumps.
+        """
         if self.out_elemsys:
             self.file_elemsys.write('GHOST_FACES\n')
             
@@ -417,13 +457,22 @@ class GradShafranovSolver(EquilipyInitialisation,
     
     
     def AssembleGlobalSystem(self):
-        """      
-        Assembles the global matrices (Left-Hand Side and Right-Hand Side) derived from the discretized linear system of equations using the Galerkin approximation.
+        """
+        Assembles the global system of equations (LHS matrix and RHS vector) for the finite element
+        formulation, accounting for standard, cut, and interface elements using domain-specific 
+        quadrature rules and stabilization techniques.
 
-        The assembly process involves:
-            1. Non-cut elements: Integration over elements not cut by any interface (using standard quadrature).
-            2. Cut elements: Integration over subelements in elements cut by interfaces, using adapted quadratures.
-            3. Boundary elements: For computational domain boundary elements, integration over the vacuum vessel boundary (if applicable).
+        Tasks:
+            - Initializes global sparse system matrices: self.LHS (global stiffness) and self.RHS (global load).
+            - Iterates over:
+                1. Non-cut elements (standard quadrature).
+                2. Cut-elements (subelement tessellation with adapted quadrature).
+                3. Interface edges in cut-elements (1D quadrature over the interface).
+                4. Internal ghost faces (optional ghost penalty stabilization).
+
+        Sets:
+            - self.LHS : Global stiffness matrix (sparse).
+            - self.RHS : Global right-hand side vector.
         """
         
         # INITIALISE GLOBAL SYSTEM MATRICES
@@ -579,6 +628,12 @@ class GradShafranovSolver(EquilipyInitialisation,
     ##################################################################################################
     
     def SolveSystem(self):
+        """
+        Solves the global linear system of equations for the scalar field variable PSI.
+
+        Sets:
+            - self.PSI : Solution vector (nodal values) of the scalar field, reshaped as a column vector.
+        """
         self.PSI = spsolve(self.LHS.tocsr(), self.RHS).reshape([self.MESH.Nn,1])
         return
 
@@ -589,24 +644,43 @@ class GradShafranovSolver(EquilipyInitialisation,
     
     def EQUILI(self,CASE):
         """
-        Main subroutine for solving the Grad-Shafranov boundary value problem (BVP) using the CutFEM method.
+        Runs the main equilibrium solver loop for the Grad-Shafranov problem.
 
-        This function orchestrates the entire iterative process for solving the plasma equilibrium problem. It involves:
-            1. Reading input files, including mesh and boundary data.
-            2. Initializing parameters and setting up directories for output.
-            3. Running an outer loop (external loop) that controls the convergence of the overall solution.
-            4. Running an inner loop (internal loop) that solves the system for the plasma current and updates the mesh and solution iteratively.
-            5. Evaluating and checking convergence criteria at each step.
-            6. Writing results at each iteration, including solution values, critical points, and residuals.
+        Input:
+            - CASE (str): Identifier name for the simulation case used for output directory setup.
 
-        The function also handles:
-            - Copying simulation files,
-            - Plotting the solution when requested,
-            - Checking convergence for both the PSI field and vacuum vessel first wall values,
-            - Updating the plasma boundary and mesh classification, and
-            - Computing and normalizing critical plasma quantities.
+        Workflow:
+            - Prepares output directories and initializes all necessary fields.
+            - Writes initial condition data (PSI, PSI_B, plasma region, boundary conditions).
+            - Executes a two-level iterative process:
+                * External loop updates boundary values.
+                * Internal loop solves the Grad-Shafranov equation until convergence.
+            - Within each internal iteration:
+                1. Assembles and solves the global system for PSI.
+                2. Computes and writes critical PSI values (if free-boundary).
+                3. Normalizes PSI and writes the normalized field.
+                4. Checks convergence of PSI_NORM.
+                5. Updates plasma region geometry (if required).
+                6. Updates normalized fields and computes plasma current normalization.
+            - After each external iteration:
+                * Updates and writes boundary values (PSI_B).
+                * Checks convergence of PSI_B and writes residuals.
 
-        The solution process continues until convergence criteria for both the internal and external loops are satisfied.
+        Final Steps:
+            - Plots final solution (if enabled).
+            - If fixed-boundary with a custom current model, computes and writes L2 error.
+            - Saves results and closes output files.
+
+        Notes:
+            - Convergence of the internal loop is based on the PSI_NORM field.
+            - Convergence of the external loop is based on changes in PSI_B.
+            - The equilibrium solution is assumed converged when both criteria are satisfied or the max iterations are reached.
+
+        Sets:
+            - self.PSI : Final scalar field solution (nodal values).
+            - self.PSI_B : Final boundary values used in computation.
+            - self.PSI_NORM : Normalized scalar field.
+            - Output files and plots (as per configuration).
         """
         
         print("PREPARE OUTPUT DIRECTORY...",end='')
@@ -685,21 +759,23 @@ class GradShafranovSolver(EquilipyInitialisation,
                 
                 self.UpdatePSI_NORM()                       # 7. UPDATE PSI_NORM ARRAY
                 self.UpdateElementalPSI()                   # 8. UPDATE PSI_NORM VALUES IN CORRESPONDING ELEMENTS 
-                self.UpdatePlasmaBoundaryValues()           # 9. UPDATE ELEMENTAL CONSTRAINT VALUES PSIgseg FOR PLASMA/VACUUM INTERFACE
-                self.PlasmaCurrent.Normalise()              # 10.COMPUTE PLASMA CURRENT NORMALISATION FACTOR ACCORDING TO NEW PLASMA REGION
+                self.PlasmaCurrent.Normalise()              # 9 .COMPUTE PLASMA CURRENT NORMALISATION FACTOR ACCORDING TO NEW PLASMA REGION
                 
                 #######################################################
                 ################ END INTERNAL LOOP ####################
                 #######################################################
                 
             #self.ComputeTotalPlasmaCurrentNormalization()
-            print('COMPUTE VACUUM VESSEL FIRST WALL VALUES PSI_B...', end="")
-            self.PSI_B[:,1] = self.ComputeBoundaryPSI()     # COMPUTE VACUUM VESSEL FIRST WALL VALUES PSI_B WITH INTERNALLY CONVERGED PSI_NORM
-            self.UpdateVacuumVesselBoundaryValues()
-            self.writePSI_B()
+            print('COMPUTE COMPUTATIONAL BOUNDARY VALUES PSI_B...', end="")
+            self.PSI_B[:,1] = self.ComputeBoundaryPSI()     # COMPUTE COMPUTATIONAL BOUNDARY VALUES PSI_B WITH INTERNALLY CONVERGED PSI_NORM
+            self.writePSI_B()                               #       -> WRITE NEW BOUNDARY CONDITIONS PSI_B
             print('Done!')
             
-            self.CheckConvergence('PSI_B')                  # CHECK CONVERGENCE OF VACUUM VESSEL FIEST WALL PSI VALUES  (PSI_B)
+            print('UPDATE COMPUTATIONAL DOMAIN BOUNDARY VALUES...', end="")
+            self.UpdateElementalPSI_B()                     # UPDATE BOUNDARY CONDITIONS PSI_B ON BOUNDARY ELEMENTS
+            print('Done!')
+            
+            self.CheckConvergence('PSI_B')                  # CHECK CONVERGENCE OF COMPUTATIONAL BOUNDARY PSI VALUES  (PSI_B)
             self.writeresidu("EXTERNAL")                    # WRITE EXTERNAL LOOP RESIDU 
             self.UpdatePSI_B()                              # UPDATE PSI_B VALUES 
             
@@ -712,9 +788,8 @@ class GradShafranovSolver(EquilipyInitialisation,
             self.PlotSolutionPSI()
         
         if self.FIXED_BOUNDARY and self.PlasmaCurrent.CURRENT_MODEL != self.PlasmaCurrent.JARDIN_CURRENT:
-            self.ErrorL2norm, self.RelErrorL2norm, self.ErrorL2normPlasmaBound, self.RelErrorL2normPlasmaBound = self.ComputeL2errorPlasma()
-            self.ErrorL2normINT, self.RelErrorL2normINT = self.ComputeL2errorInterface()
-            self.InterfGradJumpErrorL2norm, self.JumpError, self.JumpRelError = self.ComputeL2errorInterfaceJump()
+            self.ComputeErrorField()
+            self.ComputeL2errorPlasma()
             self.writeerror()
         
         self.closeOUTPUTfiles()

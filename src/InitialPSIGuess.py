@@ -1,3 +1,25 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Author: Pau Manyer Fuertes
+# Email: pau.manyer@bsc.es
+# Date: July 2025
+# Institution: Barcelona Supercomputing Center (BSC)
+# Department: Computer Applications in Science and Engineering (CASE)
+# Research Group: Nuclear Fusion  
+
+
+
 from weakref import proxy
 import numpy as np
 from random import random
@@ -9,7 +31,42 @@ import _plot as eqplot
 
 class InitialGuess:
     
+    """
+    Encapsulates the construction of an initial guess for the poloidal magnetic flux (Ψ)
+    field over a computational domain. Multiple predefined analytical and semi-analytical
+    models are supported, optionally with white noise and normalization.
+
+    Purpose:
+        - Provides a flexible mechanism to define Ψ₀ (initial magnetic flux surface).
+        - Enables initialization for equilibrium solvers or iterative methods.
+
+    Supported Models:
+        - LINEAR        : Analytical solution based on aspect ratio, elongation, triangularity.
+        - ZHENG         : Semi-analytical model based on Zheng's formulation.
+        - NONLINEAR     : Custom nonlinear analytical profile.
+        - F4E           : EUROfusion-based Hamiltonian level-set profile.
+        - FOCUS         : Localized flux peak at specified point.
+        - OTHER         : User-defined callable function Ψ₀.
+    """
+
+    
     def __init__(self,EQUILIBRIUM,PSI_GUESS,NORMALISE=False,NOISE=False,**kwargs):
+        """
+        Initialize InitialGuess instance with a selected model.
+
+        Parameters:
+            EQUILIBRIUM : object
+                Equilibrium problem proxy with mesh and geometry data.
+            PSI_GUESS : str
+                Name of initial guess model ('LINEAR', 'ZHENG', 'NONLINEAR', 'F4E', 'FOCUS', 'OTHER').
+            NORMALISE : bool, optional
+                If True, normalizes Ψ to standard range.
+            NOISE : bool, optional
+                If True, adds white noise to Ψ.
+            **kwargs : dict
+                Model-specific parameters, e.g. R0, epsilon, kappa, delta, A, X0, etc.
+        """
+
         # IMPORT PROBLEM DATA
         self.eq = proxy(EQUILIBRIUM)
         # PSI INITIAL GUESS PREDEFINED MODELS
@@ -109,6 +166,17 @@ class InitialGuess:
     
     
     def ComputeField(self,X,NORMALISE=False,X0=None):
+        """
+        Evaluate the initial guess function Ψ0fun at given points.
+
+        Input:
+            - X (ndarray): Array of points [[R,z], ...] where Ψ0 is evaluated.
+            - NORMALISE (bool, optional): If True, normalize the computed field values.
+            - X0 (optional): Critical points or parameters used for normalization (if any).
+
+        Returns:
+            - ndarray: Computed Ψ0 values at each point in X.
+        """
         PSI0 = np.zeros([np.shape(X)[0]])
         for inode in range(np.shape(X)[0]):
             PSI0[inode] = self.PSI0fun(X[inode,:])

@@ -9,6 +9,10 @@ class Mesh:
     
     def __init__(self,mesh_name):
         
+        """
+        Mesh object constructor.
+        """
+        
         pwd = os.getcwd()
         self.pwd = pwd[:-6]   # -6 CORRESPONDS TO 6 CHARACTERS IN '/TESTs'
         path_to_folder = self.pwd + '/MESHES/' + mesh_name
@@ -51,7 +55,7 @@ class Mesh:
         self.VacuumElems = None             # LIST OF ELEMENTS (INDEXES) OUTSIDE PLASMA REGION (VACUUM REGION)
         self.PlasmaBoundElems = None        # LIST OF CUT ELEMENT'S INDEXES, CONTAINING INTERFACE BETWEEN PLASMA AND VACUUM
         self.PlasmaBoundActiveElems = None  # LIST OF CUT ELEMENT'S INDEXES, CONTAINING INTERFACE BETWEEN PLASMA AND VACUUM, ON WHICH BC ARE APPLIED
-        self.FirstWallElems = None          # LIST OF CUT (OR NOT) ELEMENT'S INDEXES, CONTAINING VACUUM VESSEL FIRST WALL (OR COMPUTATIONAL DOMAIN'S BOUNDARY)
+        self.BoundaryElems = None           # LIST OF CUT (OR NOT) ELEMENT'S INDEXES AT THE COMPUTATIONAL DOMAIN'S BOUNDARY
         self.NonCutElems = None             # LIST OF ALL NON CUT ELEMENTS
         self.DirichletElems = None          # LIST OF ALL ELEMENTS POSSESSING A BOUNDARY NODE (NODE ON WHICH APPLY DIRICHLET BC)
         self.Elements = None                # ARRAY CONTAINING ALL ELEMENTS IN MESH (PYTHON OBJECTS)
@@ -111,7 +115,7 @@ class Mesh:
     
     def ReadMeshFile(self):
         """ 
-        Read input mesh data files, .dom.dat and .geo.dat, and build mesh simulation attributes. 
+        Read input mesh data files, .dom.dat and .geo.dat, and build mesh attributes. 
         """
         
         # READ DOM FILE .dom.dat
@@ -246,7 +250,18 @@ class Mesh:
     
     
     def BoundaryAttributes(self):
-    
+        """
+        Identifies and computes key geometric and topological properties related to the 
+        computational domain's boundary.
+
+        Tasks:
+            - Extracts the global indices of nodes located on the boundary (`BoundaryNodes`).
+            - Computes the number of boundary nodes (`Nnbound`) and degrees of freedom (`DOFNodes`).
+            - Identifies elements that are adjacent to the domain boundary (`BoundaryElems`).
+            - Constructs a continuous, ordered path of nodal indices (`BoundaryVertices`) that trace the boundary.
+            - Builds a closed geometric path (`boundary_path`) representing the computational domain's outer boundary,
+            using the ordered boundary vertices.
+        """
         # OBTAIN BOUNDARY NODES
         self.BoundaryNodes = set()     # GLOBAL INDEXES OF NODES ON THE COMPUTATIONAL DOMAIN'S BOUNDARY
         for i in range(self.nedge):
@@ -290,7 +305,9 @@ class Mesh:
     
     
     def ComputeMeshElementsMeanSize(self):
-        
+        """
+        Computes the average geometric size of the mesh elements.
+        """
         # COMPUTE MEAN AREA OF ELEMENT
         meanArea = 0
         meanLength = 0
@@ -308,6 +325,12 @@ class Mesh:
     ##################################################################################################
     
     def DimensionlessCoordinates(self,R0): 
+        """
+        Converts the coordinates of all mesh elements to dimensionless form using the reference length R0.
+
+        Input:
+            R0 (float): Reference length used to normalize the coordinates (typically the major radius).
+        """
         for ELEMENT in self.Elements:
             ELEMENT.Xe /= R0
             ELEMENT.area, ELEMENT.length = ELEMENT.ComputeArea_Length()
@@ -316,7 +339,7 @@ class Mesh:
     
     def InitialiseElements(self,PlasmaLS):
         """ 
-        Function initialising attribute ELEMENTS which is a list of all elements in the mesh. 
+        Function initialising all elements in the mesh. 
         """
         self.Elements = [Element(index = e,
                                     ElType = self.ElType,
@@ -362,7 +385,16 @@ class Mesh:
         return
     
     def IdentifyBoundaries(self):
-        
+        """
+        Identifies and assigns boundary information to mesh elements and nodes.
+
+        Tasks:
+            - Initializes the boundary edge connectivity (`Teboun`) for each boundary element.
+            - Loops through boundary edges to determine which local nodes in each element are on the boundary.
+            - Identifies interior elements that are not full boundary elements but have at least one node on the boundary.
+            - Populates a list of all elements that have any boundary nodes (`DirichletElems`).
+            - Sets a domain flag (`Dom = 2`) for elements that are classified as boundary elements.
+        """
         #### ASSIGN BOUNDARY CONNECTIVITIES
         # BOUNDARY ELEMENTS
         for ielem in self.BoundaryElems:
@@ -388,10 +420,8 @@ class Mesh:
             if type(ELEM.Teboun) != type(None):
                 self.DirichletElems.append(ELEM.index)
             
-        # VACUUM VESSEL WALL ELEMENTS (BY DEFAULT)
-        self.FirstWallElems = self.BoundaryElems.copy()
         # ASSIGN ELEMENTAL DOMAIN FLAG
-        for ielem in self.FirstWallElems:
+        for ielem in self.BoundaryElems:
             self.Elements[ielem].Dom = 2  
   
         return
@@ -425,25 +455,25 @@ class Mesh:
         for ielem in range(self.Ne):
             regionplasma, DHONplasma = self.Elements[ielem].CheckElementalVerticesLevelSetSigns()
             if regionplasma < 0:   # ALL PLASMA LEVEL-SET NODAL VALUES NEGATIVE -> INSIDE PLASMA DOMAIN 
-                # ALREADY CLASSIFIED AS VACUUM VESSEL ELEMENT (= BOUNDARY ELEMENT)
+                # ALREADY CLASSIFIED AS COMPUTATIONAL BOUNDARY ELEMENT (= BOUNDARY ELEMENT)
                 if self.Elements[ielem].Dom == 2:  
-                    # REMOVE FROM VACUUM VESSEL WALL ELEMENT LIST
-                    self.FirstWallElems = self.FirstWallElems[self.FirstWallElems != ielem]
+                    # REMOVE FROM COMPUTATIONAL BOUNDARY ELEMENT LIST
+                    self.BoundaryElems = self.BoundaryElems[self.BoundaryElems != ielem]
                 # REDEFINE CLASSIFICATION
                 self.PlasmaElems[kplasm] = ielem
                 self.Elements[ielem].Dom = -1
                 kplasm += 1
             elif regionplasma == 0:  # DIFFERENT SIGN IN PLASMA LEVEL-SET NODAL VALUES -> PLASMA/VACUUM INTERFACE ELEMENT
-                # ALREADY CLASSIFIED AS VACUUM VESSEL ELEMENT (= BOUNDARY ELEMENT)
+                # ALREADY CLASSIFIED AS COMPUTATIONAL BOUNDARY ELEMENT (= BOUNDARY ELEMENT)
                 if self.Elements[ielem].Dom == 2:  
-                    # REMOVE FROM VACUUM VESSEL WALL ELEMENT LIST
-                    self.FirstWallElems = self.FirstWallElems[self.FirstWallElems != ielem]
+                    # REMOVE FROM COMPUTATIONAL BOUNDARY ELEMENT LIST
+                    self.BoundaryElems = self.BoundaryElems[self.BoundaryElems != ielem]
                 # REDEFINE CLASSIFICATION
                 self.PlasmaBoundElems[kint] = ielem
                 self.Elements[ielem].Dom = 0
                 kint += 1
             elif regionplasma > 0: # ALL PLASMA LEVEL-SET NODAL VALUES POSITIVE -> OUTSIDE PLASMA DOMAIN
-                if self.Elements[ielem].Dom == 2:  # ALREADY CLASSIFIED AS VACUUM VESSEL ELEMENT (= BOUNDARY ELEMENT)
+                if self.Elements[ielem].Dom == 2:  # ALREADY CLASSIFIED AS COMPUTATIONAL BOUNDARY ELEMENT (= BOUNDARY ELEMENT)
                     continue
                 else:
                     # VACUUM ELEMENTS
@@ -463,7 +493,7 @@ class Mesh:
         self.PlasmaBoundElems = self.PlasmaBoundElems[:kint]
         
         # GATHER NON-CUT ELEMENTS  
-        self.NonCutElems = np.concatenate((self.PlasmaElems, self.VacuumElems, self.FirstWallElems), axis=0)
+        self.NonCutElems = np.concatenate((self.PlasmaElems, self.VacuumElems, self.BoundaryElems), axis=0)
         
         if len(self.NonCutElems) + len(self.PlasmaBoundElems) != self.Ne:
             raise ValueError("Non-cut elements + Cut elements =/= Total number of elements  --> Wrong mesh classification!!")
@@ -484,7 +514,7 @@ class Mesh:
             Classification[ielem] = 0
         for ielem in self.VacuumElems:
             Classification[ielem] = +1
-        for ielem in self.FirstWallElems:
+        for ielem in self.BoundaryElems:
             Classification[ielem] = +2
             
         return Classification
@@ -505,7 +535,7 @@ class Mesh:
                     self.PlasmaNodes.add(node)
                 else:
                     self.VacuumNodes.add(node)
-        for ielem in self.FirstWallElems:
+        for ielem in self.BoundaryElems:
             for node in self.T[ielem,:]:
                 self.VacuumNodes.add(node)
         for node in self.BoundaryNodes:
@@ -526,7 +556,11 @@ class Mesh:
     ##################################################################################################
     
     def ObtainPlasmaBoundaryElementalPath(self):
-        
+        """
+        Constructs an ordered path of plasma boundary elements.
+
+        The resulting `PlasmaBoundElemPath` is stored as a list of element indices representing a connected boundary path.
+        """
         self.PlasmaBoundElemPath = list()
         
         if self.PlasmaBoundElems.size != 0:
@@ -550,11 +584,18 @@ class Mesh:
                                 if ineigh != self.PlasmaBoundElemPath[ielem-1]:
                                     self.PlasmaBoundElemPath.append(self.Elements[ineigh].index)
                                     break
-        
         return
     
     
     def ObtainPlasmaBoundaryActiveElements(self,numelements = -1):
+        """
+        Selects and assigns the active plasma boundary elements used for applying plasma boundary conditions.
+
+        Input:
+            numelements (int): Number of plasma boundary elements to select as active.
+                - If -1 (default), all elements in the plasma boundary element path are used.
+                - If a positive integer, selects that many equidistant elements along the plasma boundary path.
+        """
         if self.PlasmaBoundElemPath:
             # PLASMA BOUNDARY ACTIVE ELEMS = PLASMA BOUNDARY ELEMS  --> CONSTRAIN BC ON ALL PLASMA BOUNDARY ELEMS
             if numelements == -1:
@@ -570,10 +611,8 @@ class Mesh:
     
     def ComputePlasmaBoundaryApproximation(self):
         """ 
-        Computes the elemental cutting segments conforming to the plasma boundary approximation.
-        Computes normal vectors for each segment.
-
-        The function double checks the orthogonality of the normal vectors. 
+        Computes the elemental plasma boundary approximation.
+        Computes normal vectors for each constraint node.
         """
         for inter, ielem in enumerate(self.PlasmaBoundElems):
             # APPROXIMATE PLASMA/VACUUM INTERACE GEOMETRY CUTTING ELEMENT 
@@ -678,6 +717,14 @@ class Mesh:
     
     
     def ComputePlasmaBoundaryGhostFaces(self):
+        """
+        Computes ghost faces associated with the plasma boundary for stabilization purposes.
+
+        Tasks:
+            - Identifies ghost faces on plasma boundary elements.
+            - Computes normal vectors for the ghost faces of each ghost element.
+            - Validates the computed ghost face normal vectors.
+        """
         # COMPUTE PLASMA BOUNDARY GHOST FACES
         self.IdentifyPlasmaBoundaryGhostFaces()
         # COMPUTE ELEMENTAL GHOST FACES NORMAL VECTORS
@@ -717,7 +764,6 @@ class Mesh:
         """
         Computes the STANDARD FEM numerical integration QUADRATURES for ALL MESH ELEMENTS.
         """
-        
         # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR NON-CUT ELEMENTS 
         for ELEMENT in self.Elements:
             ELEMENT.ComputeStandardQuadrature2D(QuadOrder2D)
@@ -764,6 +810,12 @@ class Mesh:
     ##################################################################################################
     
     def PlotBoundary(self,ax=None):
+        """
+        Plots the computational domain's boundary on the provided matplotlib axis or creates a new figure.
+
+        Parameters:
+            ax (matplotlib.axes.Axes, optional): Matplotlib axis to plot on. If None, a new figure and axis are created.
+        """
         # GENERATE FIGURE IF NON EXISTENT
         if type(ax) == type(None):
             fig, ax = plt.subplots(1, 1, figsize=(5,6))
@@ -781,6 +833,12 @@ class Mesh:
         return
     
     def Plot(self,ax=None):
+        """
+        Plots the computational mesh of the domain including its boundary.
+
+        Parameters:
+            ax (matplotlib.axes.Axes, optional): Axis on which to plot the mesh. If None, a new figure and axis are created.
+        """
         # GENERATE FIGURE IF NON EXISTENT
         if type(ax) == type(None):
             fig, ax = plt.subplots(1, 1, figsize=(5,6))

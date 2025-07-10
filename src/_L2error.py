@@ -1,31 +1,87 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Author: Pau Manyer Fuertes
+# Email: pau.manyer@bsc.es
+# Date: July 2025
+# Institution: Barcelona Supercomputing Center (BSC)
+# Department: Computer Applications in Science and Engineering (CASE)
+# Research Group: Nuclear Fusion  
+
+
 import numpy as np
 from Element import *
 
 class EquilipyL2error:
+    
+    """
+    A class to compute errors between the numerical and analytical solutions of the magnetic flux function (PSI) in equilibrium simulations.
+    """
 
     def __init__(self):
-        
+        """
+        Constructor to initialize error tracking attributes.
+        """
         # INITIATE ERROR ARRAYS
-        self.PSIerror = None
-        self.PSIrelerror = None
-        self.ErrorL2norm = None
-        self.RelErrorL2norm = None
-        self.ErrorL2normPlasmaBound = None
-        self.RelErrorL2normPlasmaBound = None 
-        self.ErrorL2normINT = None
-        self.RelErrorL2normINT = None
+        self.PSIexact = None                    # ANALYTICAL SOLUTION FIELD
+        self.PSIerror = None                    # ABSOLUTE PSI FIELD ERROR 
+        self.PSIrelerror = None                 # ABSOLUTE RELATIVE PSI FIELD ERROR 
+        self.ErrorEuclinorm = None              # EUCLIDEAN NORM ERROR
+        self.RelErrorEuclinorm = None           # EUCLIDEAN NORM RELATIVE ERROR
+        self.ErrorL2norm = None                 # L2 INTEGRAL NORM ERROR 
+        self.RelErrorL2norm = None              # L2 INTEGRAL NORM RELATIVE ERROR
         
         super().__init__()
         return
     
     
+    def ComputeErrorField(self):
+        """
+        Computes the error between the numerical and analytical PSI solutions.
+
+        Computes:
+            self.PSIexact          : Analytical PSI at each node.
+            self.PSIerror          : Absolute pointwise error.
+            self.PSIrelerror       : Relative pointwise error.
+            self.ErrorEuclinorm    : Euclidean norm of absolute error.
+            self.RelErrorEuclinorm : Euclidean norm of relative error.
+        """
+        # COMPUTE ERROR FIELDS
+        self.PSIexact = np.zeros([self.MESH.Nn])
+        self.PSIerror = np.zeros([self.MESH.Nn])
+        self.PSIrelerror = np.zeros([self.MESH.Nn])
+        for inode in range(self.MESH.Nn):
+            self.PSIexact[inode] = self.PlasmaCurrent.PSIanalytical(self.MESH.X[inode,:])
+            self.PSIerror[inode] = abs(self.PSIexact[inode]-self.PSI_NORM[inode,1])
+            self.PSIrelerror[inode] = self.PSIerror[inode]/abs(self.PSIexact[inode])
+            if self.PSIerror[inode] < 1e-16:
+                self.PSIerror[inode] = 1e-16
+                self.PSIrelerror[inode] = 1e-16
+    
+        # COMPUTE EUCLIDEAN NORM ERRORS
+        self.ErrorEuclinorm = np.linalg.norm(self.PSIerror)
+        self.RelErrorEuclinorm = np.linalg.norm(self.PSIrelerror)
+        return
+    
+    
     def ComputeL2errorPlasma(self):
         """
-        Computes the L2 error of the PSI field by integrating the squared difference between the analytical solution and the 
+        Computes the L2 integral norm error of the PSI field by integrating the squared difference between the analytical solution and the 
         computed solution over the plasma region.
-
-        Output:
-            L2error (float): The computed L2 error value, which measures the difference between the analytical and numerical PSI solutions.
+        
+        Computes:
+            self.ErrorL2norm        : L2 INTEGRAL NORM ERROR 
+            self.RelErrorL2norm     : L2 INTEGRAL NORM RELATIVE ERROR
         """
         ErrorL2norm = 0
         PSIexactL2norm = 0
@@ -40,8 +96,6 @@ class EquilipyL2error:
                 ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:],NORMALISED=True))**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                 PSIexactL2norm += self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:],NORMALISED=True)**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
                     
-        ErrorL2normPlasmaBound = 0
-        PSIexactL2normPlasmaBound = 0
         # INTEGRATE OVER INTERFACE ELEMENTS, FOR SUBELEMENTS INSIDE PLASMA REGION
         for elem in self.MESH.PlasmaBoundElems:
             # ISOLATE ELEMENT
@@ -56,26 +110,17 @@ class EquilipyL2error:
                     for ig in range(SUBELEM.ng):
                         ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
                         PSIexactL2norm += self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True)**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
-                        ErrorL2normPlasmaBound += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
-                        PSIexactL2normPlasmaBound += self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True)**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
-        
-        if ErrorL2normPlasmaBound == 0:
-            return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm), 0,0
-        else:
-            return np.sqrt(ErrorL2norm), np.sqrt(ErrorL2norm/PSIexactL2norm), np.sqrt(ErrorL2normPlasmaBound), np.sqrt(ErrorL2normPlasmaBound/PSIexactL2normPlasmaBound)
+                                       
+        self.ErrorL2norm = np.sqrt(ErrorL2norm)
+        self.RelErrorL2norm = np.sqrt(ErrorL2norm/PSIexactL2norm)
+        return
     
     
-    def ComputeL2error(self):
+    def ComputeL2errorDomain(self):
         """
-        Computes the L2 error of the PSI field by integrating the squared difference between the analytical solution and the 
-        computed solution over the plasma region.
-
-        Output:
-            L2error (float): The computed L2 error value, which measures the difference between the analytical and numerical PSI solutions.
+        Computes the L2 integral norm error of the PSI field by integrating the squared difference between the analytical solution and the 
+        computed solution over the full computational domain.
         """
-        # COMPUTE STANDARD QUADRATURES FOR PLASMA BOUNDARY ELEMENTS IF NOT ALREADY DONE
-        self.ComputePlasmaBoundStandardQuadratures()
-        
         ErrorL2norm = 0
         PSIexactL2norm = 0
         # INTEGRATE OVER ALL ELEMENTS

@@ -13,17 +13,10 @@
 
 # Author: Pau Manyer Fuertes
 # Email: pau.manyer@bsc.es
-# Date: October 2024
+# Date: July 2025
 # Institution: Barcelona Supercomputing Center (BSC)
 # Department: Computer Applications in Science and Engineering (CASE)
 # Research Group: Nuclear Fusion  
-
-
-# This script contains the definition for class ELEMENT, an object which 
-# embodies the cell elements constituing the mesh. For each ELEMENT object,
-# coordinates, shape functions, numerical integration quadratures... data is 
-# stored and defines the object. Several elemental methods are also defined 
-# inside this class.
 
 
 from GaussQuadrature import *
@@ -37,6 +30,14 @@ from InterfaceApprox import *
 
 class Element:
     
+    """
+    This script contains the definition for class ELEMENT, an object which 
+    embodies the cell elements constituing the mesh. For each ELEMENT object,
+    coordinates, shape functions, numerical integration quadratures... data is 
+    stored and defines the object. Several elemental methods are also defined 
+    inside this class.
+    """
+    
     ##################################################################################################
     ################################ ELEMENT INITIALISATION ##########################################
     ##################################################################################################
@@ -44,10 +45,7 @@ class Element:
     def __init__(self,index,ElType,ElOrder,Xe,Te,PlasmaLSe,interfedge=-1):
         """ 
         Initializes an element object with the specified properties, including its type, order, nodal coordinates, 
-        and level-set values for the plasma and vacuum vessel regions. 
-
-        The constructor also calculates the number of nodes and edges based on the element type and order, 
-        and sets up necessary attributes for quadrature integration and interface handling.
+        and level-set values for the plasma region. 
 
         Input:
             - index (int): Global index of the element in the computational mesh.
@@ -61,7 +59,7 @@ class Element:
             - Xe (numpy.ndarray): Elemental nodal coordinates in physical space.
             - Te (numpy.ndarray): Element connectivity matrix.
             - PlasmaLSe (numpy.ndarray): Level-set values for the plasma region at each nodal point.
-            - VacVessLSe (numpy.ndarray): Level-set values for the vacuum vessel first wall region at each nodal point.
+            - interfedge (int): Local index of edge corresponding to interface cut (only for subelements in cut elements, otherwise = -1)
         """
         
         self.index = index                                              # GLOBAL INDEX ON COMPUTATIONAL MESH
@@ -117,6 +115,17 @@ class Element:
     ##################################################################################################
     
     def ComputeArea(self):
+        """
+        Computes the area of the element based on its type and geometry.
+
+        For triangular elements (ElType == 1):
+            - If no interface edge is defined (interfedge == -1), computes the area of the regular triangle.
+            - If an interface edge exists, computes the area of the cut subtriangle using a polygon formed
+            by nodal and higher-order nodes on the interface edge.
+
+        For quadrilateral elements (ElType == 2):
+            - Computes the area using quadrilateral-specific area computation.
+        """
         match self.ElType:
             case 1:
                 # REGULAR TRIANGLE
@@ -149,6 +158,15 @@ class Element:
         return area
     
     def ComputeArea_Length(self):  
+        """
+        Computes the area of the element and an associated characteristic length scale.
+
+        The characteristic length is calculated differently based on the element type:
+        - For triangular elements (ElType == 1), length is computed as the side length of
+        an equilateral triangle with the same area.
+        - For quadrilateral elements (ElType == 2), length is computed as the square root of the area.
+        """
+        
         area = self.ComputeArea()
         match self.ElType:
             case 1:
@@ -159,6 +177,20 @@ class Element:
     
     
     def isinside(self,X):
+        """
+        Determines if a given point X lies inside the element.
+
+        For triangular elements (ElType == 1):
+            Uses the sign of cross products relative to the edges to check if the point
+            lies inside the triangle.
+
+        For quadrilateral elements (ElType == 2):
+            Uses the ray-casting algorithm by counting edge intersections with a horizontal ray
+            from the point; if the count is odd, the point is inside.
+
+        Input:
+            - X (array-like): Coordinates of the point to test, e.g., [x, y].
+        """
         inside = False
         if self.ElType == 1: # FOR TRIANGULAR ELEMENTS
             # Calculate the cross products (c1, c2, c3) for the point relative to each edge of the triangle
@@ -177,7 +209,25 @@ class Element:
     
     
     def CheckElementalVerticesLevelSetSigns(self):
-        
+        """
+        Checks the signs of the level-set function values at the elemental vertices and higher-order nodes.
+
+        This function determines whether the element lies entirely inside, outside, or intersects the interface
+        defined by the level-set function (zero contour).
+
+        Returns:
+            - region (int or None): 
+                -  0 if the element intersects the level-set interface (i.e., the level-set changes sign between vertices
+                or any vertex lies exactly on the zero level-set),
+                - +1 if the element lies entirely in the exterior region (all vertex level-set values positive),
+                - -1 if the element lies entirely in the interior region (all vertex level-set values negative),
+                - None if the region could not be determined.
+
+            - DiffHighOrderNodes (list of int): List of indices of high-order nodes (non-vertex nodes) whose level-set
+                                            sign differs from that of the vertices, indicating possible sign inconsistencies
+                                            inside the element.
+        """
+    
         region = None
         DiffHighOrderNodes = []
         # CHECK SIGN OF LEVEL SET ON ELEMENTAL VERTICES
@@ -220,8 +270,7 @@ class Element:
         In order to do that, we solve the nonlinear system implicitly araising from the original isoparametric equations. 
         
         Input: 
-            - Xg: coordinates of point in reference space for which to compute the coordinate in physical space.
-            - Xe: nodal coordinates of physical element.
+            - Xi: coordinates of point in reference space for which to compute the coordinate in physical space.
         Output: 
              X: coodinates of mapped point in reference element.
         """
@@ -241,7 +290,7 @@ class Element:
         Input: 
             X: physical coordinates of point for which compute the corresponding point in the reference space.
         Output: 
-            Xg: coodinates of mapped point in reference element.
+            Xi: coodinates of mapped point in reference element.
         """
         
         # DEFINE THE NONLINEAR SYSTEM 
@@ -392,28 +441,32 @@ class Element:
     ##################################################################################################
     
     def PHI(self,X):
-        """ ISOPARAMETRIC INTERPOLATION OF LEVEL-SET FUNCTION PHI EVALUATED AT POINT X"""
+        """ 
+        ISOPARAMETRIC INTERPOLATION OF LEVEL-SET FUNCTION PHI EVALUATED AT POINT X
+        """
         N, foo, foo = EvaluateReferenceShapeFunctions(X, self.ElType, self.ElOrder)
         return N@self.LSe
     
     
     def InterfaceApproximation(self,interface_index):
         """
-        Approximates the interface between plasma and vacuum regions by computing the intersection points 
-        of the plasma/vacuum boundary with the edges and interior of the element.
+        Approximate the interface within an element by locating points where the level-set function (PHI) crosses zero.
 
-        The function performs the following steps:
-            1. Reads the level-set nodal values
-            2. Computes the coordinates of the reference element.
-            3. Identifies the intersection points of the interface with the edges of the REFERENCE element.
-            4. Uses interpolation to approximate the interface inside the REFERENCE element, including high-order interior nodes.
-            5. Maps the interface approximation back to PHYSICAL space using shape functions.
-            6. Associates elemental connectivity to interface segments.
-            7. Generates segment objects for each segment of the interface and computes high-order segment nodes.
+        This method finds the intersection points of the interface (zero level-set contour) with the element edges,
+        and for higher-order elements, computes additional internal interface nodes to improve the interface approximation.
+
+        Steps:
+        - Obtain reference element coordinates.
+        - Identify edges where the level-set function changes sign, indicating an interface crossing.
+        - Use root-finding (scipy.optimize.root) to locate the zero of the level-set function on each intersected edge.
+        - For higher-order elements (ElOrder > 1), solve a nonlinear system to position internal interface nodes evenly along the interface curve.
+        - Map the reference interface points to physical coordinates using shape functions.
+        - Assemble the elemental connectivity for the interface approximation.
+        - Store the interface approximation data in an InterfaceApprox object.
 
         Input:
-            interface_index (int): The index of the interface to be approximated.
-        """    
+            - interface_index (int): Identifier for the interface being approximated.
+        """
         
         # OBTAIN REFERENCE ELEMENT COORDINATES
         XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
@@ -533,7 +586,7 @@ class Element:
     
     def InterfaceNormals(self):
         """ 
-        This function computes the interface normal vector pointing outwards at the Gaussian integration nodes. 
+        This function computes the normal vector pointing outwards at the plasma boundary approximation Gaussian integration nodes. 
         """
         # COMPUTE THE NORMAL VECTOR FOR EACH SEGMENT CONFORMING THE INTERFACE APPROXIMATION
         self.InterfApprox.NormalVec = list()
@@ -566,7 +619,13 @@ class Element:
     
     
     def CheckInterfaceNormals(self):
-        
+        """
+        Validates the correctness of normal vectors on the interface approximation.
+
+        Raises:
+            Exception: If a normal vector is not unitary or not perpendicular to the interface tangent,
+                    specifying the element index and the offending value.
+        """
         for ig, vec in enumerate(self.InterfApprox.NormalVec):
             # CHECK UNIT LENGTH
             if np.abs(np.linalg.norm(vec)-1) > 1e-6:
@@ -582,7 +641,9 @@ class Element:
      
     
     def GhostFacesNormals(self):
-        
+        """
+        Computes and assigns outward normal vectors for each ghost face in the element.
+        """
         for FACE in self.GhostFaces:
             #### PREPARE TEST NORMAL VECTOR IN PHYSICAL SPACE
             dx = FACE.Xseg[1,0] - FACE.Xseg[0,0]
@@ -826,21 +887,21 @@ class Element:
         
     def ComputeStandardQuadrature2D(self,NumQuadOrder2D):
         """
-        Computes the numerical integration quadratures for 2D elements that are not cut by any interface.
-        This function applies the standard FEM integration methodology using reference shape functions 
-        evaluated at standard Gauss integration nodes. It is designed for elements where no interface cuts 
-        through, and the traditional FEM approach is used for integration.
+        Computes and prepares the standard 2D Gaussian quadrature for numerical integration
+        over the reference element.
 
         Input:
-            NumQuadOrder (int): The order of the numerical integration quadrature to be used.
+            - NumQuadOrder2D (int): The order of the Gaussian quadrature to use in 2D integration.
 
-        This function performs the following tasks:
-            1. Computes the standard quadrature on the reference space in 2D.
-            2. Evaluates reference shape functions on the standard reference quadrature using Gauss nodes.
-            3. Precomputes the necessary integration entities, including:
-                - Jacobian inverse matrix for the transformation between reference and physical 2D spaces.
-                - Jacobian determinant for the transformation.
-                - Standard physical Gauss integration nodes mapped from the reference element.
+        Sets:
+            - self.XIg : Quadrature points in reference space.
+            - self.Wg : Quadrature weights.
+            - self.ng : Number of quadrature points.
+            - self.Ng : Shape function values at quadrature points.
+            - self.dNdxig, self.dNdetag : Shape function derivatives w.r.t reference coordinates.
+            - self.Xg : Quadrature points mapped to physical space.
+            - self.invJg : Inverse Jacobian matrices at quadrature points.
+            - self.detJg : Determinants of Jacobian matrices at quadrature points.
         """
         
         # COMPUTE THE STANDARD QUADRATURE ON THE REFERENCE SPACE IN 2D
@@ -872,21 +933,27 @@ class Element:
     
     
     def ComputeAdaptedQuadratures2D(self,NumQuadOrder2D):
-        """ 
-        Computes the numerical integration quadratures for both 2D and 1D elements that are cut by an interface. 
-        This function uses an adapted quadrature approach, modifying the standard FEM quadrature method to accommodate 
-        interface interactions within the element.
+        """
+        Computes adapted 2D Gaussian quadratures by tessellating the reference element into subelements,
+        mapping subelements to physical space, and calculating integration points and weights for each.
+
+        Steps performed:
+        - Tessellates the reference element into smaller subelements.
+        - Maps tessellated subelement nodes from reference to physical coordinates.
+        - Creates Element objects for each subelement and assigns reference coordinates.
+        - Interpolates the level-set function to assign domain flags to subelements.
+        - For each subelement sets:
+            - subelem.XIg : Quadrature points in reference space.
+            - subelem.Wg : Quadrature weights.
+            - subelem.ng : Number of quadrature points.
+            - subelem.Ng : Shape function values at quadrature points.
+            - subelem.dNdxig, subelem.dNdetag : Shape function derivatives w.r.t reference coordinates.
+            - subelem.Xg : Quadrature points mapped to physical space.
+            - subelem.invJg : Inverse Jacobian matrices at quadrature points.
+            - subelem.detJg : Determinants of Jacobian matrices at quadrature points.
 
         Input:
-            NumQuadOrder (int): The order of the numerical integration quadrature to be used for both the 2D and 1D elements.
-
-        This function performs the following tasks:
-            1. Tessellates the reference element to account for elemental subelements.
-            2. Maps the tessellated subelements to the physical space.
-            3. Determines the level-set values for different domains (e.g., plasma, vacuum).
-            4. Generates subelement objects, assigning region flags and interpolating level-set values within subelements.
-            5. Computes integration quadrature for each subelement using adapted quadratures (2D).
-            6. Computes the quadrature for the elemental interface approximation (1D), mapping to physical elements.
+            - NumQuadOrder2D (int): Order of the Gaussian quadrature for 2D integration.
         """
         
         ######### ADAPTED QUADRATURE TO INTEGRATE OVER ELEMENTAL SUBELEMENTS (2D)
@@ -946,7 +1013,24 @@ class Element:
     
     
     def ComputeAdaptedQuadrature1D(self,NumQuadOrder1D):
-        
+        """
+        Computes and prepares an adapted 1D Gaussian quadrature for numerical integration
+        over the elemental interface approximation.
+
+        Input:
+            - NumQuadOrder1D (int): The order of the Gaussian quadrature to use in 1D integration along the interface.
+
+        Sets:
+            - self.InterfApprox.XIg : Quadrature points on the reference interface.
+            - self.InterfApprox.Wg : Quadrature weights.
+            - self.InterfApprox.ng : Number of quadrature points.
+            - self.InterfApprox.Ng : Shape function values at quadrature points on the interface.
+            - self.InterfApprox.dNdxig, self.InterfApprox.dNdetag : Shape function derivatives w.r.t. reference coordinates.
+            - self.InterfApprox.Xg : Quadrature points mapped to physical space.
+            - self.InterfApprox.invJg : Inverse Jacobian matrices at quadrature points.
+            - self.InterfApprox.detJg : Determinants of Jacobian matrices at quadrature points.
+            - self.InterfApprox.detJg1D : 1D Jacobian determinants along the interface.
+        """
         ######### ADAPTED QUADRATURE TO INTEGRATE OVER ELEMENTAL INTERFACE APPROXIMATION (1D)
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
         XIg1Dstand, self.InterfApprox.Wg, self.InterfApprox.ng = GaussQuadrature(0,NumQuadOrder1D)
@@ -980,6 +1064,17 @@ class Element:
     
     
     def CheckQuadrature2D(self, elemindex = -1, tol=1e-4):
+        """
+        Checks the accuracy of the 2D numerical integration quadrature by comparing
+        the integrated area using the quadrature scheme against the known element area.
+
+        Input:
+            - elemindex (int, optional): Index of the element for error messaging. Default is -1.
+            - tol (float, optional): Tolerance for acceptable integration error. Default is 1e-4.
+
+        Raises:
+            - Warning with descriptive message if the quadrature integration error exceeds the tolerance.
+        """
         # CHECK NUMERICAL INTEGRATION QUADRATURE BY INTEGRATING AREA
         error = False
         integral = 0
@@ -1001,6 +1096,16 @@ class Element:
     
     
     def CheckQuadrature1D(self, tol=1e-2):
+        """
+        Checks the accuracy of the 1D numerical integration quadrature by comparing
+        the integrated arc length using the quadrature scheme against the piecewise linear approximation of the interface length.
+
+        Input:
+            - tol (float, optional): Tolerance for acceptable integration error. Default is 1e-2.
+
+        Raises:
+            - Warning with descriptive message if the quadrature integration error exceeds the tolerance.
+        """
         # CHECK CUT ELEMENTS NUMERICAL INTEGRATION QUADRATURE BY INTEGRATING ARC LENGTH
         error = False
         
@@ -1028,7 +1133,22 @@ class Element:
     
     
     def ComputeGhostFacesQuadratures(self,NumQuadOrder1D):
-        
+        """
+        Computes adapted 1D Gaussian quadratures for numerical integration over elemental ghost faces.
+
+        Input:
+            - NumQuadOrder1D (int): Order of the 1D Gaussian quadrature to use.
+
+        Sets attributes of each ghost face:
+            - ng : Number of quadrature points.
+            - Wg : Quadrature weights.
+            - XIg : Quadrature points in reference space.
+            - Ng, dNdxig, dNdetag : Shape functions and derivatives at quadrature points.
+            - Xg : Quadrature points mapped to physical space.
+            - invJg : Inverse Jacobian matrices at quadrature points.
+            - detJg : Determinants of Jacobian matrices at quadrature points.
+            - detJg1D : 1D Jacobian determinants at quadrature points.
+        """
         ######### ADAPTED QUADRATURE TO INTEGRATE OVER ELEMENTAL GHOST FACES
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
         XIg1Dstand, Wg1D, Ng1D = GaussQuadrature(0,NumQuadOrder1D)
@@ -1072,12 +1192,7 @@ class Element:
         Gauss integration nodes.
 
         Input:
-            SourceTermg (ndarray): The Grad-Shafranov equation source term evaluated at the physical Gauss integration nodes.
-        
-
-        This function computes:
-            1. The elemental contributions to the LHS matrix (stiffness term and gradient term).
-            2. The elemental contributions to the RHS vector (source term).
+            - SourceTermg (ndarray): The Grad-Shafranov equation source term evaluated at the physical Gauss integration nodes.
 
         Output:
             - LHSe (ndarray): The elemental left-hand side matrix (stiffness matrix) of the system.
@@ -1106,6 +1221,24 @@ class Element:
     
     
     def PrescribeDirichletBC(self,elmat,elrhs):
+        """
+        Applies Dirichlet boundary conditions to the local element matrix and right-hand side (RHS) vector.
+
+        Input:
+            - elmat (ndarray): Element stiffness matrix (modified in-place).
+            - elrhs (ndarray): Element RHS vector (modified in-place).
+
+        Process:
+            - For each Dirichlet boundary node in `self.Teboun`:
+                - Subtracts the boundary contribution from the RHS vector.
+                - Zeros out the corresponding row and column in the element matrix.
+                - Restores the diagonal entry to its original value if non-zero, or sets it to 1.
+                - Sets the corresponding RHS entry to the prescribed Dirichlet value.
+
+        Output:
+            - elmat (ndarray): Modified element stiffness matrix with Dirichlet BCs applied.
+            - elrhs (ndarray): Modified RHS vector with Dirichlet BCs applied.
+        """
         for Teboun in self.Teboun:
             for ibounode in Teboun:
                 adiag = elmat[ibounode,ibounode]
@@ -1133,10 +1266,6 @@ class Element:
 
         Input:
             beta (float): The penalty parameter for Nitsche's method, which controls the strength of the penalty term.
-        
-        This function computes:
-            1. The elemental contributions to the LHS matrix (including Dirichlet boundary term, symmetric Nitsche's term, and penalty term).
-            2. The elemental contributions to the RHS vector (including symmetric Nitsche's term and penalty term).
 
         Output: 
             - LHSe (ndarray): The elemental left-hand side matrix (stiffness matrix) of the system, incorporating Nitsche's method.

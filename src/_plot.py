@@ -1,3 +1,24 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Author: Pau Manyer Fuertes
+# Email: pau.manyer@bsc.es
+# Date: July 2025
+# Institution: Barcelona Supercomputing Center (BSC)
+# Department: Computer Applications in Science and Engineering (CASE)
+# Research Group: Nuclear Fusion  
+
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -562,7 +583,7 @@ class EquilipyPlotting:
         """ Function which plots the values PSIgseg at the interface edges, for both the plasma/vacuum interface and the vacuum vessel first wall. """
 
         # IMPOSED BOUNDARY VALUES
-        ### VACUUM VESSEL FIRST WALL
+        ### COMPUTATIONAL DOMAIN BOUNDARY
         PSI_Bg = self.PSI_B[:,1]
         PSI_B = self.PSI[self.MESH.BoundaryNodes]
             
@@ -728,7 +749,7 @@ class EquilipyPlotting:
                 # PLOT INTERFACE QUADRATURE
                 plt.scatter(SEGMENT.Xg[:,0],SEGMENT.Xg[:,1],marker='o',c='green')
                 
-        # PLOT VACUUM VESSEL FIRST WALL ELEMENTS
+        # PLOT COMPUTATIONAL DOMAIN ELEMENTS
         for elem in self.MESH.FirstWallElems:
             ELEMENT = self.MESH.Elements[elem]
             # PLOT ELEMENT EDGES

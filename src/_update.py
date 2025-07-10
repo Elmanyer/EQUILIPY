@@ -1,8 +1,48 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Author: Pau Manyer Fuertes
+# Email: pau.manyer@bsc.es
+# Date: July 2025
+# Institution: Barcelona Supercomputing Center (BSC)
+# Department: Computer Applications in Science and Engineering (CASE)
+# Research Group: Nuclear Fusion  
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
 
 class EquilipyUpdate:
+    
+    
+    def FixElementalPSI_P(self):
+        """
+        Updates the plasma boundary PSI values constraints (PSIg) on the interface approximation integration nodes.
+        """
+        for ielem in self.MESH.PlasmaBoundActiveElems:
+            INTAPPROX = self.MESH.Elements[ielem].InterfApprox
+            # INITIALISE BOUNDARY VALUES
+            INTAPPROX.PSIg = np.zeros([INTAPPROX.ng])
+            # FOR EACH INTEGRATION POINT ON THE PLASMA/VACUUM INTERFACE APPROXIMATION SEGMENT
+            for ig in range(INTAPPROX.ng):
+                # FIXED BOUNDARY PROBLEM -> ANALYTICAL SOLUTION PLASMA BOUNDARY VALUES 
+                if self.FIXED_BOUNDARY:
+                    INTAPPROX.PSIg[ig] = self.PlasmaCurrent.PSIanalytical(INTAPPROX.Xg[ig,:],NORMALISED=True)
+                # FREE BOUNDARY PROBLEM -> PLASMA BOUNDARY VALUES = SEPARATRIX VALUE
+                else:
+                    INTAPPROX.PSIg[ig] = self.PSIseparatrix
+        return
     
     
     def CheckConvergence(self,VALUES):
@@ -63,6 +103,9 @@ class EquilipyUpdate:
         return 
     
     def UpdatePSI_NORM(self):
+        """
+        Updates the normalized PSI solution and critical point arrays for the new iteration.
+        """
         # UPDATE NORMALISED SOLUTION ARRAY
         self.PSI_NORM[:,0] = self.PSI_NORM[:,1]
         # UPDATE CRITICAL VALUES
@@ -71,7 +114,7 @@ class EquilipyUpdate:
     
     def UpdatePSI_B(self):
         """
-        Updates the PSI_B arrays.
+        Updates the boundary PSI_B arrays.
         """
         if self.ext_cvg == False:
             self.PSI_B[:,0] = self.PSI_B[:,1]
@@ -79,6 +122,7 @@ class EquilipyUpdate:
         elif self.ext_cvg == True:
             self.PSI_CONV = self.PSI_NORM[:,1]
         return
+    
     
     def UpdateElementalPSI(self):
         """ 
@@ -88,26 +132,11 @@ class EquilipyUpdate:
             ELEMENT.PSIe = self.PSI_NORM[ELEMENT.Te,1]  # TAKE VALUES OF ITERATION N
         return
     
-    def UpdatePlasmaBoundaryValues(self):
-        """
-        Updates the plasma boundary PSI values constraints (PSIgseg) on the interface approximation segments integration points.
-        """
-        for ielem in self.MESH.PlasmaBoundActiveElems:
-            INTAPPROX = self.MESH.Elements[ielem].InterfApprox
-            # INITIALISE BOUNDARY VALUES
-            INTAPPROX.PSIg = np.zeros([INTAPPROX.ng])
-            # FOR EACH INTEGRATION POINT ON THE PLASMA/VACUUM INTERFACE APPROXIMATION SEGMENT
-            for ig in range(INTAPPROX.ng):
-                # FIXED BOUNDARY PROBLEM -> ANALYTICAL SOLUTION PLASMA BOUNDARY VALUES 
-                if self.FIXED_BOUNDARY:
-                    INTAPPROX.PSIg[ig] = self.PlasmaCurrent.PSIanalytical(INTAPPROX.Xg[ig,:],NORMALISED=True)
-                # FREE BOUNDARY PROBLEM -> PLASMA BOUNDARY VALUES = SEPARATRIX VALUE
-                else:
-                    INTAPPROX.PSIg[ig] = self.PSIseparatrix
-        return
     
-    def UpdateVacuumVesselBoundaryValues(self):
-        
+    def UpdateElementalPSI_B(self):
+        """
+        Updates the essential boundary conditions PSI_B for boundary elements.
+        """
         PSI_Bextend = np.zeros([self.MESH.Nn])
         for inode in range(self.MESH.Nnbound):
             PSI_Bextend[self.MESH.BoundaryNodes[inode]] = self.PSI_B[inode,1]
@@ -120,7 +149,33 @@ class EquilipyUpdate:
 
     
     def ComputePSILevelSet(self,PSI_NORM=None):
-        
+        """
+        Computes the level-set function representing the plasma boundary based on 
+        the normalized poloidal flux (PSI_NORM).
+
+        Parameters:
+        -----------
+        PSI_NORM : ndarray, optional
+            Normalized PSI values to use for contour extraction. If not provided, 
+            the method uses the latest solution (`self.PSI_NORM[:,1]`).
+
+        Description:
+        ------------
+        This method identifies the plasma boundary by extracting the contour line 
+        corresponding to the separatrix value (`self.PSI_NORMseparatrix`) from the 
+        normalized PSI field. It ensures the extracted contour:
+            - Contains the magnetic saddle point (X-point).
+            - Does not lie along the computational boundary (if avoidable).
+
+        If multiple valid contours exist, it selects the most physically consistent one.
+        In cases where the contour also lies along the computational boundary, a segment 
+        of the contour around the X-point is isolated.
+
+        The selected contour is then optionally reduced to a maximum number of points 
+        and used to define a signed distance level-set function (`self.PlasmaLS`):
+            - Negative inside the plasma domain.
+            - Positive outside the plasma domain.
+        """
         if type(PSI_NORM) == type(None):
             psinorm = self.PSI_NORM[:,1]
         else:
@@ -247,6 +302,9 @@ class EquilipyUpdate:
     
     
     def UpdateElementalPlasmaLevSet(self):
+        """
+        Updates the elemental level-set values for each mesh element.
+        """
         for ELEMENT in self.MESH.Elements:
             ELEMENT.LSe = self.PlasmaLS[self.MESH.T[ELEMENT.index,:]]
         return

@@ -1,10 +1,45 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Author: Pau Manyer Fuertes
+# Email: pau.manyer@bsc.es
+# Date: July 2025
+# Institution: Barcelona Supercomputing Center (BSC)
+# Department: Computer Applications in Science and Engineering (CASE)
+# Research Group: Nuclear Fusion  
+
+
+
 import matplotlib.pyplot as plt
 from Magnet import *
 import _plot as eqplot
 
 class Tokamak:
     
+    """
+    Represents a Tokamak device with external magnets and a first wall boundary.
+    """
+    
     def __init__(self,WALL_MESH,MAGNETS=None):
+        """
+        Initialize the Tokamak object using the wall mesh and optional external magnets.
+
+        Input:
+            - WALL_MESH (Mesh): Mesh object representing the Tokamak wall with attributes
+                               BoundaryVertices (list or array), X (coordinates array),
+                               and boundary_path.
+            - MAGNETS (list or None): Optional list of external magnet objects.
+        """
         
         # TOKAMAK EXTERNAL MAGNETS
         self.MAGNETS = MAGNETS                          # ARRAY OF EXTERNAL MAGNETS
@@ -24,6 +59,15 @@ class Tokamak:
     
     
     def Psi(self,X):
+        """
+        Compute the magnetic flux function Psi at a given point by summing contributions from all magnets.
+
+        Input:
+            X (array-like): Coordinate [R, Z] at which to evaluate Psi.
+
+        Ouput:
+            float: Magnetic flux Psi at point X.
+        """
         psi = 0
         for magnet in self.MAGNETS:
             psi += magnet.Psi(X)
@@ -31,6 +75,15 @@ class Tokamak:
     
     
     def ComputeField(self,X):
+        """
+        Compute the magnetic flux Psi field over multiple points.
+
+        Input:
+            X (ndarray): Array of points with shape (N, 2), where each row is [R, Z].
+
+        Ouput:
+            psifield (ndarray): Array of Psi values at each input point.
+        """
         n = np.shape(X)[0]
         psifield = np.zeros([n])
         for inode in range(n):

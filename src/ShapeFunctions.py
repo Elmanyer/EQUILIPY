@@ -13,7 +13,7 @@
 
 # Author: Pau Manyer Fuertes
 # Email: pau.manyer@bsc.es
-# Date: October 2024
+# Date: July 2025
 # Institution: Barcelona Supercomputing Center (BSC)
 # Department: Computer Applications in Science and Engineering (CASE)
 # Research Group: Nuclear Fusion  

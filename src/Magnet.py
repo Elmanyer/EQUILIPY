@@ -13,11 +13,10 @@
 
 # Author: Pau Manyer Fuertes
 # Email: pau.manyer@bsc.es
-# Date: October 2024
+# Date: July 2025
 # Institution: Barcelona Supercomputing Center (BSC)
 # Department: Computer Applications in Science and Engineering (CASE)
 # Research Group: Nuclear Fusion  
-
 
 
 from Greens import *
@@ -35,15 +34,14 @@ class Coil:
     
     def __init__(self,name,X,I,Nturns=1):
         """
-        Constructor to initialize the Coil object with the provided attributes.
+        Coil object constructor.
 
         Input:
-            - index (int): The index of the coil in the global system.
-            - dim (int): The spatial dimension of the coil coordinates.
-            - X (numpy.ndarray): A 1D array representing the position coordinates of the coil in physical space.
-            - I (float): The current carried by the coil.
+            - name (str): Identifier name of the coil.
+            - X (np.ndarray): Position vector of the coil center (shape: dim,).
+            - I (float): Electric current carried by the coil [A].
+            - Nturns (int): Number of turns in the coil (total current = I × Nturns).
         """
-        
         self.name = name        # IDENTIFICATION
         self.X = X              # POSITION COORDINATES
         self.dim = len(X)       # SPATIAL DIMENSION
@@ -71,6 +69,12 @@ class Coil:
         return GreensBz(self.X,X) * self.I * self.Nturns
     
     def Plot(self,ax):
+        """
+        Plots the coil as a circle on the given axis.
+
+        Input:
+            - ax (matplotlib.axes.Axes): Matplotlib axis where the coil will be plotted.
+        """
         ax.add_patch(plt.Circle((self.X[0],self.X[1]),dcoil,facecolor=coilcolor,edgecolor='k',linewidth=2))
         ax.text(self.X[0]+0.4,self.X[1]+0.4,self.name)
         return
@@ -82,13 +86,17 @@ class RectangularMultiCoil:
     
     def __init__(self,name,Xe,I, nr=1, nz=4, padr = 0.05, padz = 0.1, Xcoils=None):
         """
-        Constructor to initialize the Solenoid object with the provided attributes.
+        Solenoid object constructor.
 
         Input:
-            - index (int): The index of the solenoid in the global system.
-            - dim (int): The spatial dimension of the solenoid coordinates.
-            - X (numpy.ndarray): Solenoid nodal coordinates matrix.
-            - I (float): The current carried by the solenoid.
+            - name (str): Identifier name of the solenoid.
+            - Xe (np.ndarray): Matrix of vertex coordinates (n_vertices x dim).
+            - I (float): Electric current carried by the solenoid [A].
+            - nr (int): Number of coils in the radial direction.
+            - nz (int): Number of coils in the vertical direction.
+            - padr (float): Radial padding between coils.
+            - padz (float): Vertical padding between coils.
+            - Xcoils (list[np.ndarray] or None): Predefined list of coil positions. If None, coils are automatically distributed.
         """
         
         self.name = name            # IDENTIFICATION
@@ -116,11 +124,16 @@ class RectangularMultiCoil:
     
     def Distribute_coils(self, nr, nz, padr, padz):
         """
-        Generate approximately n_points equally spaced within a rectangle.
-        
-        Returns:
-            Xcoils : np.ndarray of shape (<=n_points, 2)
-                Grid-aligned points inside the rectangle.
+        Distributes coil centers uniformly within the solenoid's geometry.
+
+        Input:
+            - nr (int): Number of coils along the horizontal (radial) direction.
+            - nz (int): Number of coils along the vertical (axial) direction.
+            - padr (float): Fractional horizontal padding (relative to width).
+            - padz (float): Fractional vertical padding (relative to height).
+
+        Output:
+            - Xcoils (np.ndarray): Array of coil center positions (n_coils x 2).
         """
         # Determine domain boundaries
         xmax = np.max(self.Xe[:, 0])
@@ -179,6 +192,12 @@ class RectangularMultiCoil:
         return Bz_sole
     
     def Plot(self,ax):
+        """
+        Plot the solenoid and its coils on the given matplotlib axis.
+
+        Input:
+            - ax (matplotlib.axes.Axes): The axis to plot on.
+        """
         for coil in self.COILS:
             ax.add_patch(plt.Circle((coil.X[0],coil.X[1]),dcoil,facecolor=coilcolor,edgecolor='k',linewidth=2))
         Xe = np.zeros([5,2])
@@ -194,16 +213,29 @@ class QuadrilateralCoil:
     """ Class defining a tokamak's external magnet with quadrilateral (non-null surface) cross-section. """
     
     def __init__(self, name, Itotal, ElOrder = 2, QuadOrder = 4, **kwargs):
+        """
+        Quadrilateral magnet object constructor.
+
+        Input:
+            - name (str): Identifier name of the magnet.
+            - Itotal (float): Total current passing through the magnet cross-section [A].
+            - ElOrder (int, optional): Finite element order (default: 2).
+            - QuadOrder (int, optional): Quadrature order for numerical integration (default: 4).
+            - kwargs (optional):
+                - Xvertices (np.ndarray): Vertices coordinates (n_vertices × dim) defining the cross-section.
+                - Xcenter (np.ndarray): Center coordinates of the magnet cross-section.
+                - Area (float): Cross-section area (required if Xcenter is given).
+        """
         
         self.name = name                    # IDENTIFICATION
         self.I = Itotal                     # TOTAL CURRENT PASSING THOUGH MAGNET CROSS-SECTION
-        self.area = None
-        self.Xvertices = None
-        self.Xcenter = None
+        self.area = None                    # CROSS-SECTION AREA
+        self.Xvertices = None               # VERTICES COORDINATES
+        self.Xcenter = None                 # CENTER COORDINATES
         # QUADRILATERAL SHAPED MAGNET
-        self.ElOrder = ElOrder                    # ELEMENT ORDER
-        self.ElType = 2                     
-        self.numedges = 4
+        self.ElOrder = ElOrder              # ASSOCIATED ELEMENT ORDER
+        self.ElType = 2                     # ASSOCIATED ELEMENT TYPE (= 2 -> QUADRILATERAL)
+        self.numedges = 4                   # ASSOCIATED ELEMENT NUMBER OF EDGES
         
         # CASE WHERE THE VERTICES COORDINATES ARE GIVEN TO DEFINE CROSS-SECTION
         if 'Xvertices' in kwargs:
@@ -223,12 +255,12 @@ class QuadrilateralCoil:
                                        [self.Xcenter[0] - h, self.Xcenter[1] + h]])  # top-left       
         
         # NUMERICAL INTEGRATION QUADRATURE
-        self.ng = None          # NUMBER OF GAUSS INTEGRATION NODES FOR STANDARD 1D QUADRATURE
-        self.XIg = None         # GAUSS INTEGRATION NODES (REFERENCE SPACE)
-        self.Xg = None          # GAUSS INTEGRATION NODES (PHYSICAL SPACE)
-        self.Wg = None          # GAUSS INTEGRATION WEIGTHS 
-        self.Ng = None          # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES 
-        self.dNdxig = None      # REFERENCE SHAPE FUNCTIONS DERIVATIVES RESPECT TO XI EVALUATED AT GAUSS INTEGRATION NODES
+        self.ng = None              # NUMBER OF GAUSS INTEGRATION NODES FOR STANDARD 1D QUADRATURE
+        self.XIg = None             # GAUSS INTEGRATION NODES (REFERENCE SPACE)
+        self.Xg = None              # GAUSS INTEGRATION NODES (PHYSICAL SPACE)
+        self.Wg = None              # GAUSS INTEGRATION WEIGTHS 
+        self.Ng = None              # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES 
+        self.dNdxig = None          # REFERENCE SHAPE FUNCTIONS DERIVATIVES RESPECT TO XI EVALUATED AT GAUSS INTEGRATION NODES
         self.dNdetag = None         # REFERENCE SHAPE FUNCTIONS DERIVATIVES RESPECT TO ETA EVALUATED AT GAUSS INTEGRATION NODES
         self.invJg = None           # INVERSE MATRIX OF JACOBIAN OF TRANSFORMATION FROM 2D REFERENCE ELEMENT TO 2D PHYSICAL ELEMENT, EVALUATED AT GAUSS INTEGRATION NODES
         self.detJg = None           # MATRIX DETERMINANT OF JACOBIAN OF TRANSFORMATION FROM 2D REFERENCE ELEMENT TO 2D PHYSICAL ELEMENT, EVALUATED AT GAUSS INTEGRATION NODES 
@@ -246,12 +278,8 @@ class QuadrilateralCoil:
     
     def HO_quadrilateral(self):
         """
-        Generates a high-order quadrilateral element from a linear one with nodal vertices coordinates XeLIN, incorporating high-order 
+        Generates a high-order quadrilateral element from a linear one with nodal vertices coordinates Xvertices, incorporating high-order 
         nodes on the edges and interior.
-
-        Input: 
-            - XeLIN (numpy.ndarray): An array of shape (n, 2) containing the coordinates of the linear (low-order) element nodes.
-            - ElOrder (int): The order of the element, determining the number of high-order nodes to be added.
 
         Output: 
             XeHO (numpy.ndarray): An array containing the coordinates of the high-order element nodes, including those on 
@@ -283,7 +311,23 @@ class QuadrilateralCoil:
     
     
     def ComputeQuadrature(self,QuadOrder):
-        
+        """
+        Computes the numerical integration quadrature for the quadrilateral magnet.
+
+        Input:
+            - QuadOrder (int): Order of the Gauss quadrature to use.
+
+        Sets the following attributes:
+            - XIg (np.ndarray): Gauss integration nodes in reference element space.
+            - Wg (np.ndarray): Corresponding Gauss integration weights.
+            - ng (int): Number of Gauss integration nodes.
+            - Ng (np.ndarray): Reference shape functions evaluated at Gauss nodes.
+            - dNdxig (np.ndarray): Derivatives of shape functions w.r.t. xi at Gauss nodes.
+            - dNdetag (np.ndarray): Derivatives of shape functions w.r.t. eta at Gauss nodes.
+            - Xg (np.ndarray): Gauss nodes mapped to physical element coordinates.
+            - invJg (np.ndarray): Inverse Jacobian matrices at each Gauss node.
+            - detJg (np.ndarray): Determinants of Jacobian matrices at each Gauss node (absolute value).
+        """
         #### REFERENCE ELEMENT QUADRATURE TO INTEGRATE SURFACES
         self.XIg, self.Wg, self.ng = GaussQuadrature(self.ElType,QuadOrder)
         # EVALUATE REFERENCE SHAPE FUNCTIONS 
@@ -300,6 +344,12 @@ class QuadrilateralCoil:
         return
     
     def CheckQuadrature(self):
+        """
+        Verifies the numerical integration quadrature by checking the integrated area.
+
+        Raises:
+            - ValueError: If the computed integral differs from the coil area by more than 1e-6.
+        """
         # CHECK NUMERICAL INTEGRATION QUADRATURE BY INTEGRATING AREA
         integral = 0
         for ig in range(self.ng):
@@ -340,6 +390,12 @@ class QuadrilateralCoil:
         return Bz_coil
     
     def Plot(self,ax):
+        """
+        Plots the quadrilateral coil on the given matplotlib axis.
+
+        Input:
+            - ax (matplotlib.axes.Axes): Axis object where the coil will be plotted.
+        """
         ax.add_patch(plt.Polygon(self.Xvertices,closed=True,facecolor=coilcolor,edgecolor='k',linewidth=3))
         ax.text(self.Xcenter[0]+0.5,self.Xcenter[1], self.name)
         return
