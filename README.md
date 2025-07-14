@@ -2,7 +2,7 @@
 
 ## *PROBLEM DESCRIPTION:*
 
-The Grad-Shafranov equation is an nonlinear elliptic PDE which models the force balance between the plasma expansion pressure and the magnetic confinement pressure in an axisymmetrical system (for instance a tokamak device). 
+The Grad-Shafranov (GS) equation is an nonlinear elliptic PDE which models the force balance between the plasma expansion pressure and the magnetic confinement pressure in an axisymmetrical system (for instance a tokamak device). 
 Solving the equation yields the cross-section poloidal magnetic flux surfaces configuration at the equilibrium state.
 
 While the tokamak's confining magnets' currents and positions can be adjusted to accommodate a variety of plasma pressure and current profiles, the current carried by the plasma depends on its cross-section shape, which at the same time is affected by the plasma current's self-induced magnetic field. 
@@ -15,7 +15,7 @@ Additionally, the code is equiped with a **FIXED-boundary** solver, for which se
 
 - **The FIXED-boundary problem** refers to an artificial case where the plasma shape is *a priori* known, and therefore the plasma region and by extension its boundary are fixed.
 In this case, the external confinement magnets are irrelevant as the equilibrium state is forced on the system by fixing the plasma boundary.
-Analytical solutions can be obtained by selecting the adequate source term function (plasma current model) and imposing the correct BC on the plasma boundary. 
+Analytical solutions can be obtained by selecting the adequate source term function (plasma current model) and imposing the correct boundary conditions (BC) on the plasma boundary. 
 
 - **The FREE-boundary problem** refers to the situation when the shape of the plasma domain is unknown.
 In this case, the magnetic confinement is projected onto the computational domain's boundary using a Green's function formalism, thus providing the corresponding BC so that the plasma domain converges towards the equilibrium state iteratively. 
@@ -26,16 +26,17 @@ The user may find in the repository the following items:
 - folder **MESHES**: contains the folders containing different example meshes. 
 - folder **TESTs**: contains the test-suites, in both *.py* and *.ipynb* format, for the different standard problem cases, and the main test files in *.ipynb*
 - folder **src**: contains the source code.
-- file **requirements.txt**: lists the Python packages and their versions on which EQUILIPY depends.
+- file **requirements.txt**: lists the Python packages and their versions necessary to run EQUILIPY.
 
 ## *CODE:*
 
-The EQUILIPY solver is built on a CutFEM numerical scheme, where the plasma cross-section geometry is free to deform and evolve towards the equilibrium configuration. 
+The EQUILIPY solver is built on a CutFEM numerical scheme, where the plasma cross-section geometry is free to deform and evolve towards the equilibrium configuration.
+The general solution strategy for solving FREE-boundary problems involves an iterative approach based on a **double-loop structure**: 
 
+- *in the external loop*, the algorithm looks for the **convergence of the boundary values**, projected onto the computational domain's boundary using a Green's function formalism.
+- *in the internal loop*, using as BC the values obtained in the external loop, the algorithm solves iteratively the GS free-boundary Boundary Value Problem (BVP) until convergence.
 
 Adequate tolerances and maximal iteration thresholds shall be specified as inputs for both loops: internal loop, responsible of converging the poloidal magnetic field solution; external loop, responsible for converging the projected BC poloidal magnetic values.   
-
-
 
 In the following are described the different steps in order to prepare an EQUILIPY simulation file.
 The user may find already prepared examples in folder **TESTs**.
