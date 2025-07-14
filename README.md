@@ -88,6 +88,7 @@ and initialise
 
 Folder **MESHES** contains several computational domain meshes on which the simulation can be run and from which the user may select one. 
 A reasonable criterion for determining mesh size limits and general shape would be to select/define a mesh that encompasses the tokamak's first wall geometry while excluding the external magnetic coils.
+Assign the desired mesh to the equilibrium's *MESH* object as follows:
 
     $ Equilibrium.MESH = Mesh('TRI03-MEDIUM-LINEAR') 
 
@@ -99,10 +100,13 @@ After selecting an adequate computational domain mesh, the user must provide the
 
 #### First wall 
 
+First, generate a mesh object such that its boundary corresponds to the tokamak's first wall, for instance:
 
     $ TokamakFirstWallMesh = Mesh('TRI03-FINE-ITFW')
 
 #### Magnets 
+
+Then, generate the different tokmak's external magnets using the different available classes (see file src/Magnet.py), for instance:
 
     $ coil1 = QuadrilateralCoil(name = 'PF1',
     $                           Itotal = 5.73e6,
@@ -112,14 +116,20 @@ After selecting an adequate computational domain mesh, the user must provide the
     $                           Itotal= -2.88e6,
     $                           Xcenter = np.array([8.2851,6.5398]),
     $                           Area = 0.25)
+
+and place them inside a list
+
     $ magnets = [coil1, coil2]
 
 #### Generate Tokamak
 
-- for the **FIXED-boundary** problem, defining a tokamak object is actually optional, however we recomment providing a mesh whose boundaries correspond to the tokamak's first wall. 
-- for the **FREE-boundary**  problem, both tokamak first wall mesh and external magnets must be defined using the different available classes (see file src/Magnet.py).
+Finally, generate the **Tokamak** object and assign it to equilibrium object *TOKAMAK* as follows: 
 
     $ Equilibrium.TOKAMAK = Tokamak(WALL_MESH = TokamakFirstWallMesh, MAGNETS = magnets)
+
+In fact, we have the following:
+- for the **FIXED-boundary** problem, defining a tokamak object is actually optional, however we recomment providing the tokamak's first wall mesh. 
+- for the **FREE-boundary**  problem, both tokamak first wall mesh and external magnets must be defined.
 
 ### **IV. Initial plasma boundary**
 
