@@ -6,12 +6,19 @@ The Grad-Shafranov equation is an nonlinear elliptic PDE which models the force 
 Solving the equation yields the cross-section poloidal magnetic flux surfaces configuration at the equilibrium state.
 
 While the tokamak's confining magnets' currents and positions can be adjusted to accommodate a variety of plasma pressure and current profiles, the current carried by the plasma depends on its cross-section shape, which at the same time is affected by the plasma current's self-induced magnetic field. 
-This coupling implies that the problem must be solved free-boundary, for which CutFEM is suited, allowing the plasma to evolve towards the equilibrium configuration.
+This coupling implies that the problem must be solved **FREE-boundary**, for which CutFEM is suited, allowing the plasma to evolve towards the equilibrium configuration.
 
 CutFEM is a non-conforming Finite Element Method characterised by an unfitted computational mesh, where geometries and domains are not aligned with mesh nodes but instead lie embedded, making it adapted for problems where interfaces are affected by large deformations and resizing such as free-boundary problems.
 When using these unfitted methods, interfaces and domain boundaries are parametrised and monitored using level-set functions.
 
-Additionally, the code is equiped with a fixed-boundary solver, for which several analytical cases have been implemented and tested in order to validate the complex numering scheme. 
+Additionally, the code is equiped with a **FIXED-boundary** solver, for which several analytical cases have been implemented and tested in order to validate the numering scheme. 
+
+- **The FIXED-boundary problem** refers to an artificial case where the plasma shape is *a priori* known, and therefore the plasma region and by extension its boundary are fixed.
+In this case, the external confinement magnets are irrelevant as the equilibrium state is forced on the system by fixing the plasma boundary.
+Analytical solutions can be obtained by selecting the adequate source term function (plasma current model) and imposing the correct BC on the plasma boundary. 
+
+- **The FREE-boundary problem** refers to the situation when the shape of the plasma domain is unknown.
+In this case, the magnetic confinement is projected onto the computational domain's boundary using a Green's function formalism, thus providing the corresponding BC so that the plasma domain converges towards the equilibrium state iteratively. 
 
 ## *CONTENT:*
 
@@ -25,6 +32,11 @@ The user may find in the repository the following items:
 
 The EQUILIPY solver is built on a CutFEM numerical scheme, where the plasma cross-section geometry is free to deform and evolve towards the equilibrium configuration. 
 
+
+Adequate tolerances and maximal iteration thresholds shall be specified as inputs for both loops: internal loop, responsible of converging the poloidal magnetic field solution; external loop, responsible for converging the projected BC poloidal magnetic values.   
+
+
+
 In the following are described the different steps in order to prepare an EQUILIPY simulation file.
 The user may find already prepared examples in folder **TESTs**.
 
@@ -33,7 +45,7 @@ The user may find already prepared examples in folder **TESTs**.
 In a first instance, the user shall provide several numerical parameters which define the problem's nature and the solver's convergence tolerances and iterative behavior. 
 Among these parameters the user will find:
 
-- **FIXED_BOUNDARY**: Enable/disable fixed boundary conditions (bool).    
+- **FIXED_BOUNDARY**: Enable/disable fixed plasma boundary behavior (bool).    
 - **QuadratureOrder2D**: Surface numerical integration order (int).  
 - **QuadratureOrder1D**: Length numerical integration order (int).  
 - **ext_maxiter**: Max iterations for external loop (int).  
@@ -83,13 +95,7 @@ Under such circumstances, both plasma boundary and vacuum vessel wall generate c
 
 In case where the computational domain's boundary is taken as the vacuum vessel wall, the BC are still imposed weakly using Nitsche's method. 
 
-EQUILIPY_CutFEM can solve two distinct problems: either *fixed-boundary* or *free-boundary* problems:
-- **The fixed-boundary problem** refers to an artificial case where the plasma shape is *a priori* known, and therefore the plasma region and by extension its boundary are fixed.
-In this case, both the vacuum vessel wall parametrisation and the external magnets configuration are irrelevant, as the equilibrium state is forced on the system by fixing the plasma boundary.
-Analytical solutions can be obtained by selecting the adequate source term function (plasma current model) and imposing the correct BC on the plasma boundary. 
-- **The free-boundary problem** refers to the situation when the shape of the plasma domain is unknown.
-In this case, the magnetic confinement is projected onto the vacuum vessel wall using a Green's function formalism, thus providing the corresponding BC so that the plasma domain converges towards the equilibrium state iteratively. 
-Adequate tolerances and maximal iteration thresholds shall be specified as inputs for both loops: internal loop, responsible of converging the poloidal magnetic field solution; external loop, responsible for converging the projected BC poloidal magnetic values.   
+
 
 
 ## *EXECUTION:*
