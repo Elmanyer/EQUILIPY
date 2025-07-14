@@ -2,11 +2,14 @@
 
 ## *PROBLEM DESCRIPTION:*
 
-The Grad-Shafranov equation is an nonlinear elliptic PDE which models the force balance between the plasma expansion pressure and the magnetic confinement pressure in an axisymmetrical system. 
-Solving the equation yields the plasma equilibrium cross-section configuration.
+The Grad-Shafranov equation is an nonlinear elliptic PDE which models the force balance between the plasma expansion pressure and the magnetic confinement pressure in an axisymmetrical system (for instance a tokamak device). 
+Solving the equation yields the cross-section poloidal magnetic flux surfaces configuration at the equilibrium state.
 
-The problem is tackle as a free-boundary problem, where the plasma cross-section geometry is free to evolve and deform towards the equilibrium state. 
-In order to deal with such configuration, the solver is based on a CutFEM numerical scheme, a non-conforming mesh Finite Element Method where the geometry is embedded in the mesh. 
+While the tokamak's confining magnets' currents and positions can be adjusted to accommodate a variety of plasma pressure and current profiles, the current carried by the plasma depends on its cross-section shape, which at the same time is affected by the plasma current's self-induced magnetic field. 
+This coupling implies that the problem must be solved free-boundary, for which CutFEM is suited, allowing the plasma to evolve towards the equilibrium configuration.
+
+CutFEM is a non-conforming Finite Element Method characterised by an unfitted computational mesh, where geometries and domains are not aligned with mesh nodes but instead lie embedded, making it adapted for problems where interfaces are affected by large deformations and resizing such as free-boundary problems.
+When using these unfitted methods, interfaces and domain boundaries are parametrised and monitored using level-set functions.
 
 Additionally, the code is equiped with a fixed-boundary solver, for which several analytical cases have been implemented and tested in order to validate the complex numering scheme. 
 
@@ -21,49 +24,45 @@ The user may find in the repository the following items:
 ## *CODE:*
 
 The EQUILIPY solver is built on a CutFEM numerical scheme, where the plasma cross-section geometry is free to deform and evolve towards the equilibrium configuration. 
-In a first instance, the user shall provide several numerical parameters which define the problem's nature and the solver's convergence. 
 
-- **FIXED_BOUNDARY**: Enable/disable fixed boundary conditions (bool).  
-- **GhostStabilization**: Enable/disable ghost penalty stabilization (bool).  
-- **PARALLEL**: Enable/disable parallel computation (bool). (THIS OPTION IS STILL NOT IMPLEMENTED!!)  
+In the following are described the different steps in order to prepare an EQUILIPY simulation file.
+The user may find already prepared examples in folder **TESTs**.
 
-- **plotelemsClas**: Plot element classification each iteration (bool).  
-- **plotPSI**: Plot PSI solution each iteration (bool).  
-- **out_proparams**: Output simulation parameters file (bool).  
-- **out_elemsClas**: Output mesh element classification file (bool).  
-- **out_plasmaLS**: Output plasma boundary level-set values (bool).  
-- **out_plasmaBC**: Output plasma boundary condition values (bool).  
-- **out_plasmaapprox**: Output plasma boundary approximation data (bool).  
-- **out_ghostfaces**: Output ghost stabilization face data (bool).  
-- **out_elemsys**: Output elemental matrices (bool).  
-- **out_pickle**: Enable simulation data pickling (bool).  
+In a first instance, the user shall provide several numerical parameters which define the problem's nature and the solver's convergence tolerances and iterative behavior. 
+Among these parameters the user will find:
 
-- **dim**: Problem spatial dimension (int).  
+- **FIXED_BOUNDARY**: Enable/disable fixed boundary conditions (bool).    
 - **QuadratureOrder2D**: Surface numerical integration order (int).  
 - **QuadratureOrder1D**: Length numerical integration order (int).  
 - **ext_maxiter**: Max iterations for external loop (int).  
 - **ext_tol**: Convergence tolerance for external loop (float).  
 - **int_maxiter**: Max iterations for internal loop (int).  
-- **int_tol**: Convergence tolerance for internal loop (float).  
-- **it_plasma**: Iteration to update plasma region (int).  
-- **tol_saddle**: Tolerance for saddle point update (float).  
-- **beta**: Nitsche’s method penalty parameter (float).  
-- **Nconstrainedges**: Number of plasma boundary edges with constrained BC (int).  
+- **int_tol**: Convergence tolerance for internal loop (float).   
+- **beta**: Nitsche’s method penalty parameter (float).   
 - **zeta**: Ghost penalty parameter (float).  
-
-- **PSIrelax**: Enable PSI Aitken relaxation (bool).  
-- **lambda0**: Initial Aitken relaxation parameter (float).  
-- **PHIrelax**: Enable PHI level-set Aitken relaxation (bool).  
-- **alphaPHI**: Initial PHI Aitken relaxation parameter (float).  
-
 - **R0_axis**, **Z0_axis**: Initial guess coordinates for magnetic axis optimization (float).  
 - **R0_saddle**, **Z0_saddle**: Initial guess coordinates for saddle point optimization (float).  
 - **opti_maxiter**: Max iterations for critical points optimization (int).  
 - **opti_tol**: Convergence tolerance for optimization (float).  
 
+EQUILIPY can in fact solve either **FIXED-boundary** or **FREE-boundary problems**, with different order of quadratures and tolerances. 
+Constraints on the arbitrary plasma boundary (cutting through the mesh) are weakly imposed using **Nitsche's method** and stabilized through **Ghost stabilisation**. 
+
+After selecting an adequate computational domain mesh from folder **MESHES**, the user must provide the tokamak's geometry data and use it to declare object **Tokamak** (contained in src/Tokamak.py): 
+
+- for the **FIXED-boundary** problem, defining a tokamak object is actually optional, however we recomment providing a mesh whose boundaries correspond to the tokamak's first wall. 
+- for the **FREE-boundary**  problem, both tokamak first wall mesh and external magnets must be defined using the different available classes (see file src/Magnet.py).
+
+The next step consists in defining the plasma cross-section initial boundary using class **InitialPlasmaBoundary** (contained in src/InitialPlasmaBoundary.py).
+
+
+
+
 
 Embedded in a larger uncomforming mesh, the plasma region geometry is parametrised using a level-set function. 
 Hence, the initial plasma cross-section can be arbitrarily defined by the user.
+
+
 
 Under such circumstances, both plasma boundary and vacuum vessel wall generate cut-elements on which the FE methodology is adapted: 
 - **Standard high-order approach adapted numerical integration quadratures** to integrate on each subdomain composing the cut-element

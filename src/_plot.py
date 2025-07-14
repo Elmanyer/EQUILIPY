@@ -98,6 +98,7 @@ class EquilipyPlotting:
         fig, ax = plt.subplots(1, 1, figsize=(5,5))
         ax.set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
         ax.set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
+        ax.set_aspect('equal')
         ax.set_xlabel('R (in m)')
         ax.set_ylabel('Z (in m)')
         
