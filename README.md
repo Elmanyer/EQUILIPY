@@ -38,6 +38,8 @@ The general solution strategy for solving FREE-boundary problems involves an ite
 
 Adequate tolerances and maximal iteration thresholds shall be specified as inputs for both loops: internal loop, responsible of converging the poloidal magnetic field solution; external loop, responsible for converging the projected BC poloidal magnetic values.   
 
+## *EXECUTION:*
+
 In the following are described the different steps in order to prepare an EQUILIPY simulation file.
 The user may find already prepared examples in folder **TESTs**.
 
@@ -118,7 +120,9 @@ Several parametrised models are already implemented.
 
 
 
-## *EXECUTION:*
+
+
+## *INSTALLATION:*
 
 After clonning the repository with 
 
