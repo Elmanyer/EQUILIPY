@@ -55,18 +55,41 @@ Among these parameters the user will find:
 - **int_tol**: Convergence tolerance for internal loop (float).   
 - **beta**: Nitsche’s method penalty parameter (float).   
 - **zeta**: Ghost penalty parameter (float).  
-- **R0_axis**, **Z0_axis**: Initial guess coordinates for magnetic axis optimization (float).  
-- **R0_saddle**, **Z0_saddle**: Initial guess coordinates for saddle point optimization (float).  
-- **opti_maxiter**: Max iterations for critical points optimization (int).  
-- **opti_tol**: Convergence tolerance for optimization (float).  
+- **R0_axis**, **Z0_axis**: Initial guess coordinates for magnetic axis nonlinear solver (float).  
+- **R0_saddle**, **Z0_saddle**: Initial guess coordinates for saddle point nonlinear solver (float).  
+- **opti_maxiter**: Max iterations for critical points nonlinear solver (int).  
+- **opti_tol**: Convergence tolerance for nonlinear solver (float).  
 
 EQUILIPY can solve either **FIXED-boundary** or **FREE-boundary problems** with different order of quadratures and tolerances. 
 Constraints on the arbitrary plasma boundary (cutting through the mesh) are weakly imposed using **Nitsche's method** and stabilized through **Ghost stabilisation**. 
+Poloidal magnetic flux critical points used for the solution's normalisation are searched using nonlinear solver (optimization algorithms). 
+
+After defining the equilibrium problem using 
+
+    $ Equilibrium = GradShafranovSolver()
+
+declare the different parameters, for instance
+
+    $ Equilibrium.FIXED_BOUNDARY = True
+    $ Equilibrium.QuadratureOrder2D = 8     
+    $ Equilibrium.QuadratureOrder1D = 5     
+    $ Equilibrium.ext_maxiter = 5            
+    $ Equilibrium.ext_tol = 1.0e-3           
+    $ Equilibrium.int_maxiter = 10           
+    $ Equilibrium.int_tol = 1.0e-4    
+
+and initialise 
+
+    $ Equilibrium.InitialiseParameters()
 
 ### **II. Computational domain mesh**
 
 Folder **MESHES** contains several computational domain meshes on which the simulation can be run and from which the user may select one. 
 A reasonable criterion for determining mesh size limits and general shape would be to select/define a mesh that encompasses the tokamak's first wall geometry while excluding the external magnetic coils.
+
+
+    $ Equilibrium.MESH = Mesh('TRI03-MEDIUM-LINEAR') 
+
 All proposed meshes have been generated using software GiD (https://www.gidsimulation.com/). 
 
 ### **III. Tokamak device**
@@ -78,27 +101,20 @@ After selecting an adequate computational domain mesh, the user must provide the
 
 ### **IV. Initial plasma boundary**
 
-The next step consists in defining the plasma cross-section initial boundary using class **InitialPlasmaBoundary** (contained in src/InitialPlasmaBoundary.py).
+The next step consists in defining the plasma cross-section initial boundary using class **InitialPlasmaBoundary** (contained in src/InitialPlasmaBoundary.py). While for the **FIXED-boundary** problem this initial boundary will not change throughout the simulation, for the **FREE-boundary** case such domain is simply an initial guess that will evolve and converge iteratively towards the equilibrium state. 
+Different models for the initial plasma boundary level-set function are already implemented inside class **InitialPlasmaBoundary**, nonetheless the user is free to parametrise a new one.
 
+A special case arises in the FIXED-boundary problem when the initial plasma boundary coincides with the computational mesh boundary. In this scenario, the entire mesh corresponds to a fixed plasma domain with its boundary aligned to the mesh nodes, allowing the problem to be solved using a standard finite element method (FEM) scheme.
 
 ### **V. Initial plasma magnetic flux field (initial guess)**
 
+Similarly to the initial plasma boundary, the user must then provide an initial guess for the poloidal magnetic flux by defining an object of class **InitialGuess** (contained in src/InitialPSIGuess.py).
+Several parametrised models are already implemented.
 
 ### **VI. Plasma toroidal current model**
 
-
-Embedded in a larger uncomforming mesh, the plasma region geometry is parametrised using a level-set function. 
-Hence, the initial plasma cross-section can be arbitrarily defined by the user.
-
-
-
-Under such circumstances, both plasma boundary and vacuum vessel wall generate cut-elements on which the FE methodology is adapted: 
-- **Standard high-order approach adapted numerical integration quadratures** to integrate on each subdomain composing the cut-element
-- **Nitsche's method** to weakly impose boundary conditions (BC) 
-- **Ghost stabilisation** is applied to reduce irregular cut-elements instabilities
-
-In case where the computational domain's boundary is taken as the vacuum vessel wall, the BC are still imposed weakly using Nitsche's method. 
-
+Finally, the user must provide the model for the toroidal plasma current model appearing in the GS equation source term. 
+Several parametrised models are already implemented.
 
 
 
