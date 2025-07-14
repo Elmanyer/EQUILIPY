@@ -34,7 +34,7 @@ The EQUILIPY solver is built on a CutFEM numerical scheme, where the plasma cros
 The general solution strategy for solving FREE-boundary problems involves an iterative approach based on a **double-loop structure**: 
 
 - *in the external loop*, the algorithm looks for the **convergence of the boundary values**, projected onto the computational domain's boundary using a Green's function formalism.
-- *in the internal loop*, using as BC the values obtained in the external loop, the algorithm solves iteratively the GS free-boundary Boundary Value Problem (BVP) until convergence.
+- *in the internal loop*, using as BC the values obtained in the external loop, the algorithm **solves iteratively the GS free-boundary Boundary Value Problem (BVP)** until convergence.
 
 Adequate tolerances and maximal iteration thresholds shall be specified as inputs for both loops: internal loop, responsible of converging the poloidal magnetic field solution; external loop, responsible for converging the projected BC poloidal magnetic values.   
 
@@ -43,7 +43,7 @@ The user may find already prepared examples in folder **TESTs**.
 
 ### **I. Simulation parameters**
 
-In a first instance, the user shall provide several numerical parameters which define the problem's nature and the solver's convergence tolerances and iterative behavior. 
+In a first instance, the user shall provide several **numerical parameters** which define the problem's nature and the solver's convergence tolerances and iterative behavior. 
 Among these parameters the user will find:
 
 - **FIXED_BOUNDARY**: Enable/disable fixed plasma boundary behavior (bool).    
@@ -60,15 +60,18 @@ Among these parameters the user will find:
 - **opti_maxiter**: Max iterations for critical points optimization (int).  
 - **opti_tol**: Convergence tolerance for optimization (float).  
 
-EQUILIPY can in fact solve either **FIXED-boundary** or **FREE-boundary problems**, with different order of quadratures and tolerances. 
+EQUILIPY can solve either **FIXED-boundary** or **FREE-boundary problems** with different order of quadratures and tolerances. 
 Constraints on the arbitrary plasma boundary (cutting through the mesh) are weakly imposed using **Nitsche's method** and stabilized through **Ghost stabilisation**. 
 
 ### **II. Computational domain mesh**
 
+Folder **MESHES** contains several computational domain meshes on which the simulation can be run and from which the user may select one. 
+A reasonable criterion for determining mesh size limits and general shape would be to select/define a mesh that encompasses the tokamak's first wall geometry while excluding the external magnetic coils.
+All proposed meshes have been generated using software GiD (https://www.gidsimulation.com/). 
 
 ### **III. Tokamak device**
 
-After selecting an adequate computational domain mesh from folder **MESHES**, the user must provide the tokamak's geometry data and use it to declare object **Tokamak** (contained in src/Tokamak.py): 
+After selecting an adequate computational domain mesh, the user must provide the tokamak's geometry data and use it to declare simulation object **Tokamak** (contained in src/Tokamak.py): 
 
 - for the **FIXED-boundary** problem, defining a tokamak object is actually optional, however we recomment providing a mesh whose boundaries correspond to the tokamak's first wall. 
 - for the **FREE-boundary**  problem, both tokamak first wall mesh and external magnets must be defined using the different available classes (see file src/Magnet.py).
