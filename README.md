@@ -28,6 +28,8 @@ The EQUILIPY solver is built on a CutFEM numerical scheme, where the plasma cros
 In the following are described the different steps in order to prepare an EQUILIPY simulation file.
 The user may find already prepared examples in folder **TESTs**.
 
+### **Simulation parameters**
+
 In a first instance, the user shall provide several numerical parameters which define the problem's nature and the solver's convergence tolerances and iterative behavior. 
 Among these parameters the user will find:
 
@@ -48,15 +50,25 @@ Among these parameters the user will find:
 EQUILIPY can in fact solve either **FIXED-boundary** or **FREE-boundary problems**, with different order of quadratures and tolerances. 
 Constraints on the arbitrary plasma boundary (cutting through the mesh) are weakly imposed using **Nitsche's method** and stabilized through **Ghost stabilisation**. 
 
+### **Computational domain mesh**
+
+
+### **Tokamak device**
+
 After selecting an adequate computational domain mesh from folder **MESHES**, the user must provide the tokamak's geometry data and use it to declare object **Tokamak** (contained in src/Tokamak.py): 
 
 - for the **FIXED-boundary** problem, defining a tokamak object is actually optional, however we recomment providing a mesh whose boundaries correspond to the tokamak's first wall. 
 - for the **FREE-boundary**  problem, both tokamak first wall mesh and external magnets must be defined using the different available classes (see file src/Magnet.py).
 
+### **Initial plasma boundary**
+
 The next step consists in defining the plasma cross-section initial boundary using class **InitialPlasmaBoundary** (contained in src/InitialPlasmaBoundary.py).
 
 
+### **Initial plasma magnetic flux field (initial guess)**
 
+
+### **Plasma toroidal current model**
 
 
 Embedded in a larger uncomforming mesh, the plasma region geometry is parametrised using a level-set function. 
