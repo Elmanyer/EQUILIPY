@@ -202,8 +202,10 @@ For instance, the following example defines the plasma current using the model u
 
 Once all previous steps have been executed, the user may call the solver in order to solve the defined equilibrium problem in the following way:
 
-    $ Equilibrium.EQUILI("TS-FREE-APEC-SHAPEDCOILS")
+    $ Equilibrium.EQUILI("TS-CASE")
 
+This command will launch the python plasma equilibrium solver with the defined problem parameters. 
+The user may find the simulation results inside a new folder *RESULTS*, that will be created in the same code directory if needed, inside a new folder with name "TS-CASE" + mesh name. 
 
 ## *INSTALLATION:*
 
@@ -211,13 +213,15 @@ After clonning the repository with
 
     $ git clone https://github.com/Elmanyer/EQUILI_PY.git
     
-the code is ready is run. 
+install all required packages inside the desired python environment or directly in the local machine using pip with
+
+    $ pip install -r requirements.txt
+
+The code is ready is run. 
 
 Inside the **TESTs** folder, the user may find the test-suites *TS-* files, both in *.py* and *.ipynb*, ready to execute. For python files *.py* simply execute 
 
     $ python TS-CASE.py
-
-The mesh used for the simulation may be changed by commenting and uncommenting the adequate lines. These test-suites represent the simulations corresponding to the *FIXED*-boundary analytical cases, for the *LINEAR* and *NONLINEAR* plasma current models, and the *FREE*-boundary problem with *APEC* plasma current model.
 
 
 
