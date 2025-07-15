@@ -133,8 +133,10 @@ On the other hand, defining external magnets is mandatory for the **FREE-boundar
 ### **IV. Initial plasma boundary**
 
 The next step consists in defining the plasma cross-section initial boundary using class **InitialPlasmaBoundary** (contained in src/InitialPlasmaBoundary.py). 
+
 While for the **FIXED-boundary** problem this initial boundary will not change throughout the simulation, for the **FREE-boundary** case such domain is simply an initial guess that will evolve and converge iteratively towards the equilibrium state. 
 Different models for the initial plasma boundary level-set function are already implemented inside class **InitialPlasmaBoundary**, nonetheless the user is free to parametrise a new one. 
+
 For instance, the following lines initiate the plasma boundary level-set function using a parametrised cubic hamiltonian model:
 
     $ X_SADDLE = np.array([5.2, -2.9])       # ACTIVE SADDLE POINT   
@@ -183,8 +185,11 @@ With the initial already defined, the unknown arrays are initialised with
 
 ### **VI. Plasma toroidal current model**
 
-Finally, the user must provide the model for the toroidal plasma current model appearing in the GS equation source term. 
+Finally, the user must provide the model for the toroidal plasma current model appearing in the GS equation source term.  
+This consists simply in defining an object of class **CurrentModel** (contained in src/PlasmaCurrent.py).
 Several parametrised models are already implemented.
+
+For instance, the following example defines the plasma current using the model used in the APEC plasma solver. 
 
     $ Equilibrium.PlasmaCurrent = CurrentModel(EQUILIBRIUM = Equilibrium,
     $                                          MODEL = 'APEC',
@@ -192,6 +197,12 @@ Several parametrised models are already implemented.
     $                                          Betap = 0.75,      # POLOIDAL BETA
     $                                          R0 = 6.0,          # MEAN RADIUS
     $                                          Tcurrent = 15e6)   # TOTAL PLASMA CURRENT
+
+### **VII. Launch simulation**
+
+Once all previous steps have been executed, the user may call the solver in order to solve the defined equilibrium problem in the following way:
+
+    $ Equilibrium.EQUILI("TS-FREE-APEC-SHAPEDCOILS")
 
 
 ## *INSTALLATION:*
