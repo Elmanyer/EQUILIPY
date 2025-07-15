@@ -20,6 +20,22 @@ Analytical solutions can be obtained by selecting the adequate source term funct
 - **The FREE-boundary problem** refers to the situation when the shape of the plasma domain is unknown.
 In this case, the magnetic confinement is projected onto the computational domain's boundary using a Green's function formalism, thus providing the corresponding BC so that the plasma domain converges towards the equilibrium state iteratively. 
 
+## *INSTALLATION:*
+
+After clonning the repository with 
+
+    $ git clone https://github.com/Elmanyer/EQUILI_PY.git
+    
+install all required packages inside the desired python environment or directly in the local machine using *pip* with command line
+
+    $ pip install -r requirements.txt
+
+The code is ready is run. 
+
+Inside the **TESTs** folder, the user may find the test-suites *TS-* files, both in *.py* and *.ipynb*, ready to execute. For python files *.py* simply execute 
+
+    $ python TS-CASE.py
+
 ## *CONTENT:*
 
 The user may find in the repository the following items:
@@ -36,7 +52,7 @@ The general solution strategy for solving FREE-boundary problems involves an ite
 - *in the external loop*, the algorithm looks for the **convergence of the boundary values**, projected onto the computational domain's boundary using a Green's function formalism.
 - *in the internal loop*, using as BC the values obtained in the external loop, the algorithm **solves iteratively the GS free-boundary Boundary Value Problem (BVP)** until convergence.
 
-Adequate tolerances and maximal iteration thresholds shall be specified as inputs for both loops: internal loop, responsible of converging the poloidal magnetic field solution; external loop, responsible for converging the projected BC poloidal magnetic values.   
+Adequate tolerances and maximal iteration thresholds shall be specified as inputs for both loops: internal loop, responsible of converging the poloidal magnetic field solution; external loop, responsible for converging the projected BC poloidal magnetic values.  
 
 ## *EXECUTION:*
 
@@ -207,21 +223,6 @@ Once all previous steps have been executed, the user may call the solver in orde
 This command will launch the python plasma equilibrium solver with the defined problem parameters. 
 The user may find the simulation results inside a new folder *RESULTS*, that will be created in the same code directory if needed, inside a new folder with name "TS-CASE" + mesh name. 
 
-## *INSTALLATION:*
-
-After clonning the repository with 
-
-    $ git clone https://github.com/Elmanyer/EQUILI_PY.git
-    
-install all required packages inside the desired python environment or directly in the local machine using pip with
-
-    $ pip install -r requirements.txt
-
-The code is ready is run. 
-
-Inside the **TESTs** folder, the user may find the test-suites *TS-* files, both in *.py* and *.ipynb*, ready to execute. For python files *.py* simply execute 
-
-    $ python TS-CASE.py
 
 
 
