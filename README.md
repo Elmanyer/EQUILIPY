@@ -72,7 +72,7 @@ After defining the equilibrium problem using
 
 declare the different parameters, for instance
 
-    $ Equilibrium.FIXED_BOUNDARY = True
+    $ Equilibrium.FIXED_BOUNDARY = False
     $ Equilibrium.QuadratureOrder2D = 8     
     $ Equilibrium.QuadratureOrder1D = 5     
     $ Equilibrium.ext_maxiter = 5            
@@ -90,7 +90,7 @@ Folder **MESHES** contains several computational domain meshes on which the simu
 A reasonable criterion for determining mesh size limits and general shape would be to select/define a mesh that encompasses the tokamak's first wall geometry while excluding the external magnetic coils.
 Assign the desired mesh to the equilibrium's *MESH* object as follows:
 
-    $ Equilibrium.MESH = Mesh('TRI03-MEDIUM-LINEAR') 
+    $ Equilibrium.MESH = Mesh('TRI06-SUPERFINE-REC') 
 
 All proposed meshes have been generated using software GiD (https://www.gidsimulation.com/). 
 
@@ -127,29 +127,71 @@ Finally, generate the **Tokamak** object and assign it to equilibrium object *TO
 
     $ Equilibrium.TOKAMAK = Tokamak(WALL_MESH = TokamakFirstWallMesh, MAGNETS = magnets)
 
-In fact, we have the following:
-- for the **FIXED-boundary** problem, defining a tokamak object is actually optional, however we recomment providing the tokamak's first wall mesh. 
-- for the **FREE-boundary**  problem, both tokamak first wall mesh and external magnets must be defined.
+Defining a tokamak object is actually optional for the **FIXED-boundary** problem, however we recommend providing the tokamak's first wall mesh. 
+On the other hand, defining external magnets is mandatory for the **FREE-boundary** problem.
 
 ### **IV. Initial plasma boundary**
 
-The next step consists in defining the plasma cross-section initial boundary using class **InitialPlasmaBoundary** (contained in src/InitialPlasmaBoundary.py). While for the **FIXED-boundary** problem this initial boundary will not change throughout the simulation, for the **FREE-boundary** case such domain is simply an initial guess that will evolve and converge iteratively towards the equilibrium state. 
-Different models for the initial plasma boundary level-set function are already implemented inside class **InitialPlasmaBoundary**, nonetheless the user is free to parametrise a new one.
+The next step consists in defining the plasma cross-section initial boundary using class **InitialPlasmaBoundary** (contained in src/InitialPlasmaBoundary.py). 
+While for the **FIXED-boundary** problem this initial boundary will not change throughout the simulation, for the **FREE-boundary** case such domain is simply an initial guess that will evolve and converge iteratively towards the equilibrium state. 
+Different models for the initial plasma boundary level-set function are already implemented inside class **InitialPlasmaBoundary**, nonetheless the user is free to parametrise a new one. 
+For instance, the following lines initiate the plasma boundary level-set function using a parametrised cubic hamiltonian model:
+
+    $ X_SADDLE = np.array([5.2, -2.9])       # ACTIVE SADDLE POINT   
+    $ X_RIGHT = np.array([7.9, 0.6])         # POINT ON RIGHT
+    $ X_LEFT = np.array([4.5, 1.5])          # POINT ON LEFT
+    $ X_TOP = np.array([5.9, 3.7])           # POINT ON TOP
+    $ 
+    $ Equilibrium.initialPHI = InitialPlasmaBoundary(EQUILIBRIUM = Equilibrium,
+    $                                                GEOMETRY = 'cubicHam',
+    $                                                Xsaddle = X_SADDLE,  # ACTIVE SADDLE POINT        
+    $                                                Xright = X_RIGHT,    # POINT ON RIGHT
+    $                                                Xleft = X_LEFT,      # POINT ON LEFT
+    $                                                Xtop = X_TOP)        # POINT ON TOP
 
 A special case arises in the FIXED-boundary problem when the initial plasma boundary coincides with the computational mesh boundary. In this scenario, the entire mesh corresponds to a fixed plasma domain with its boundary aligned to the mesh nodes, allowing the problem to be solved using a standard finite element method (FEM) scheme.
+
+Once the initial plasma boundary has been defined, the computational domain is ready to be discretised with
+
+    $ Equilibrium.DomainDiscretisation(INITIALISATION = True)
 
 ### **V. Initial plasma magnetic flux field (initial guess)**
 
 Similarly to the initial plasma boundary, the user must then provide an initial guess for the poloidal magnetic flux by defining an object of class **InitialGuess** (contained in src/InitialPSIGuess.py).
-Several parametrised models are already implemented.
+Several parametrised models are already implemented. 
+Similarly to the previous section, in the following example the initial guess is taken as parametrised cubic hamiltonian so that plasma boundary and normalised initial guess are in correspondance: 
+
+    $ X_SADDLE = np.array([5.2, -2.9])        # ACTIVE SADDLE POINT
+    $ X_RIGHT = np.array([7.9, 0.6])          # POINT ON RIGHT
+    $ X_LEFT = np.array([4.5, 1.5])           # POINT ON LEFT
+    $ X_TOP = np.array([5.9, 3.7])            # POINT ON TOP
+    $
+    $ X0 = list()
+    $ X0.append(np.array([6.0,0.0],dtype=float))
+    $ Equilibrium.initialPSI = InitialGuess(EQUILIBRIUM = Equilibrium,
+    $                                       PSI_GUESS = 'cubicHam',
+    $                                       NORMALISE = True,
+    $                                       Xsaddle = X_SADDLE,  # ACTIVE SADDLE POINT        
+    $                                       Xright = X_RIGHT,    # POINT ON RIGHT
+    $                                       Xleft = X_LEFT,      # POINT ON LEFT
+    $                                       Xtop = X_TOP,        # POINT ON TOP
+    $                                       X0 = X0)     
+
+With the initial already defined, the unknown arrays are initialised with 
+
+    $ Equilibrium.InitialisePSI()
 
 ### **VI. Plasma toroidal current model**
 
 Finally, the user must provide the model for the toroidal plasma current model appearing in the GS equation source term. 
 Several parametrised models are already implemented.
 
-
-
+    $ Equilibrium.PlasmaCurrent = CurrentModel(EQUILIBRIUM = Equilibrium,
+    $                                          MODEL = 'APEC',
+    $                                          Ii = 0.81,         # PLASMA INTERNAL INDUCTANCE
+    $                                          Betap = 0.75,      # POLOIDAL BETA
+    $                                          R0 = 6.0,          # MEAN RADIUS
+    $                                          Tcurrent = 15e6)   # TOTAL PLASMA CURRENT
 
 
 ## *INSTALLATION:*

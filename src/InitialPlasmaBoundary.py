@@ -41,7 +41,7 @@ class InitialPlasmaBoundary:
     Supports:
         - LINEAR: Analytically defined plasma shape based on aspect ratio, elongation, and triangularity.
         - ZHENG: Parametrized model from Zheng's solution.
-        - F4E: Hamiltonian-based parametrization used in EUROfusion designs.
+        - cubicHam: Hamiltonian-based parametrization used in EUROfusion designs.
         - OTHER: Custom user-provided level-set function.
     """
     
@@ -54,11 +54,11 @@ class InitialPlasmaBoundary:
             - GEOMETRY (str): Identifier string specifying the geometry model:
                 * 'LINEAR' — Analytic linear model with elongation and triangularity.
                 * 'ZHENG' — Parametrization from Zheng's analytic solution.
-                * 'F4E' — EUROfusion Hamiltonian-based parametrization.
+                * 'cubicHam' — EUROfusion Hamiltonian-based parametrization.
                 * 'OTHER' — User-specified level-set function via keyword argument.
             - kwargs: Additional parameters required by the specific geometry model:
                 * For 'LINEAR' and 'ZHENG': R0, epsilon, kappa, delta
-                * For 'F4E': Xsaddle, Xleft, Xright, Xtop
+                * For 'cubicHam': Xsaddle, Xleft, Xright, Xtop
                 * For 'OTHER': PHI0 (callable level-set function)
 
         Sets:
@@ -75,7 +75,7 @@ class InitialPlasmaBoundary:
         self.INITIAL_GEOMETRY = None
         self.LINEAR_SOLUTION = 0
         self.ZHENG_SOLUTION = 1
-        self.F4E_HAMILTONIAN = 2
+        self.CUBIC_HAMILTONIAN = 2
         self.OTHER_PARAMETRIATION = 3
         
         # GENERAL ATTRIBUTES
@@ -108,16 +108,16 @@ class InitialPlasmaBoundary:
                 # GEOMETRY LEVEL-SET FUNCTION
                 self.PHI0fun = self.PHIzheng
                 
-            case 'F4E':
+            case 'cubicHam':
                 # GEOMETRY PARAMETERS
-                self.INITIAL_GEOMETRY = self.F4E_HAMILTONIAN
+                self.INITIAL_GEOMETRY = self.CUBIC_HAMILTONIAN
                 self.X_SADDLE = kwargs['Xsaddle']          # ACTIVE SADDLE POINT
                 self.X_RIGHT = kwargs['Xright']            # POINT ON THE RIGHT
                 self.X_LEFT = kwargs['Xleft']              # POINT ON THE LEFT
                 self.X_TOP = kwargs['Xtop']                # POINT ON TOP
-                self.coeffs = ComputeF4EPlasmaLScoeffs(self.X_SADDLE, self.X_RIGHT, self.X_LEFT, self.X_TOP)
+                self.coeffs = ComputeCubicHamcoeffs(self.X_SADDLE, self.X_RIGHT, self.X_LEFT, self.X_TOP)
                 # GEOMETRY LEVEL-SET FUNCTION
-                self.PHI0fun = partial(F4EPlasmaLS, coeffs=self.coeffs, X_SADDLE=self.X_SADDLE, X_LEFT=self.X_LEFT)
+                self.PHI0fun = partial(CubicHamPlasmaLS, coeffs=self.coeffs, X_SADDLE=self.X_SADDLE, X_LEFT=self.X_LEFT)
                 
             case 'OTHER':
                 self.INITIAL_GEOMETRY = self.OTHER_PARAMETRIATION      

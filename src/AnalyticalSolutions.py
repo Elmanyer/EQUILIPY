@@ -132,10 +132,10 @@ def PSIanalyticalNONLINEAR(X,R0,coeffs,NORMALISED=False):
                 
                 
 ##################################################################################################
-##################################### F4E PARAMETRISATION ########################################
+##################################### cubicHam PARAMETRISATION ########################################
 ##################################################################################################
     
-def ComputeF4EPlasmaLScoeffs(X_SADDLE,X_RIGHT,X_LEFT,X_TOP):
+def ComputeCubicHamcoeffs(X_SADDLE,X_RIGHT,X_LEFT,X_TOP):
     """ # IN ORDER TO FIND THE CURVE PARAMETRIZING THE PLASMA REGION BOUNDARY, WE LOOK FOR THE COEFFICIENTS DEFINING
     # A 3rd ORDER HAMILTONIAN FROM WHICH WE WILL TAKE THE 0-LEVEL CURVE AS PLASMA REGION BOUNDARY. THAT IS
     #
@@ -259,7 +259,7 @@ def ComputeF4EPlasmaLScoeffs(X_SADDLE,X_RIGHT,X_LEFT,X_TOP):
     return coeffs
 
 
-def F4EPlasmaLS(X,coeffs,X_SADDLE,X_LEFT):
+def CubicHamPlasmaLS(X,coeffs,X_SADDLE,X_LEFT):
     Xstar = X[0] - X_SADDLE[0]
     Ystar = X[1] - X_SADDLE[1]
     

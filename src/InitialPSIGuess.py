@@ -44,7 +44,7 @@ class InitialGuess:
         - LINEAR        : Analytical solution based on aspect ratio, elongation, triangularity.
         - ZHENG         : Semi-analytical model based on Zheng's formulation.
         - NONLINEAR     : Custom nonlinear analytical profile.
-        - F4E           : EUROfusion-based Hamiltonian level-set profile.
+        - cubicHam           : EUROfusion-based Hamiltonian level-set profile.
         - FOCUS         : Localized flux peak at specified point.
         - OTHER         : User-defined callable function Ψ₀.
     """
@@ -58,7 +58,7 @@ class InitialGuess:
             EQUILIBRIUM : object
                 Equilibrium problem proxy with mesh and geometry data.
             PSI_GUESS : str
-                Name of initial guess model ('LINEAR', 'ZHENG', 'NONLINEAR', 'F4E', 'FOCUS', 'OTHER').
+                Name of initial guess model ('LINEAR', 'ZHENG', 'NONLINEAR', 'cubicHam', 'FOCUS', 'OTHER').
             NORMALISE : bool, optional
                 If True, normalizes Ψ to standard range.
             NOISE : bool, optional
@@ -74,7 +74,7 @@ class InitialGuess:
         self.LINEAR_SOLUTION = 0
         self.ZHENG_SOLUTION = 1
         self.NONLINEAR_SOLUTION = 2
-        self.F4E_HAMILTONIAN = 3
+        self.CUBIC_HAMILTONIAN = 3
         self.FOCUS_PSI = 4
         self.OTHER_GUESS = 5
         
@@ -135,16 +135,16 @@ class InitialGuess:
                 else:
                     self.PSI0fun = partial(PSIanalyticalNONLINEAR, R0=self.R0, coeffs=self.coeffs)
                     
-            case 'F4E':
+            case 'cubicHam':
                 # GEOMETRY PARAMETERS
-                self.INITIAL_GUESS = self.F4E_HAMILTONIAN
+                self.INITIAL_GUESS = self.CUBIC_HAMILTONIAN
                 self.X_SADDLE = kwargs['Xsaddle']          # ACTIVE SADDLE POINT
                 self.X_RIGHT = kwargs['Xright']            # POINT ON THE RIGHT
                 self.X_LEFT = kwargs['Xleft']              # POINT ON THE LEFT
                 self.X_TOP = kwargs['Xtop']                # POINT ON TOP
-                self.coeffs = ComputeF4EPlasmaLScoeffs(self.X_SADDLE, self.X_RIGHT, self.X_LEFT, self.X_TOP)
+                self.coeffs = ComputeCubicHamcoeffs(self.X_SADDLE, self.X_RIGHT, self.X_LEFT, self.X_TOP)
                 # GEOMETRY LEVEL-SET FUNCTION
-                self.PSI0fun = partial(F4EPlasmaLS, coeffs=self.coeffs, X_SADDLE=self.X_SADDLE, X_LEFT=self.X_LEFT)
+                self.PSI0fun = partial(CubicHamPlasmaLS, coeffs=self.coeffs, X_SADDLE=self.X_SADDLE, X_LEFT=self.X_LEFT)
                 
             case 'FOCUS':
                 self.INITIAL_GUESS = self.FOCUS_PSI
