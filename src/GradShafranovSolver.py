@@ -613,10 +613,12 @@ class GradShafranovSolver(EquilipyInitialisation,
             self.file_globalsys.write('END_RHS_VECTOR\n')
                 
             self.file_globalsys.write('LHS_MATRIX\n')
+            inode = 0
             for irow in range(self.MESH.Nn):
                 for jcol in range(self.MESH.Nn):
                     if self.LHS[irow,jcol] != 0:
-                        self.file_globalsys.write("{:d} {:d} {:f}\n".format(irow+1, jcol+1, self.LHS[irow,jcol]))
+                        inode += 1
+                        self.file_globalsys.write("{:d} {:d} {:d} {:f}\n".format(inode, irow+1, jcol+1, self.LHS[irow,jcol]))
             self.file_globalsys.write('END_LHS_MATRIX\n')
         
         print("Done!")   
@@ -699,6 +701,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         
         # WRITE INITIAL SIMULATION DATA
         print("WRITE INITIAL SIMULATION DATA...",end='')
+        self.writeboundaries()
         self.writePlasmaBoundaryData()
         self.writePSI()
         self.writePSI_B()
