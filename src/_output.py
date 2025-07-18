@@ -356,27 +356,27 @@ class EquilipyOutput:
     
     def writeboundaries(self):
         if self.out_boundaries:
-            self.file_boundaries.write("BOUNDARY_NODES (NNBOUN = {:d})\n".format(self.MESH.Nnbound))
+            self.file_boundaries.write("BOUNDARY_NODES (NNBOUN = {:d} )\n".format(self.MESH.Nnbound))
             for inode, nodeindex in enumerate(self.MESH.BoundaryNodes):
-                self.file_boundaries.write("{:d} {:d}\n".format(inode, nodeindex))
+                self.file_boundaries.write("{:d} {:d}\n".format(inode+1, nodeindex+1))
             self.file_boundaries.write("END_BOUNDARY_NODES\n")
-            self.file_boundaries.write("BOUNDARY_CONNECTIVITIES (NBOUN = {:d})\n".format(self.MESH.Nbound))
+            self.file_boundaries.write("BOUNDARY_CONNECTIVITIES (NBOUN = {:d} )\n".format(self.MESH.Nbound))
             kboun = 0
             for ielem in self.MESH.BoundaryElems: 
                 ELEM = self.MESH.Elements[ielem]
                 for iboun in range(np.shape(ELEM.Teboun)[0]):
                     kboun += 1
-                    values = " ".join(str(val) for val in ELEM.Teboun[iboun, :])
-                    self.file_boundaries.write("{:d} {:d} {}\n".format(kboun, ELEM.index, values))
+                    values = " ".join(str(val) for val in ELEM.Teboun[iboun, :]+np.ones([len(ELEM.Teboun[iboun])],dtype=int))
+                    self.file_boundaries.write("{:d} {:d} {}\n".format(kboun, ELEM.index+1, values))
             self.file_boundaries.write("END_BOUNDARY_CONNECTIVITIES\n")
-            self.file_boundaries.write("DIRICHLET_ELEMENTS (NDIRICH = {:d})\n".format(len(self.MESH.DirichletElems)))
+            self.file_boundaries.write("DIRICHLET_ELEMENTS (NDIRICH = {:d} )\n".format(len(self.MESH.DirichletElems)))
             kboun = 0
             for ielem in self.MESH.DirichletElems: 
                 ELEM = self.MESH.Elements[ielem]
                 for iboun in range(np.shape(ELEM.Teboun)[0]):
                     kboun += 1
-                    values = " ".join(str(val) for val in ELEM.Teboun[iboun])
-                    self.file_boundaries.write("{:d} {:d} {}\n".format(kboun, ELEM.index, values))
+                    values = " ".join(str(val) for val in ELEM.Teboun[iboun]+np.ones([len(ELEM.Teboun[iboun])],dtype=int))
+                    self.file_boundaries.write("{:d} {:d} {}\n".format(kboun, ELEM.index+1, values))
             self.file_boundaries.write("END_DIRICHLET_ELEMENTS\n")
         return
     
@@ -391,29 +391,29 @@ class EquilipyOutput:
             for ielem in range(self.MESH.Ne):
                 self.file_elemsClas.write("{:d} {:d}\n".format(ielem+1,MeshClassi[ielem]))
             
-            self.file_elemgroups.write("PLASMA_ELEMENTS (N = {:d})\n".format(len(self.MESH.PlasmaElements)))
-            for ielem, elemindex in enumerate(self.MESH.PlasmaElements):
-                self.file_elemgroups.write("{d:} {:d}\n".format(ielem+1, elemindex))
+            self.file_elemgroups.write("PLASMA_ELEMENTS (N = {:d} )\n".format(len(self.MESH.PlasmaElems)))
+            for ielem, elemindex in enumerate(self.MESH.PlasmaElems):
+                self.file_elemgroups.write("{:d} {:d}\n".format(ielem+1, elemindex+1))
             self.file_elemgroups.write("END_PLASMA_ELEMENTS\n")
             
-            self.file_elemgroups.write("PLASMA_BOUNDARY_ELEMENTS (N = {:d})\n".format(len(self.MESH.PlasmaBoundaryElements)))
-            for ielem, elemindex in enumerate(self.MESH.PlasmaBoundaryElements):
-                self.file_elemgroups.write("{d:} {:d}\n".format(ielem+1, elemindex))
+            self.file_elemgroups.write("PLASMA_BOUNDARY_ELEMENTS (N = {:d} )\n".format(len(self.MESH.PlasmaBoundElems)))
+            for ielem, elemindex in enumerate(self.MESH.PlasmaBoundElems):
+                self.file_elemgroups.write("{:d} {:d}\n".format(ielem+1, elemindex+1))
             self.file_elemgroups.write("END_PLASMA_BOUNDARY_ELEMENTS\n")
             
-            self.file_elemgroups.write("VACUUM_ELEMENTS (N = {:d})\n".format(len(self.MESH.VacuumElements)))
-            for ielem, elemindex in enumerate(self.MESH.VacuumElements):
-                self.file_elemgroups.write("{d:} {:d}\n".format(ielem+1, elemindex))
+            self.file_elemgroups.write("VACUUM_ELEMENTS (N = {:d} )\n".format(len(self.MESH.VacuumElems)))
+            for ielem, elemindex in enumerate(self.MESH.VacuumElems):
+                self.file_elemgroups.write("{:d} {:d}\n".format(ielem+1, elemindex+1))
             self.file_elemgroups.write("END_VACUUM_ELEMENTS\n")
             
-            self.file_elemgroups.write("BOUNDARY_ELEMENTS (N = {:d})\n".format(len(self.MESH.BoundaryElements)))
-            for ielem, elemindex in enumerate(self.MESH.BoundaryElements):
-                self.file_elemgroups.write("{d:} {:d}\n".format(ielem+1, elemindex))
+            self.file_elemgroups.write("BOUNDARY_ELEMENTS (N = {:d} )\n".format(len(self.MESH.BoundaryElems)))
+            for ielem, elemindex in enumerate(self.MESH.BoundaryElems):
+                self.file_elemgroups.write("{:d} {:d}\n".format(ielem+1, elemindex+1))
             self.file_elemgroups.write("END_BOUNDARY_ELEMENTS\n")
             
-            self.file_elemgroups.write("NON_CUT_ELEMENTS (N = {:d})\n".format(len(self.MESH.NonCutElements)))
-            for ielem, elemindex in enumerate(self.MESH.NonCutElements):
-                self.file_elemgroups.write("{d:} {:d}\n".format(ielem+1, elemindex))
+            self.file_elemgroups.write("NON_CUT_ELEMENTS (N = {:d} )\n".format(len(self.MESH.NonCutElems)))
+            for ielem, elemindex in enumerate(self.MESH.NonCutElems):
+                self.file_elemgroups.write("{:d} {:d}\n".format(ielem+1, elemindex+1))
             self.file_elemgroups.write("END_NON_CUT_ELEMENTS\n")
             
             if not self.FIXED_BOUNDARY:
@@ -445,7 +445,7 @@ class EquilipyOutput:
             for ielem in self.MESH.PlasmaBoundActiveElems:
                 INTAPPROX = self.MESH.Elements[ielem].InterfApprox
                 for ig in range(INTAPPROX.ng):
-                    self.file_plasmaBC.write("{:d} {:d} {:d} {:f} {:f} {:f}\n".format(self.MESH.Elements[ielem].index,INTAPPROX.index,ig,INTAPPROX.Xg[ig,0],INTAPPROX.Xg[ig,1],INTAPPROX.PSIg[ig]))
+                    self.file_plasmaBC.write("{:d} {:d} {:d} {:f} {:f} {:f}\n".format(self.MESH.Elements[ielem].index+1,INTAPPROX.index+1,ig+1,INTAPPROX.Xg[ig,0],INTAPPROX.Xg[ig,1],INTAPPROX.PSIg[ig]))
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaBC.write("END_ITERATION\n")
         return
@@ -458,7 +458,7 @@ class EquilipyOutput:
             for ielem in self.MESH.PlasmaBoundActiveElems:
                 INTAPPROX = self.MESH.Elements[ielem].InterfApprox
                 for inode in range(INTAPPROX.n):
-                    self.file_plasmaapprox.write("{:d} {:d} {:f} {:f}\n".format(self.MESH.Elements[ielem].index,inode,INTAPPROX.Xint[inode,0],INTAPPROX.Xint[inode,1]))
+                    self.file_plasmaapprox.write("{:d} {:d} {:f} {:f}\n".format(self.MESH.Elements[ielem].index+1,inode+1,INTAPPROX.Xint[inode,0],INTAPPROX.Xint[inode,1]))
             if not self.FIXED_BOUNDARY:
                 self.file_plasmaapprox.write("END_ITERATION\n")
                 
@@ -475,6 +475,57 @@ class EquilipyOutput:
                     plasmaapprox[counter,1] = INTAPPROX.Xint[inode,1]
                     counter += 1
             self.PlasmaBoundApprox_sim.append(plasmaapprox)
+        return
+    
+    
+    def writeGhostFaces(self):
+        if self.out_ghostfaces:
+            if not self.FIXED_BOUNDARY:
+                self.file_ghostfaces.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+            self.file_ghostfaces.write("GHOST_ELEMENTS (NGE = {:d})\n".format(len(self.MESH.GhostElems)))
+            for ielem, elemindex in enumerate(self.MESH.GhostElems):
+                self.file_ghostfaces.write("{:d} {:d}".format(ielem+1, elemindex+1))
+            self.file_ghostfaces.write("END_GHOST_ELEMENTS\n")
+            self.file_ghostfaces.write("GHOST_FACES (NGF = {:d})\n".format(len(self.MESH.GhostFaces)))
+            for iface, FACE in enumerate(self.MESH.GhostFaces):
+                self.file_ghostfaces.write("{:d} {:d} {:d} {:d} {:d}\n".format(iface+1, FACE[1][0], FACE[1][1], FACE[2][0], FACE[2][1]))
+            self.file_ghostfaces.write("END_GHOST_FACES\n")
+            if not self.FIXED_BOUNDARY: 
+                self.file_ghostfaces.write("END_ITERATION\n")
+                
+        if self.GhostStabilization and self.out_pickle:
+            self.PlasmaBoundGhostFaces_sim.append(self.MESH.GhostFaces.copy())
+        return
+
+    def writePlasmaBoundaryData(self):
+        self.writePlasmaLS()
+        self.writeElementsClassification()
+        if self.MESH.PlasmaBoundElems.size > 0:
+            self.writePlasmaapprox()
+            self.writeGhostFaces()
+        return
+    
+    
+    def writeQuadratures(self):
+        if self.it == 0:
+            self.file_quadratures.write("ng = {:d}\n".format(self.MESH.nge))
+        if not self.FIXED_BOUNDARY:
+            self.file_quadratures.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+        self.file_quadratures.write("NON_CUT_ELEMENTS\n")
+        for ielem in self.MESH.NonCutElems:
+            ELEM = self.MESH.Elements[ielem]
+            self.file_quadratures.write("elem {:d}\n".format(ELEM.index+1))
+            self.file_quadratures.write("Xg\n")
+            for igaus in range(ELEM.ng):
+                values = " ".join(str(val) for val in ELEM.Xg[igaus,:])
+                self.file_quadratures.write("{}\n".format(values))
+            self.file_quadratures.write("detJg\n")
+            values = " ".join(str(val) for val in ELEM.detJg)
+            self.file_quadratures.write("{}\n".format(values))
+            
+        self.file_quadratures.write("END_NON_CUT_ELEMENTS\n")
+        if not self.FIXED_BOUNDARY: 
+            self.file_quadratures.write("END_ITERATION\n")
         return
     
 
@@ -537,35 +588,6 @@ class EquilipyOutput:
             if self.out_pickle:
                 PSIcrit = np.concatenate((self.Xcrit[1,:,:],np.array([[self.PSI_0],[self.PSI_X]])),axis=1)
                 self.PSIcrit_sim.append(PSIcrit)
-        return
-
-    
-
-    def writeGhostFaces(self):
-        if self.out_ghostfaces:
-            if not self.FIXED_BOUNDARY:
-                self.file_ghostfaces.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
-            self.file_ghostfaces.write("GHOST_ELEMENTS (NGE = {:d})\n".format(len(self.MESH.GhostElems)))
-            for ielem, elemindex in enumerate(self.MESH.GhostElems):
-                self.file_ghostfaces.write("{:d} {:d}".format(ielem+1, elemindex))
-            self.file_ghostfaces.write("END_GHOST_ELEMENTS\n")
-            self.file_ghostfaces.write("GHOST_FACES (NGF = {:d})\n".format(len(self.MESH.GhostFaces)))
-            for iface, FACE in enumerate(self.MESH.GhostFaces):
-                self.file_ghostfaces.write("{:d} {:d} {:d} {:d} {:d}\n".format(iface+1, FACE[1][0], FACE[1][1], FACE[2][0], FACE[2][1]))
-            self.file_ghostfaces.write("END_GHOST_FACES\n")
-            if not self.FIXED_BOUNDARY: 
-                self.file_ghostfaces.write("END_ITERATION\n")
-                
-        if self.GhostStabilization and self.out_pickle:
-            self.PlasmaBoundGhostFaces_sim.append(self.MESH.GhostFaces.copy())
-        return
-
-    def writePlasmaBoundaryData(self):
-        if self.MESH.PlasmaBoundElems.size > 0:
-            self.writePlasmaLS()
-            self.writeElementsClassification()
-            self.writePlasmaapprox()
-            self.writeGhostFaces()
         return
 
 

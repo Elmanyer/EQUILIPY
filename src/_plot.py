@@ -202,10 +202,10 @@ class EquilipyPlotting:
             axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=[0], colors = 'black')
             self.MESH.PlotBoundary(ax = axs[1])
             # COLORBAR
+            axs[2].axis('off')
             fig.colorbar(a1, ax=axs[2], orientation="vertical", fraction=0.8, pad=-0.7)
             
             # RIGHT PLOT: ERROR
-            axs[3].axis('off')
             axs[3].set_aspect('equal')
             axs[3].set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
             axs[3].set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)

@@ -507,9 +507,12 @@ class GradShafranovSolver(EquilipyInitialisation,
             if self.out_elemsys:
                 self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index,ELEMENT.Dom))
                 self.file_elemsys.write('elmat\n')
-                np.savetxt(self.file_elemsys,LHSe,delimiter=',',fmt='%e')
+                for irow in range(ELEMENT.n):
+                    values = " ".join("{:.6e}".format(val) for val in LHSe[irow,:])
+                    self.file_elemsys.write("{}\n".format(values))
                 self.file_elemsys.write('elrhs\n')
-                np.savetxt(self.file_elemsys,RHSe,fmt='%e')
+                values = " ".join("{:.6e}".format(val) for val in RHSe)
+                self.file_elemsys.write("{}\n".format(values))
             
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
             for i in range(ELEMENT.n):   # ROWS ELEMENTAL MATRIX
@@ -552,9 +555,12 @@ class GradShafranovSolver(EquilipyInitialisation,
                 if self.out_elemsys:
                     self.file_elemsys.write("elem {:d} {:d} subelem {:d} {:d}\n".format(ELEMENT.index,ELEMENT.Dom,SUBELEM.index,SUBELEM.Dom))
                     self.file_elemsys.write('elmat\n')
-                    np.savetxt(self.file_elemsys,LHSe,delimiter=',',fmt='%e')
+                    for irow in range(ELEMENT.n):
+                        values = " ".join("{:.6e}".format(val) for val in LHSe[irow,:])
+                        self.file_elemsys.write("{}\n".format(values))
                     self.file_elemsys.write('elrhs\n')
-                    np.savetxt(self.file_elemsys,RHSe,fmt='%e')
+                    values = " ".join("{:.6e}".format(val) for val in RHSe)
+                    self.file_elemsys.write("{}\n".format(values))
                 
                 # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
                 for i in range(SUBELEM.n):   # ROWS ELEMENTAL MATRIX
@@ -584,9 +590,12 @@ class GradShafranovSolver(EquilipyInitialisation,
             if self.out_elemsys:
                 self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index,ELEMENT.Dom))
                 self.file_elemsys.write('elmat\n')
-                np.savetxt(self.file_elemsys,LHSe,delimiter=',',fmt='%e')
+                for irow in range(ELEMENT.n):
+                    values = " ".join("{:.6e}".format(val) for val in LHSe[irow,:])
+                    self.file_elemsys.write("{}\n".format(values))
                 self.file_elemsys.write('elrhs\n')
-                np.savetxt(self.file_elemsys,RHSe,fmt='%e')
+                values = " ".join("{:.6e}".format(val) for val in RHSe)
+                self.file_elemsys.write("{}\n".format(values))
             
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
             for i in range(len(ELEMENT.Te)):   # ROWS ELEMENTAL MATRIX
@@ -703,6 +712,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         print("WRITE INITIAL SIMULATION DATA...",end='')
         self.writeboundaries()
         self.writePlasmaBoundaryData()
+        self.writeQuadratures()
         self.writePSI()
         self.writePSI_B()
         self.writePlasmaBC()
