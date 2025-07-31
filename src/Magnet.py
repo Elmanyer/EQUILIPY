@@ -364,7 +364,7 @@ class QuadrilateralCoil:
         Calculate poloidal flux psi at (R,Z) due to quadrilateral coil
         """
         Psi_coil = 0.0
-        # INTEGRATE ALONG SOLENOID AREA 
+        # INTEGRATE ALONG COIL CROSS-SECTION AREA 
         for ig in range(self.ng):
             Psi_coil += GreensFunction(self.Xg[ig,:],X) * self.detJg[ig] * self.Wg[ig] * self.I/self.area
         return Psi_coil  
@@ -374,7 +374,7 @@ class QuadrilateralCoil:
         Calculate radial magnetic field Br at (R,Z) due to quadrilateral coil
         """
         Br_coil = 0.0
-        # INTEGRATE ALONG SOLENOID AREA 
+        # INTEGRATE ALONG COIL CROSS-SECTION AREA 
         for ig in range(self.ng):
             Br_coil += GreensBr(self.Xg[ig,:],X) * self.detJg[ig] * self.Wg[ig] * self.I/self.area
         return Br_coil
@@ -384,7 +384,7 @@ class QuadrilateralCoil:
         Calculate vertical magnetic field Bz at (R,Z) due to quadrilateral coil
         """
         Bz_coil = 0.0
-        # INTEGRATE ALONG SOLENOID AREA 
+        # INTEGRATE ALONG COIL CROSS-SECTION AREA 
         for ig in range(self.ng):
             Br_coil += GreensBz(self.Xg[ig,:],X) * self.detJg[ig] * self.Wg[ig] * self.I/self.area
         return Bz_coil

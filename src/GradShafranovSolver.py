@@ -174,8 +174,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                 
                 ##### COMPUTE PSI BOUNDARY VALUES
                 # CONTRIBUTION FROM EXTERNAL MAGNETS
-                for MAGNET in self.TOKAMAK.MAGNETS: 
-                    PSI_B[inode] += self.mu0 * MAGNET.Psi(Xbound)
+                PSI_B[inode] += self.mu0 * self.TOKAMAK.Psi(Xbound)
                             
                 # CONTRIBUTION FROM PLASMA CURRENT  ->>  INTEGRATE OVER PLASMA REGION
                 #   1. INTEGRATE IN PLASMA ELEMENTS
@@ -251,8 +250,9 @@ class GradShafranovSolver(EquilipyInitialisation,
             
             # IDENTIFY ELEMENTS MESH RELATION   
             print("     -> IDENTIFY ELEMENTS MESH RELATION...", end="")
-            self.MESH.IdentifyNearestNeighbors()
             self.MESH.IdentifyBoundaries()
+            if self.GhostStabilization:
+                self.MESH.IdentifyNearestNeighbors()
             print("Done!")
             
             # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR ALL ELEMENTS 
@@ -309,13 +309,13 @@ class GradShafranovSolver(EquilipyInitialisation,
     ########################################## INTEGRATION ###########################################
     ##################################################################################################
     
-    def IntegratePlasmaDomain(self,fun,PSIdependent=True):
+    def IntegratePlasmaDomain(self,fun,PSI_INDEPENDENT=False):
         """ 
         Function that integrates function fun over the plasma region. 
         """ 
         
         integral = 0
-        if PSIdependent:
+        if not PSI_INDEPENDENT:
             # INTEGRATE OVER PLASMA ELEMENTS
             for ielem in self.MESH.PlasmaElems:
                 # ISOLATE ELEMENT
@@ -711,6 +711,8 @@ class GradShafranovSolver(EquilipyInitialisation,
         # WRITE INITIAL SIMULATION DATA
         print("WRITE INITIAL SIMULATION DATA...",end='')
         self.writeboundaries()
+        if self.GhostStabilization:
+            self.writeNeighbours()
         self.writePlasmaBoundaryData()
         self.writeQuadratures()
         self.writePSI()

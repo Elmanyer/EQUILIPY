@@ -59,7 +59,7 @@ class EquilipyUpdate:
         """
         if VALUES == "PSI_NORM":
             # FOR THE LINEAR AND ZHENG MODELS (FIXED BOUNDARY) THE SOURCE TERM DOESN'T DEPEND ON PSI, THEREFORE A SINGLE INTERNAL ITERATION IS ENOUGH
-            if not self.PlasmaCurrent.PSIdependent:
+            if self.PlasmaCurrent.PSI_INDEPENDENT:
                 self.int_cvg = True  # STOP INTERNAL WHILE LOOP 
                 self.int_residu = 0
             else:

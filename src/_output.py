@@ -22,6 +22,7 @@
 import numpy as np
 import os
 from shutil import copy2
+from Magnet import *
 
 ##################################################################################################
 ####################################### EQUILIPY OUTPUT ##########################################
@@ -251,71 +252,114 @@ class EquilipyOutput:
             self.file_proparams.write('END_MESH_PARAMETERS\n')
             self.file_proparams.write('\n')
             
-            self.file_proparams.write('PROBLEM_TYPE_PARAMETERS\n') 
-            self.file_proparams.write("    PLASMA_BOUNDARY = {}".format(str(self.FIXED_BOUNDARY)))
-            self.file_proparams.write("    PLASMA_CURRENT = {:d}\n".format(self.PlasmaCurrent.CURRENT_MODEL))
-            self.file_proparams.write('END_PROBLEM_TYPE_PARAMETERS\n')
-            self.file_proparams.write('\n')
-            
-            """
-            self.file_proparams.write('VACUUM_VESSEL_GEOMETRY_PARAMETERS\n')
-            self.file_proparams.write("    R0 = {:f}\n".format(self.R0))
-            self.file_proparams.write("    EPSILON = {:f}\n".format(self.epsilon))
-            self.file_proparams.write("    KAPPA = {:f}\n".format(self.kappa))
-            self.file_proparams.write("    DELTA = {:f}\n".format(self.delta))
-            self.file_proparams.write('END_VACUUM_VESSEL_GEOMETRY_PARAMETERS\n')
-            self.file_proparams.write('\n')
-            
-            if 
-                self.file_proparams.write('PLASMA_REGION_GEOMETRY_PARAMETERS\n')
-                self.file_proparams.write("    CONTROL_POINTS = {:d}\n".format(self.CONTROL_POINTS))
-                self.file_proparams.write("    R_SADDLE = {:f}\n".format(self.R_SADDLE))
-                self.file_proparams.write("    Z_SADDLE = {:f}\n".format(self.Z_SADDLE))
-                self.file_proparams.write("    R_RIGHTMOST = {:f}\n".format(self.R_RIGHTMOST))
-                self.file_proparams.write("    Z_RIGHTMOST = {:f}\n".format(self.Z_RIGHTMOST))
-                self.file_proparams.write("    R_LEFTMOST = {:f}\n".format(self.R_LEFTMOST))
-                self.file_proparams.write("    Z_LEFTMOST = {:f}\n".format(self.Z_LEFTMOST))
-                self.file_proparams.write("    R_TOP = {:f}\n".format(self.R_TOP))
-                self.file_proparams.write("    Z_TOP = {:f}\n".format(self.Z_TOP))
-                self.file_proparams.write('END_PLASMA_REGION_GEOMETRY_PARAMETERS\n')
-                self.file_proparams.write('\n')
-            
-            if self.PLASMA_CURRENT == self.JARDIN_CURRENT:
-                self.file_proparams.write('PLASMA_CURRENT_MODEL_PARAMETERS\n')
-                self.file_proparams.write("    B0 = {:f}\n".format(self.B0))
-                self.file_proparams.write("    q0 = {:f}\n".format(self.q0))
-                self.file_proparams.write("    n_p = {:f}\n".format(self.n_p))
-                self.file_proparams.write("    g0 = {:f}\n".format(self.G0))
-                self.file_proparams.write("    n_g = {:f}\n".format(self.n_g))
-                self.file_proparams.write("    TOTAL_PLASMA_CURRENT = {:f}\n".format(self.TOTAL_CURRENT))
-                self.file_proparams.write('END_PLASMA_CURRENT_MODEL_PARAMETERS\n')
-                self.file_proparams.write('\n')
-            """
-            
-            """
+            self.file_proparams.write('PHYSICAL_PROBLEM_PARAMETERS\n') 
+            self.file_proparams.write("    FIXED_BOUNDARY = {0}\n".format(self.FIXED_BOUNDARY))
             if not self.FIXED_BOUNDARY:
-                self.file_proparams.write('EXTERNAL_COILS_PARAMETERS\n')
-                self.file_proparams.write("    N_COILS = {:d}\n".format(len(self.COILS)))
-                for COIL in self.COILS:
-                    self.file_proparams.write("    Rposi = {:f}\n".format(COIL.X[0]))
-                    self.file_proparams.write("    Zposi = {:f}\n".format(COIL.X[1]))
-                    self.file_proparams.write("    Inten = {:f}\n".format(COIL.I))
+                # WRITE TOKAMAK SINGLE COILS
+                ncoils = sum(isinstance(x, Coil) for x in self.TOKAMAK.MAGNETS)
+                if ncoils > 0:
+                    self.file_proparams.write('    EXTERNAL_SINGLE_COILS (Ncoils = {:d} )\n'.format(ncoils))
+                    for magnet in self.TOKAMAK.MAGNETS:
+                        if type(magnet) == type(Coil):
+                            self.file_proparams.write('\n')
+                            self.file_proparams.write("         NAME = {}\n".format(magnet.name))
+                            self.file_proparams.write("         X = {:f} {:f}\n".format(magnet.X[0], magnet.X[1]))
+                            self.file_proparams.write("         I = {:f}\n".format(magnet.I))
                     self.file_proparams.write('\n')
-                self.file_proparams.write('END_EXTERNAL_COILS_PARAMETERS\n')
-                self.file_proparams.write('\n')
-                
-                self.file_proparams.write('EXTERNAL_SOLENOIDS_PARAMETERS\n')
-                self.file_proparams.write("    N_SOLENOIDS = {:d}\n".format(len(self.SOLENOIDS)))
-                for SOLENOID in self.SOLENOIDS:
-                    self.file_proparams.write("    Rposi = {:f}\n".format(SOLENOID.Xe[0,0]))
-                    self.file_proparams.write("    Zlow = {:f}\n".format(SOLENOID.Xe[0,1]))
-                    self.file_proparams.write("    Zup = {:f}\n".format(SOLENOID.Xe[1,1]))
-                    self.file_proparams.write("    Inten = {:f}\n".format(SOLENOID.I))
-                    self.file_proparams.write("    Nturns = {:d}\n".format(SOLENOID.Nturns))
+                    self.file_proparams.write('    END_EXTERNAL_SINGLE_COILS\n'.format(ncoils))
+                # WRITE TOKAMAK MULTICOIL COILS
+                ncoils = sum(isinstance(x, RectangularMultiCoil) for x in self.TOKAMAK.MAGNETS)
+                if ncoils > 0:
+                    self.file_proparams.write('    EXTERNAL_RECTANGULAR_MULTICOIL (Ncoils = {:d} )\n'.format(ncoils))
+                    for magnet in self.TOKAMAK.MAGNETS:
+                        if type(magnet) == type(RectangularMultiCoil):
+                            self.file_proparams.write('\n')
+                            self.file_proparams.write("         NAME = {}\n".format(magnet.name))
+                            self.file_proparams.write("         X = {:f} {:f}\n".format(magnet.X[0], magnet.X[1]))
+                            self.file_proparams.write("         I = {:f}\n".format(magnet.I))
                     self.file_proparams.write('\n')
-                self.file_proparams.write('END_EXTERNAL_SOLENOIDS_PARAMETERS\n')
-                self.file_proparams.write('\n')
-            """
+                    self.file_proparams.write('    END_EXTERNAL_RECTANGULAR_MUTICOILS\n'.format(ncoils))
+                # WRITE TOKAMAK QUADRILATERAL COILS
+                ncoils = sum(isinstance(x, QuadrilateralCoil) for x in self.TOKAMAK.MAGNETS)
+                if ncoils > 0:
+                    self.file_proparams.write('    EXTERNAL_QUADRILATERAL_COILS (Ncoils = {:d} )\n'.format(ncoils))
+                    for magnet in self.TOKAMAK.MAGNETS:
+                        if type(magnet) == type(QuadrilateralCoil):
+                            self.file_proparams.write('\n')
+                            self.file_proparams.write("         NAME = {}\n".format(magnet.name))
+                            for ivertex in range(magnet.numedges):
+                                self.file_proparams.write("         X{:d} = {:f} {:f}\n".format(ivertex+1,magnet.Xvertices[ivertex,0], magnet.Xvertices[ivertex,1]))
+                            self.file_proparams.write("         I = {:f}\n".format(magnet.I))
+                    self.file_proparams.write('\n')
+                    self.file_proparams.write('    END_EXTERNAL_QUADRILATERAL_COILS\n'.format(ncoils))
+                    
+            self.file_proparams.write('END_PHYSICAL_PROBLEM_PARAMETERS\n')
+            self.file_proparams.write('\n')
+            
+            self.file_proparams.write('INITIAL_PLASMA_BOUNDARY_PARAMETERS\n')
+            self.file_proparams.write("    MODEL = {:d}\n".format(self.initialPHI.INITIAL_GEOMETRY))
+            match self.initialPHI.INITIAL_GEOMETRY:
+                case self.initialPHI.LINEAR_SOLUTION:
+                    self.file_proparams.write("    R0_PHI0 = {:f}\n".format(self.initialPHI.R0))
+                    self.file_proparams.write("    EPSILON_PHI0 = {:f}\n".format(self.initialPHI.epsilon))
+                    self.file_proparams.write("    KAPPA_PHI0 = {:f}\n".format(self.initialPHI.kappa))
+                    self.file_proparams.write("    DELTA_PHI0 = {:f}\n".format(self.initialPHI.delta))
+                case self.initialPHI.CUBIC_HAMILTONIAN:
+                    self.file_proparams.write("    Xsaddle_PHI0 = {:f} {:f}\n".format(self.initialPHI.Xsaddle[0], self.initialPHI.Xsaddle[1]))
+                    self.file_proparams.write("    Xright_PHI0 = {:f} {:f}\n".format(self.initialPHI.Xright[0], self.initialPHI.Xright[1]))
+                    self.file_proparams.write("    Xleft_PHI0 = {:f} {:f}\n".format(self.initialPHI.Xleft[0], self.initialPHI.Xleft[1]))
+                    self.file_proparams.write("    Xtop_PHI0 = {:f} {:f}\n".format(self.initialPHI.Xtop[0], self.initialPHI.Xtop[1]))
+            self.file_proparams.write('END_INITIAL_PLASMA_BOUNDARY_PARAMETERS\n')
+            self.file_proparams.write('\n')
+            
+            self.file_proparams.write('INITIAL_PSI_GUESS_PARAMETERS\n')
+            self.file_proparams.write("    MODEL = {:d}\n".format(self.initialPSI.INITIAL_GUESS))
+            match self.initialPSI.INITIAL_GUESS:
+                case self.initialPSI.LINEAR_SOLUTION:
+                    self.file_proparams.write("    R0_PSI0 = {:f}\n".format(self.initialPSI.R0))
+                    self.file_proparams.write("    EPSILON_PSI0 = {:f}\n".format(self.initialPSI.epsilon))
+                    self.file_proparams.write("    KAPPA_PSI0 = {:f}\n".format(self.initialPSI.kappa))
+                    self.file_proparams.write("    DELTA_PSI0 = {:f}\n".format(self.initialPSI.delta))
+                case self.initialPSI.CUBIC_HAMILTONIAN:
+                    self.file_proparams.write("    Xsaddle_PSI0 = {:f} {:f}\n".format(self.initialPSI.Xsaddle[0], self.initialPSI.Xsaddle[1]))
+                    self.file_proparams.write("    Xright_PSI0 = {:f} {:f}\n".format(self.initialPSI.Xright[0], self.initialPSI.Xright[1]))
+                    self.file_proparams.write("    Xleft_PSI0 = {:f} {:f}\n".format(self.initialPSI.Xleft[0], self.initialPSI.Xleft[1]))
+                    self.file_proparams.write("    Xtop_PSI0 = {:f} {:f}\n".format(self.initialPSI.Xtop[0], self.initialPSI.Xtop[1]))
+            self.file_proparams.write('END_INITIAL_PSI_GUESS_PARAMETERS\n')
+            self.file_proparams.write('\n')
+    
+            # CURRENT MODEL PARAMETERS
+            self.file_proparams.write("PLASMA_CURRENT_PARAMETERS\n")
+            self.file_proparams.write("    MODEL = {:d}\n".format(self.PlasmaCurrent.CURRENT_MODEL))
+            self.file_proparams.write("    DIMENSIONLESS = {0}\n".format(self.PlasmaCurrent.DIMENSIONLESS))
+            self.file_proparams.write("    PSI_INDEPENDENT = {0}\n".format(self.PlasmaCurrent.PSI_INDEPENDENT))
+            self.file_proparams.write("    TOTAL_CURRENT = {:d}\n".format(self.PlasmaCurrent.TOTAL_CURRENT))
+            match self.PlasmaCurrent.CURRENT_MODEL:
+                case self.PlasmaCurrent.LINEAR_CURRENT:
+                    self.file_proparams.write("    R0_CURRENT = {:f}\n".format(self.PlasmaCurrent.R0))
+                    self.file_proparams.write("    EPSILON_CURRENT = {:f}\n".format(self.PlasmaCurrent.epsilon))
+                    self.file_proparams.write("    KAPPA_CURRENT = {:f}\n".format(self.PlasmaCurrent.kappa))
+                    self.file_proparams.write("    DELTA_CURRENT = {:f}\n".format(self.PlasmaCurrent.delta))
+                case self.PlasmaCurrent.ZHENG_CURRENT:
+                    self.file_proparams.write("    R0_CURRENT = {:f}\n".format(self.PlasmaCurrent.R0))
+                    self.file_proparams.write("    EPSILON_CURRENT = {:f}\n".format(self.PlasmaCurrent.epsilon))
+                    self.file_proparams.write("    KAPPA_CURRENT = {:f}\n".format(self.PlasmaCurrent.kappa))
+                    self.file_proparams.write("    DELTA_CURRENT = {:f}\n".format(self.PlasmaCurrent.delta))
+                case self.PlasmaCurrent.NONLINEAR_CURRENT:
+                    self.file_proparams.write("    R0_CURRENT = {:f}\n".format(self.PlasmaCurrent.R0))
+                case self.PlasmaCurrent.JARDIN_CURRENT:
+                    self.file_proparams.write("    KAPPA_CURRENT = {:f}\n".format(self.PlasmaCurrent.kappa))
+                    self.file_proparams.write("    B0_CURRENT = {:f}\n".format(self.PlasmaCurrent.B0))
+                    self.file_proparams.write("    q0_CURRENT = {:f}\n".format(self.PlasmaCurrent.q0))
+                    self.file_proparams.write("    n_p_CURRENT = {:f}\n".format(self.PlasmaCurrent.n_p))
+                    self.file_proparams.write("    g0_CURRENT = {:f}\n".format(self.PlasmaCurrent.g0))
+                    self.file_proparams.write("    n_g_CURRENT = {:f}\n".format(self.PlasmaCurrent.n_g))
+                case self.PlasmaCurrent.APEC_CURRENT:
+                    self.file_proparams.write("    R0_CURRENT = {:f}\n".format(self.PlasmaCurrent.R0))
+                    self.file_proparams.write("    Ii_CURRENT = {:f}\n".format(self.PlasmaCurrent.Ii))
+                    self.file_proparams.write("    Betap_CURRENT = {:f}\n".format(self.PlasmaCurrent.Betap))
+            self.file_proparams.write("END_PLASMA_CURRENT_PARAMETERS\n")
+            self.file_proparams.write("\n")
             
             self.file_proparams.write('NUMERICAL_TREATMENT_PARAMETERS\n')
             self.file_proparams.write("    GHOST_STABILIZATION = {0}\n".format(self.GhostStabilization))
@@ -325,6 +369,7 @@ class EquilipyOutput:
             self.file_proparams.write("    EXT_TOL = {:e}\n".format(self.ext_tol))
             self.file_proparams.write("    MAX_INT_IT = {:d}\n".format(self.int_maxiter))
             self.file_proparams.write("    INT_TOL = {:e}\n".format(self.int_tol))
+            self.file_proparams.write("    SADDLE_TOL = {:e}\n".format(self.tol_saddle))
             self.file_proparams.write("    BETA = {:f}\n".format(self.beta))
             self.file_proparams.write("    ZETA = {:f}\n".format(self.zeta))
             self.file_proparams.write("    R0_axis = {:f}\n".format(self.R0_axis))
@@ -366,7 +411,7 @@ class EquilipyOutput:
                 ELEM = self.MESH.Elements[ielem]
                 for iboun in range(np.shape(ELEM.Teboun)[0]):
                     kboun += 1
-                    values = " ".join(str(val) for val in ELEM.Teboun[iboun, :]+np.ones([len(ELEM.Teboun[iboun])],dtype=int))
+                    values = " ".join(str(val) for val in ELEM.Teboun[iboun]+np.ones([len(ELEM.Teboun[iboun])],dtype=int))
                     self.file_boundaries.write("{:d} {:d} {}\n".format(kboun, ELEM.index+1, values))
             self.file_boundaries.write("END_BOUNDARY_CONNECTIVITIES\n")
             self.file_boundaries.write("DIRICHLET_ELEMENTS (NDIRICH = {:d} )\n".format(len(self.MESH.DirichletElems)))
@@ -478,17 +523,27 @@ class EquilipyOutput:
         return
     
     
+    def writeNeighbours(self):
+        if self.out_ghostfaces:
+            self.file_ghostfaces.write("ELEMENT_NEIGHBOURS\n")
+            for ielem, ELEM in enumerate(self.MESH.Elements):
+                neighbours = " ".join(str(val+1) for val in ELEM.neighbours)
+                self.file_ghostfaces.write("{:d} {}\n".format(ielem+1, neighbours))
+            self.file_ghostfaces.write("END_ELEMENT_NEIGHBOURS\n")
+        return
+    
+    
     def writeGhostFaces(self):
         if self.out_ghostfaces:
             if not self.FIXED_BOUNDARY:
                 self.file_ghostfaces.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
             self.file_ghostfaces.write("GHOST_ELEMENTS (NGE = {:d})\n".format(len(self.MESH.GhostElems)))
             for ielem, elemindex in enumerate(self.MESH.GhostElems):
-                self.file_ghostfaces.write("{:d} {:d}".format(ielem+1, elemindex+1))
+                self.file_ghostfaces.write("{:d} {:d}\n".format(ielem+1, elemindex+1))
             self.file_ghostfaces.write("END_GHOST_ELEMENTS\n")
             self.file_ghostfaces.write("GHOST_FACES (NGF = {:d})\n".format(len(self.MESH.GhostFaces)))
             for iface, FACE in enumerate(self.MESH.GhostFaces):
-                self.file_ghostfaces.write("{:d} {:d} {:d} {:d} {:d}\n".format(iface+1, FACE[1][0], FACE[1][1], FACE[2][0], FACE[2][1]))
+                self.file_ghostfaces.write("{:d} {:d} {:d} {:d} {:d}\n".format(iface+1, FACE[1][0]+1, FACE[1][1]+1, FACE[2][0]+1, FACE[2][1]+1))
             self.file_ghostfaces.write("END_GHOST_FACES\n")
             if not self.FIXED_BOUNDARY: 
                 self.file_ghostfaces.write("END_ITERATION\n")
@@ -507,25 +562,30 @@ class EquilipyOutput:
     
     
     def writeQuadratures(self):
-        if self.it == 0:
-            self.file_quadratures.write("ng = {:d}\n".format(self.MESH.nge))
-        if not self.FIXED_BOUNDARY:
-            self.file_quadratures.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
-        self.file_quadratures.write("NON_CUT_ELEMENTS\n")
-        for ielem in self.MESH.NonCutElems:
-            ELEM = self.MESH.Elements[ielem]
-            self.file_quadratures.write("elem {:d}\n".format(ELEM.index+1))
-            self.file_quadratures.write("Xg\n")
-            for igaus in range(ELEM.ng):
-                values = " ".join(str(val) for val in ELEM.Xg[igaus,:])
+        if self.out_quadratures:
+            if self.it == 0:
+                self.file_quadratures.write("ng = {:d}\n".format(self.MESH.nge))
+            if not self.FIXED_BOUNDARY:
+                self.file_quadratures.write("ITERATION {:d} (EXT_it = {:d}, INT_it = {:d})\n".format(self.it,self.ext_it,self.int_it))
+            self.file_quadratures.write("NON_CUT_ELEMENTS\n")
+            for ielem in self.MESH.NonCutElems:
+                ELEM = self.MESH.Elements[ielem]
+                self.file_quadratures.write("elem {:d}\n".format(ELEM.index+1))
+                self.file_quadratures.write("Xe\n")
+                for inode in range(ELEM.n):
+                    values = " ".join(str(val) for val in ELEM.Xe[inode,:])
+                    self.file_quadratures.write("{}\n".format(values))
+                self.file_quadratures.write("Xg\n")
+                for igaus in range(ELEM.ng):
+                    values = " ".join(str(val) for val in ELEM.Xg[igaus,:])
+                    self.file_quadratures.write("{}\n".format(values))
+                self.file_quadratures.write("detJg\n")
+                values = " ".join(str(val) for val in ELEM.detJg)
                 self.file_quadratures.write("{}\n".format(values))
-            self.file_quadratures.write("detJg\n")
-            values = " ".join(str(val) for val in ELEM.detJg)
-            self.file_quadratures.write("{}\n".format(values))
-            
-        self.file_quadratures.write("END_NON_CUT_ELEMENTS\n")
-        if not self.FIXED_BOUNDARY: 
-            self.file_quadratures.write("END_ITERATION\n")
+                
+            self.file_quadratures.write("END_NON_CUT_ELEMENTS\n")
+            if not self.FIXED_BOUNDARY: 
+                self.file_quadratures.write("END_ITERATION\n")
         return
     
 

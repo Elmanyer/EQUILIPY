@@ -48,8 +48,8 @@ class CurrentModel:
         self.APEC_CURRENT = 6
         self.OTHER_CURRENT = 7
         
-        self.PSIdependent = False
-        self.DIMENSIONLESS = False
+        self.PSI_INDEPENDENT = None
+        self.DIMENSIONLESS = None
         
         ##### PRE-DEFINED PLASMA CURRENT MODELS
         match MODEL:
@@ -61,6 +61,8 @@ class CurrentModel:
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.LINEAR_CURRENT
                 self.DIMENSIONLESS = True
+                self.PSI_INDEPENDENT = True
+                self.TOTAL_CURRENT = 0
                 self.R0 = kwargs['R0']                    # MEAN RADIUS
                 self.epsilon = kwargs['epsilon']          # INVERSE ASPECT RATIO
                 self.kappa = kwargs['kappa']              # ELONGATION
@@ -75,6 +77,9 @@ class CurrentModel:
             case 'ZHENG':
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.ZHENG_CURRENT
+                self.DIMENSIONLESS = False
+                self.PSI_INDEPENDENT = True
+                self.TOTAL_CURRENT = 0
                 self.R0 = kwargs['R0']                     # MEAN RADIUS
                 self.epsilon = kwargs['epsilon']           # INVERSE ASPECT RATIO
                 self.kappa = kwargs['kappa']               # ELONGATION
@@ -90,7 +95,8 @@ class CurrentModel:
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.NONLINEAR_CURRENT
                 self.DIMENSIONLESS = True
-                self.PSIdependent = True
+                self.PSI_INDEPENDENT = False
+                self.TOTAL_CURRENT = 0
                 self.R0 = kwargs['R0']
                 self.coeffs = [1.15*np.pi,  # [Kr, 
                                1.15,        #  Kz,
@@ -107,7 +113,8 @@ class CurrentModel:
             case 'JARDIN':
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.JARDIN_CURRENT
-                self.PSIdependent = True
+                self.DIMENSIONLESS = False
+                self.PSI_INDEPENDENT = False
                 self.P0 = kwargs['P0']                      # PRESSURE VALUE ON MAGNETIC AXIS
                 self.n_p = kwargs['np']                     # EXPONENT FOR PRESSURE PROFILE p_hat FUNCTION
                 self.G0 = kwargs['G0']                      # TOROIDAL FIELD FACTOR
@@ -121,7 +128,8 @@ class CurrentModel:
             case 'PCONSTRAIN':
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.PCONSTRAIN_CURRENT
-                self.PSIdependent = True
+                self.DIMENSIONLESS = False
+                self.PSI_INDEPENDENT = False
                 self.P0 = kwargs['P0']                      # PRESSURE VALUE ON MAGNETIC AXIS
                 self.alpha_m = kwargs['alpha_m']
                 self.alpha_n = kwargs['alpha_n']
@@ -140,7 +148,8 @@ class CurrentModel:
             case 'BetaCONSTRAIN':
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.BetaCONSTRAIN_CURRENT
-                self.PSIdependent = True
+                self.DIMENSIONLESS = False
+                self.PSI_INDEPENDENT = False
                 self.Betap = kwargs['Betap']                # POLOIDAL BETA
                 self.alpha_m = kwargs['alpha_m']
                 self.alpha_n = kwargs['alpha_n']
@@ -158,7 +167,8 @@ class CurrentModel:
             case 'APEC':
                 # MODEL PARAMETERS
                 self.CURRENT_MODEL = self.APEC_CURRENT
-                self.PSIdependent = True
+                self.DIMENSIONLESS = False
+                self.PSI_INDEPENDENT = False
                 self.Ii = kwargs['Ii']                      # PLASMA INTERNAL INDUCTANCE
                 self.Betap = kwargs['Betap']                # POLOIDAL BETA
                 self.R0 = kwargs['R0']                      # MEAN RADIUS
@@ -174,7 +184,8 @@ class CurrentModel:
             case 'OTHER':
                 self.CURRENT_MODEL = self.OTHER_CURRENT
                 self.Jphi = kwargs['Jphi']
-                self.PSIdependent = kwargs['PSIdependent']
+                self.PSI_INDEPENDENT = kwargs['PSI_INDEPENDENT']
+                self.DIMENSIONLESS = kwargs['DIMENSIONLESS']
         
         return
     
