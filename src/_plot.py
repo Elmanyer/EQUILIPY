@@ -281,52 +281,25 @@ class EquilipyPlotting:
             plt.show()
             
         elif not self.FIXED_BOUNDARY:  # ITERATION SOLUTION FOR JARDIN PLASMA CURRENT (PLOT PSI and PSI_NORM)
-            if not self.PSIrelax:
-                fig, axs = plt.subplots(1, 2, figsize=(11,6))
-                axs[0].set_aspect('equal')
-                axs[1].set_aspect('equal')
-                # LEFT PLOT: PSI at iteration N+1 WITHOUT NORMALISATION (SOLUTION OBTAINED BY SOLVING CUTFEM SYSTEM)
-                subplotfield(self,axs[0],self.PSI[:,0],normalised=False)
-                axs[0].set_title('PSI')
-                # RIGHT PLOT: NORMALISED PSI at iteration N+1
-                subplotfield(self,axs[1],self.PSI_NORM[:,1])
-                axs[1].set_title('PSI_NORM')
-                axs[1].yaxis.set_visible(False)
-                ## PLOT LOCATION OF CRITICAL POINTS
-                for i in range(2):
-                    # LOCAL EXTREMUM
-                    axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=magneticaxiscolor, edgecolor=Black, s = 100, linewidths = 1.5,zorder=5)
-                    # SADDLE POINT
-                    axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=saddlepointcolor, edgecolor=Black, s = 100, linewidths = 1.5,zorder=5)
-                plt.suptitle("Iteration n = "+str(self.it))
-                plt.show(block=False)
-                plt.pause(0.8)
-            else:
-                fig, axs = plt.subplots(1, 3, figsize=(15,6))
-                axs[0].set_aspect('equal')
-                axs[1].set_aspect('equal')
-                axs[2].set_aspect('equal')
-                # LEFT PLOT: PSI at iteration N+1 WITHOUT NORMALISATION (SOLUTION OBTAINED BY SOLVING CUTFEM SYSTEM)
-                subplotfield(self,axs[0],self.PSI[:,0],normalised=False)
-                axs[0].set_title('PSI')
-                # CENTER PLOT: NORMALISED PSI at iteration N+1
-                subplotfield(self,axs[1],self.PSI_NORMstar[:,1])
-                axs[1].set_title('PSI_NORMstar')
-                axs[1].yaxis.set_visible(False)
-                # RIGHT PLOT: RELAXED SOLUTION
-                subplotfield(self,axs[2],self.PSI_NORMstar[:,1])
-                axs[2].set_title('PSI_NORM')
-                axs[2].yaxis.set_visible(False)
-                
-                ## PLOT LOCATION OF CRITICAL POINTS
-                for i in range(2):
-                    # LOCAL EXTREMUM
-                    axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=magneticaxiscolor, edgecolor=Black, s = 100, linewidths = 1.5,zorder=5)
-                    # SADDLE POINT
-                    axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=saddlepointcolor, edgecolor=Black, s = 100, linewidths = 1.5,zorder=5)
-                plt.suptitle("Iteration n = "+str(self.it))
-                plt.show(block=False)
-                plt.pause(0.8)
+            fig, axs = plt.subplots(1, 2, figsize=(11,6))
+            axs[0].set_aspect('equal')
+            axs[1].set_aspect('equal')
+            # LEFT PLOT: PSI at iteration N+1 WITHOUT NORMALISATION (SOLUTION OBTAINED BY SOLVING CUTFEM SYSTEM)
+            subplotfield(self,axs[0],self.PSI[:,0],normalised=False)
+            axs[0].set_title('PSI')
+            # RIGHT PLOT: NORMALISED PSI at iteration N+1
+            subplotfield(self,axs[1],self.PSI_NORM[:,1])
+            axs[1].set_title('PSI_NORM')
+            axs[1].yaxis.set_visible(False)
+            ## PLOT LOCATION OF CRITICAL POINTS
+            for i in range(2):
+                # LOCAL EXTREMUM
+                axs[i].scatter(self.Xcrit[1,0,0],self.Xcrit[1,0,1],marker = 'X',facecolor=magneticaxiscolor, edgecolor=Black, s = 100, linewidths = 1.5,zorder=5)
+                # SADDLE POINT
+                axs[i].scatter(self.Xcrit[1,1,0],self.Xcrit[1,1,1],marker = 'X',facecolor=saddlepointcolor, edgecolor=Black, s = 100, linewidths = 1.5,zorder=5)
+            plt.suptitle("Iteration n = "+str(self.it))
+            plt.show(block=False)
+            plt.pause(0.8)
                 
         else:  # ITERATION SOLUTION FOR ANALYTICAL PLASMA CURRENT CASES (PLOT PSI)
             fig, axs = plt.subplots(1, 1, figsize=(5,6))

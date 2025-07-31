@@ -305,10 +305,10 @@ class EquilipyOutput:
                     self.file_proparams.write("    KAPPA_PHI0 = {:f}\n".format(self.initialPHI.kappa))
                     self.file_proparams.write("    DELTA_PHI0 = {:f}\n".format(self.initialPHI.delta))
                 case self.initialPHI.CUBIC_HAMILTONIAN:
-                    self.file_proparams.write("    Xsaddle_PHI0 = {:f} {:f}\n".format(self.initialPHI.Xsaddle[0], self.initialPHI.Xsaddle[1]))
-                    self.file_proparams.write("    Xright_PHI0 = {:f} {:f}\n".format(self.initialPHI.Xright[0], self.initialPHI.Xright[1]))
-                    self.file_proparams.write("    Xleft_PHI0 = {:f} {:f}\n".format(self.initialPHI.Xleft[0], self.initialPHI.Xleft[1]))
-                    self.file_proparams.write("    Xtop_PHI0 = {:f} {:f}\n".format(self.initialPHI.Xtop[0], self.initialPHI.Xtop[1]))
+                    self.file_proparams.write("    Xsaddle_PHI0 = {:f} {:f}\n".format(self.initialPHI.X_SADDLE[0], self.initialPHI.X_SADDLE[1]))
+                    self.file_proparams.write("    Xright_PHI0 = {:f} {:f}\n".format(self.initialPHI.X_RIGHT[0], self.initialPHI.X_RIGHT[1]))
+                    self.file_proparams.write("    Xleft_PHI0 = {:f} {:f}\n".format(self.initialPHI.X_LEFT[0], self.initialPHI.X_LEFT[1]))
+                    self.file_proparams.write("    Xtop_PHI0 = {:f} {:f}\n".format(self.initialPHI.X_TOP[0], self.initialPHI.X_TOP[1]))
             self.file_proparams.write('END_INITIAL_PLASMA_BOUNDARY_PARAMETERS\n')
             self.file_proparams.write('\n')
             
@@ -321,10 +321,10 @@ class EquilipyOutput:
                     self.file_proparams.write("    KAPPA_PSI0 = {:f}\n".format(self.initialPSI.kappa))
                     self.file_proparams.write("    DELTA_PSI0 = {:f}\n".format(self.initialPSI.delta))
                 case self.initialPSI.CUBIC_HAMILTONIAN:
-                    self.file_proparams.write("    Xsaddle_PSI0 = {:f} {:f}\n".format(self.initialPSI.Xsaddle[0], self.initialPSI.Xsaddle[1]))
-                    self.file_proparams.write("    Xright_PSI0 = {:f} {:f}\n".format(self.initialPSI.Xright[0], self.initialPSI.Xright[1]))
-                    self.file_proparams.write("    Xleft_PSI0 = {:f} {:f}\n".format(self.initialPSI.Xleft[0], self.initialPSI.Xleft[1]))
-                    self.file_proparams.write("    Xtop_PSI0 = {:f} {:f}\n".format(self.initialPSI.Xtop[0], self.initialPSI.Xtop[1]))
+                    self.file_proparams.write("    Xsaddle_PSI0 = {:f} {:f}\n".format(self.initialPSI.X_SADDLE[0], self.initialPSI.X_SADDLE[1]))
+                    self.file_proparams.write("    Xright_PSI0 = {:f} {:f}\n".format(self.initialPSI.X_RIGHT[0], self.initialPSI.X_RIGHT[1]))
+                    self.file_proparams.write("    Xleft_PSI0 = {:f} {:f}\n".format(self.initialPSI.X_LEFT[0], self.initialPSI.X_LEFT[1]))
+                    self.file_proparams.write("    Xtop_PSI0 = {:f} {:f}\n".format(self.initialPSI.X_TOP[0], self.initialPSI.X_TOP[1]))
             self.file_proparams.write('END_INITIAL_PSI_GUESS_PARAMETERS\n')
             self.file_proparams.write('\n')
     
@@ -333,7 +333,7 @@ class EquilipyOutput:
             self.file_proparams.write("    MODEL = {:d}\n".format(self.PlasmaCurrent.CURRENT_MODEL))
             self.file_proparams.write("    DIMENSIONLESS = {0}\n".format(self.PlasmaCurrent.DIMENSIONLESS))
             self.file_proparams.write("    PSI_INDEPENDENT = {0}\n".format(self.PlasmaCurrent.PSI_INDEPENDENT))
-            self.file_proparams.write("    TOTAL_CURRENT = {:d}\n".format(self.PlasmaCurrent.TOTAL_CURRENT))
+            self.file_proparams.write("    TOTAL_CURRENT = {:f}\n".format(self.PlasmaCurrent.TOTAL_CURRENT))
             match self.PlasmaCurrent.CURRENT_MODEL:
                 case self.PlasmaCurrent.LINEAR_CURRENT:
                     self.file_proparams.write("    R0_CURRENT = {:f}\n".format(self.PlasmaCurrent.R0))
