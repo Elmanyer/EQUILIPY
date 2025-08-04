@@ -275,7 +275,9 @@ class EquilipyOutput:
                         if type(magnet) == type(RectangularMultiCoil):
                             self.file_proparams.write('\n')
                             self.file_proparams.write("         NAME = {}\n".format(magnet.name))
-                            self.file_proparams.write("         X = {:f} {:f}\n".format(magnet.X[0], magnet.X[1]))
+                            for ivertex in range(magnet.numedges):
+                                self.file_proparams.write("         X{:d} = {:f} {:f}\n".format(ivertex+1,magnet.Xe[ivertex,0], magnet.Xe[ivertex,1]))
+                            self.file_proparams.write("         n = {:f}\n".format(magnet.n))
                             self.file_proparams.write("         I = {:f}\n".format(magnet.I))
                     self.file_proparams.write('\n')
                     self.file_proparams.write('    END_EXTERNAL_RECTANGULAR_MUTICOILS\n'.format(ncoils))
@@ -371,6 +373,7 @@ class EquilipyOutput:
             self.file_proparams.write("    INT_TOL = {:e}\n".format(self.int_tol))
             self.file_proparams.write("    SADDLE_TOL = {:e}\n".format(self.tol_saddle))
             self.file_proparams.write("    BETA = {:f}\n".format(self.beta))
+            self.file_proparams.write("    GHOST_STABILIZATION = {0}\n".format(self.GhostStabilization))
             self.file_proparams.write("    ZETA = {:f}\n".format(self.zeta))
             self.file_proparams.write("    R0_axis = {:f}\n".format(self.R0_axis))
             self.file_proparams.write("    Z0_axis = {:f}\n".format(self.Z0_axis))

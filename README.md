@@ -161,7 +161,7 @@ For instance, the following lines initiate the plasma boundary level-set functio
     $ X_TOP = np.array([5.9, 3.7])           # POINT ON TOP
     $ 
     $ Equilibrium.initialPHI = InitialPlasmaBoundary(EQUILIBRIUM = Equilibrium,
-    $                                                GEOMETRY = 'cubicHam',
+    $                                                GEOMETRY = 'CUBICHAM',
     $                                                Xsaddle = X_SADDLE,  # ACTIVE SADDLE POINT        
     $                                                Xright = X_RIGHT,    # POINT ON RIGHT
     $                                                Xleft = X_LEFT,      # POINT ON LEFT
@@ -187,7 +187,7 @@ Similarly to the previous section, in the following example the initial guess is
     $ X0 = list()
     $ X0.append(np.array([6.0,0.0],dtype=float))
     $ Equilibrium.initialPSI = InitialGuess(EQUILIBRIUM = Equilibrium,
-    $                                       PSI_GUESS = 'cubicHam',
+    $                                       PSI_GUESS = 'CUBICHAM',
     $                                       NORMALISE = True,
     $                                       Xsaddle = X_SADDLE,  # ACTIVE SADDLE POINT        
     $                                       Xright = X_RIGHT,    # POINT ON RIGHT

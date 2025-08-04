@@ -780,15 +780,15 @@ class GradShafranovSolver(EquilipyInitialisation,
                 ################ END INTERNAL LOOP ####################
                 #######################################################
                 
-            #self.ComputeTotalPlasmaCurrentNormalization()
-            print('COMPUTE COMPUTATIONAL BOUNDARY VALUES PSI_B...', end="")
-            self.PSI_B[:,1] = self.ComputeBoundaryPSI()     # COMPUTE COMPUTATIONAL BOUNDARY VALUES PSI_B WITH INTERNALLY CONVERGED PSI_NORM
-            self.writePSI_B()                               #       -> WRITE NEW BOUNDARY CONDITIONS PSI_B
-            print('Done!')
+            if not self.FIXED_BOUNDARY:
+                print('COMPUTE COMPUTATIONAL BOUNDARY VALUES PSI_B...', end="")
+                self.PSI_B[:,1] = self.ComputeBoundaryPSI()     # COMPUTE COMPUTATIONAL BOUNDARY VALUES PSI_B WITH INTERNALLY CONVERGED PSI_NORM
+                self.writePSI_B()                               #       -> WRITE NEW BOUNDARY CONDITIONS PSI_B
+                print('Done!')
             
-            print('UPDATE COMPUTATIONAL DOMAIN BOUNDARY VALUES...', end="")
-            self.UpdateElementalPSI_B()                     # UPDATE BOUNDARY CONDITIONS PSI_B ON BOUNDARY ELEMENTS
-            print('Done!')
+                print('UPDATE COMPUTATIONAL DOMAIN BOUNDARY VALUES...', end="")
+                self.UpdateElementalPSI_B()                     # UPDATE BOUNDARY CONDITIONS PSI_B ON BOUNDARY ELEMENTS
+                print('Done!')
             
             self.CheckConvergence('PSI_B')                  # CHECK CONVERGENCE OF COMPUTATIONAL BOUNDARY PSI VALUES  (PSI_B)
             self.writeresidu("EXTERNAL")                    # WRITE EXTERNAL LOOP RESIDU 

@@ -58,7 +58,7 @@ class InitialGuess:
             EQUILIBRIUM : object
                 Equilibrium problem proxy with mesh and geometry data.
             PSI_GUESS : str
-                Name of initial guess model ('LINEAR', 'ZHENG', 'NONLINEAR', 'cubicHam', 'FOCUS', 'OTHER').
+                Name of initial guess model ('LINEAR', 'ZHENG', 'NONLINEAR', 'CUBICHAM', 'FOCUS', 'OTHER').
             NORMALISE : bool, optional
                 If True, normalizes Ψ to standard range.
             NOISE : bool, optional
@@ -135,7 +135,7 @@ class InitialGuess:
                 else:
                     self.PSI0fun = partial(PSIanalyticalNONLINEAR, R0=self.R0, coeffs=self.coeffs)
                     
-            case 'cubicHam':
+            case 'CUBICHAM':
                 # GEOMETRY PARAMETERS
                 self.INITIAL_GUESS = self.CUBIC_HAMILTONIAN
                 self.X_SADDLE = kwargs['Xsaddle']          # ACTIVE SADDLE POINT

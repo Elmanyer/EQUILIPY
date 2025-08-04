@@ -7,7 +7,7 @@ import _plot as eqplot
 
 class Mesh:
     
-    def __init__(self,mesh_name):
+    def __init__(self,mesh_name,readfiles=True):
         
         """
         Mesh object constructor.
@@ -19,7 +19,8 @@ class Mesh:
         self.name = mesh_name
         self.directory = path_to_folder
         
-        print('Mesh folder: ' + path_to_folder)
+        if readfiles:
+            print('Mesh folder: ' + path_to_folder)
         
         # INITIALISE ATTRIBUTES
         self.ElTypeALYA = None              # TYPE OF ELEMENTS CONSTITUTING THE MESH, USING ALYA NOTATION
@@ -67,10 +68,11 @@ class Mesh:
         self.GhostElems = None              # LIST OF ELEMENTS CONTAINING PLASMA BOUNDARY FACES
         
         # READ MESH FILES
-        print("READ MESH FILES...", end="")
-        self.ReadMeshFile()
-        self.ReadFixFile()
-        print('Done!')
+        if readfiles:
+            print("READ MESH FILES...", end="")
+            self.ReadMeshFile()
+            self.ReadFixFile()
+            print('Done!')
         return
     
     

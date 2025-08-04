@@ -54,11 +54,11 @@ class InitialPlasmaBoundary:
             - GEOMETRY (str): Identifier string specifying the geometry model:
                 * 'LINEAR' — Analytic linear model with elongation and triangularity.
                 * 'ZHENG' — Parametrization from Zheng's analytic solution.
-                * 'cubicHam' — EUROfusion Hamiltonian-based parametrization.
+                * 'CUBICHAM' — EUROfusion Hamiltonian-based parametrization.
                 * 'OTHER' — User-specified level-set function via keyword argument.
             - kwargs: Additional parameters required by the specific geometry model:
                 * For 'LINEAR' and 'ZHENG': R0, epsilon, kappa, delta
-                * For 'cubicHam': Xsaddle, Xleft, Xright, Xtop
+                * For 'CUBICHAM': Xsaddle, Xleft, Xright, Xtop
                 * For 'OTHER': PHI0 (callable level-set function)
 
         Sets:
@@ -108,7 +108,7 @@ class InitialPlasmaBoundary:
                 # GEOMETRY LEVEL-SET FUNCTION
                 self.PHI0fun = self.PHIzheng
                 
-            case 'cubicHam':
+            case 'CUBICHAM':
                 # GEOMETRY PARAMETERS
                 self.INITIAL_GEOMETRY = self.CUBIC_HAMILTONIAN
                 self.X_SADDLE = kwargs['Xsaddle']          # ACTIVE SADDLE POINT

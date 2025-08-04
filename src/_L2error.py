@@ -110,9 +110,9 @@ class EquilipyL2error:
                     for ig in range(SUBELEM.ng):
                         ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
                         PSIexactL2norm += self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True)**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]                  
-                                       
-        self.ErrorL2norm = np.sqrt(ErrorL2norm)
+        
         self.RelErrorL2norm = np.sqrt(ErrorL2norm/PSIexactL2norm)
+        self.ErrorL2norm = np.sqrt(ErrorL2norm)
         return
     
     
