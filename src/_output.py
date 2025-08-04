@@ -657,12 +657,24 @@ class EquilipyOutput:
     def writeerror(self):
         self.file_PSIerror = open(self.outputdir+'/PSIerror.dat', 'w')
         self.file_PSIerror.write('PSI_ERROR_FILE\n')
+        
+        self.file_PSIerror.write('PSI_EXACT_FIELD\n')
+        for inode in range(self.MESH.Nn):
+            self.file_PSIerror.write("{:d} {:e}\n".format(inode+1,self.PSIexact[inode])) 
+        self.file_PSIerror.write('END_PSI_EXACT_FIELD\n')
+        
         self.file_PSIerror.write('PSI_ERROR_FIELD\n')
         for inode in range(self.MESH.Nn):
             self.file_PSIerror.write("{:d} {:e}\n".format(inode+1,self.PSIerror[inode])) 
         self.file_PSIerror.write('END_PSI_ERROR_FIELD\n')
         
+        self.file_PSIerror.write('PSI_RELATIVE_ERROR_FIELD\n')
+        for inode in range(self.MESH.Nn):
+            self.file_PSIerror.write("{:d} {:e}\n".format(inode+1,self.PSIrelerror[inode])) 
+        self.file_PSIerror.write('END_PSI_RELATIVE_ERROR_FIELD\n')
+        
         self.file_PSIerror.write("EUCLIDEAN_ERROR = {:e}\n".format(self.ErrorEuclinorm))
+        self.file_PSIerror.write("RelEUCLIDEAN_ERROR = {:e}\n".format(self.RelErrorEuclinorm))
         self.file_PSIerror.write("L2ERROR = {:e}\n".format(self.ErrorL2norm))
         self.file_PSIerror.write("RelL2ERROR = {:e}\n".format(self.RelErrorL2norm))
         self.file_PSIerror.write('END_PSI_ERROR_FILE\n')
