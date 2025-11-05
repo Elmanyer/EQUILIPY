@@ -1453,8 +1453,8 @@ class Element:
         axs[0].set_ylim([Etamin,Etamax])
         axs[0].set_xlim([Ximin,Ximax])
         # PLOT ELEMENT EDGES
-        for iedge in range(self.nedge):
-            axs[0].plot([XIe[iedge,0],XIe[int((iedge+1)%self.nedge),0]],[XIe[iedge,1],XIe[int((iedge+1)%self.nedge),1]], color='k', linewidth=3)
+        for iedge in range(self.numedges):
+            axs[0].plot([XIe[iedge,0],XIe[int((iedge+1)%self.numedges),0]],[XIe[iedge,1],XIe[int((iedge+1)%self.numedges),1]], color='k', linewidth=3)
         # PLOT NODES WITH NEGATIVE OR POSITIVE LEVEL-SET VALUES
         for inode in range(len(XIe[:,0])):
             if self.LSe[inode] < 0:
@@ -1476,11 +1476,11 @@ class Element:
         etatext = [0.05,0.05,-0.05]
         for isub, SUBELEM in enumerate(self.SubElements):
             # PLOT SUBELEMENT EDGES
-            for iedge in range(SUBELEM.nedge):
+            for iedge in range(SUBELEM.numedges):
                 inode = iedge
-                jnode = int((iedge+1)%SUBELEM.nedge)
+                jnode = int((iedge+1)%SUBELEM.numedges)
                 if iedge == SUBELEM.interfedge:
-                    inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
+                    inodeHO = SUBELEM.numedges+(SUBELEM.ElOrder-1)*inode
                     xcoords = [SUBELEM.XIe[inode,0],SUBELEM.XIe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),0],SUBELEM.XIe[jnode,0]]
                     xcoords = list(chain.from_iterable([x] if not isinstance(x, np.ndarray) else x for x in xcoords))
                     ycoords = [SUBELEM.XIe[inode,1],SUBELEM.XIe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),1],SUBELEM.XIe[jnode,1]]
@@ -1508,15 +1508,15 @@ class Element:
             else:
                 Xepoly = np.zeros([3+SUBELEM.ElOrder-1,2])
                 ipoint = 0
-                for iedge in range(SUBELEM.nedge):
+                for iedge in range(SUBELEM.numedges):
                     inode = iedge
-                    jnode = int((iedge+1)%SUBELEM.nedge)
+                    jnode = int((iedge+1)%SUBELEM.numedges)
                     if iedge == 0:
                         Xepoly[ipoint,:] = SUBELEM.XIe[inode,:]
                         Xepoly[ipoint+1,:] = SUBELEM.XIe[jnode,:]
                         ipoint += 2
                     elif iedge == SUBELEM.interfedge:
-                        inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
+                        inodeHO = SUBELEM.numedges+(SUBELEM.ElOrder-1)*inode
                         Xepoly[ipoint:ipoint+(SUBELEM.ElOrder-1),:] = SUBELEM.XIe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),:]
                         ipoint += SUBELEM.ElOrder-1
                     else:
@@ -1591,14 +1591,14 @@ class Element:
         
         colorlist = ['orange','gold','grey','cyan']
 
-        if self.interfedge == -1:
+        if type(self.SubElements) == type(None):
             fig, axs = plt.subplots(1, 1, figsize=(5,5))
             #### LEFT PLOT: PHYSICAL ELEMENT
             axs.set_ylim([Zmin,Zmax])
             axs.set_xlim([Rmin,Rmax])
             # PLOT ELEMENT EDGES
-            for iedge in range(self.nedge):
-                axs.plot([self.Xe[iedge,0],self.Xe[int((iedge+1)%self.nedge),0]],[self.Xe[iedge,1],self.Xe[int((iedge+1)%self.nedge),1]], color='k', linewidth=2)
+            for iedge in range(self.numedges):
+                axs.plot([self.Xe[iedge,0],self.Xe[int((iedge+1)%self.numedges),0]],[self.Xe[iedge,1],self.Xe[int((iedge+1)%self.numedges),1]], color='k', linewidth=2)
             # PLOT NODES WITH NEGATIVE OR POSITIVE LEVEL-SET VALUES
             for inode in range(self.n):
                 if self.LSe[inode] < 0:
@@ -1641,8 +1641,8 @@ class Element:
             axs[0].set_ylim([Zmin,Zmax])
             axs[0].set_xlim([Rmin,Rmax])
             # PLOT ELEMENT EDGES
-            for iedge in range(self.nedge):
-                axs[0].plot([self.Xe[iedge,0],self.Xe[int((iedge+1)%self.nedge),0]],[self.Xe[iedge,1],self.Xe[int((iedge+1)%self.nedge),1]], color='k', linewidth=2)
+            for iedge in range(self.numedges):
+                axs[0].plot([self.Xe[iedge,0],self.Xe[int((iedge+1)%self.numedges),0]],[self.Xe[iedge,1],self.Xe[int((iedge+1)%self.numedges),1]], color='k', linewidth=2)
             # PLOT NODES WITH NEGATIVE OR POSITIVE LEVEL-SET VALUES
             for inode in range(self.n):
                 if self.LSe[inode] < 0:
@@ -1664,11 +1664,11 @@ class Element:
             ytext = [-0.25,0.08,-0.25]
             for isub, SUBELEM in enumerate(self.SubElements):
                 # PLOT SUBELEMENT EDGES
-                for iedge in range(SUBELEM.nedge):
+                for iedge in range(SUBELEM.numedges):
                     inode = iedge
-                    jnode = int((iedge+1)%SUBELEM.nedge)
-                    if iedge == self.interfedge[isub]:
-                        inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
+                    jnode = int((iedge+1)%SUBELEM.numedges)
+                    if iedge == SUBELEM.interfedge:
+                        inodeHO = SUBELEM.numedges+(SUBELEM.ElOrder-1)*inode
                         xcoords = [SUBELEM.Xe[inode,0],SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),0],SUBELEM.Xe[jnode,0]]
                         xcoords = list(chain.from_iterable([x] if not isinstance(x, np.ndarray) else x for x in xcoords))
                         ycoords = [SUBELEM.Xe[inode,1],SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),1],SUBELEM.Xe[jnode,1]]

@@ -251,8 +251,7 @@ class GradShafranovSolver(EquilipyInitialisation,
             # IDENTIFY ELEMENTS MESH RELATION   
             print("     -> IDENTIFY ELEMENTS MESH RELATION...", end="")
             self.MESH.IdentifyBoundaries()
-            if self.GhostStabilization:
-                self.MESH.IdentifyNearestNeighbors()
+            self.MESH.IdentifyNearestNeighbors()
             print("Done!")
             
             # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR ALL ELEMENTS 
@@ -505,7 +504,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                 LHSe, RHSe = ELEMENT.PrescribeDirichletBC(LHSe,RHSe)
             
             if self.out_elemsys:
-                self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index,ELEMENT.Dom))
+                self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index+1,ELEMENT.Dom))
                 self.file_elemsys.write('elmat\n')
                 for irow in range(ELEMENT.n):
                     values = " ".join("{:.6e}".format(val) for val in LHSe[irow,:])
@@ -553,7 +552,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                     LHSe, RHSe = ELEMENT.PrescribeDirichletBC(LHSe,RHSe)
                 
                 if self.out_elemsys:
-                    self.file_elemsys.write("elem {:d} {:d} subelem {:d} {:d}\n".format(ELEMENT.index,ELEMENT.Dom,SUBELEM.index,SUBELEM.Dom))
+                    self.file_elemsys.write("elem {:d} {:d} subelem {:d} {:d}\n".format(ELEMENT.index+1,ELEMENT.Dom,SUBELEM.index+1,SUBELEM.Dom))
                     self.file_elemsys.write('elmat\n')
                     for irow in range(ELEMENT.n):
                         values = " ".join("{:.6e}".format(val) for val in LHSe[irow,:])
@@ -588,7 +587,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                 LHSe, RHSe = ELEMENT.PrescribeDirichletBC(LHSe,RHSe)
                 
             if self.out_elemsys:
-                self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index,ELEMENT.Dom))
+                self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index+1,ELEMENT.Dom))
                 self.file_elemsys.write('elmat\n')
                 for irow in range(ELEMENT.n):
                     values = " ".join("{:.6e}".format(val) for val in LHSe[irow,:])

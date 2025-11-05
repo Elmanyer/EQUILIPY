@@ -574,10 +574,6 @@ class EquilipyOutput:
             for ielem in self.MESH.NonCutElems:
                 ELEM = self.MESH.Elements[ielem]
                 self.file_quadratures.write("elem {:d}\n".format(ELEM.index+1))
-                self.file_quadratures.write("Xe\n")
-                for inode in range(ELEM.n):
-                    values = " ".join(str(val) for val in ELEM.Xe[inode,:])
-                    self.file_quadratures.write("{}\n".format(values))
                 self.file_quadratures.write("Xg\n")
                 for igaus in range(ELEM.ng):
                     values = " ".join(str(val) for val in ELEM.Xg[igaus,:])
@@ -587,6 +583,55 @@ class EquilipyOutput:
                 self.file_quadratures.write("{}\n".format(values))
                 
             self.file_quadratures.write("END_NON_CUT_ELEMENTS\n")
+            
+            self.file_quadratures.write("CUT_ELEMENTS_SURFACE\n")
+            for ielem in self.MESH.PlasmaBoundElems:
+                ELEM = self.MESH.Elements[ielem]
+                for SUBELEM in ELEM.SubElements:
+                    self.file_quadratures.write("elem {:d} {:d} subelem {:d} {:d}\n".format(ELEM.index+1,ELEM.Dom,SUBELEM.index+1,SUBELEM.Dom))
+                    self.file_quadratures.write("Xe\n")
+                    for inode in range(SUBELEM.n):
+                        values = " ".join(str(val) for val in SUBELEM.Xe[inode,:])
+                        self.file_quadratures.write("{}\n".format(values))
+                    self.file_quadratures.write("XIe\n")
+                    for inode in range(SUBELEM.n):
+                        values = " ".join(str(val) for val in SUBELEM.XIe[inode,:])
+                        self.file_quadratures.write("{}\n".format(values))
+                    self.file_quadratures.write("XIg\n")
+                    for igaus in range(SUBELEM.ng):
+                        values = " ".join(str(val) for val in SUBELEM.XIg[igaus,:])
+                        self.file_quadratures.write("{}\n".format(values))
+                    self.file_quadratures.write("Xg\n")
+                    for igaus in range(SUBELEM.ng):
+                        values = " ".join(str(val) for val in SUBELEM.Xg[igaus,:])
+                        self.file_quadratures.write("{}\n".format(values))
+                    self.file_quadratures.write("detJg\n")
+                    values = " ".join(str(val) for val in SUBELEM.detJg)
+                    self.file_quadratures.write("{}\n".format(values))
+                
+            self.file_quadratures.write("END_CUT_ELEMENTS_SURFACE\n")
+            
+            self.file_quadratures.write("CUT_ELEMENTS_INTERFACE\n")
+            for ielem in self.MESH.PlasmaBoundElems:
+                ELEM = self.MESH.Elements[ielem]
+                self.file_quadratures.write("elem {:d} {:d}\n".format(ELEM.index+1,ELEM.Dom))
+                self.file_quadratures.write("Xint\n")
+                for inode in range(ELEM.InterfApprox.n):
+                    values = " ".join(str(val) for val in ELEM.InterfApprox.Xint[inode,:])
+                    self.file_quadratures.write("{}\n".format(values))
+                self.file_quadratures.write("PSIg\n")
+                values = " ".join(str(val) for val in ELEM.InterfApprox.PSIg)
+                self.file_quadratures.write("{}\n".format(values))
+                self.file_quadratures.write("Xgint\n")
+                for igaus in range(ELEM.InterfApprox.ng):
+                    values = " ".join(str(val) for val in ELEM.InterfApprox.Xg[igaus,:])
+                    self.file_quadratures.write("{}\n".format(values))
+                self.file_quadratures.write("detJg1D\n")
+                values = " ".join(str(val) for val in ELEM.InterfApprox.detJg1D)
+                self.file_quadratures.write("{}\n".format(values))
+            
+            self.file_quadratures.write("END_CUT_ELEMENTS_INTERFACE\n")
+            
             if not self.FIXED_BOUNDARY: 
                 self.file_quadratures.write("END_ITERATION\n")
         return
