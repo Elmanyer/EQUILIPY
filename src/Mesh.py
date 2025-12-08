@@ -651,7 +651,7 @@ class Mesh:
         for ielem in self.PlasmaBoundElems:
             ELEMENT = self.Elements[ielem]
             for iedge, neighbour in enumerate(ELEMENT.neighbours):
-                if neighbour >= 0:
+                if neighbour >= 0 and self.Elements[neighbour].Dom < 1:
                     # IDENTIFY THE CORRESPONDING FACE IN THE NEIGHBOUR ELEMENT
                     NEIGHBOUR = self.Elements[neighbour]
                     neighbour_edge = list(NEIGHBOUR.neighbours).index(ELEMENT.index)
@@ -879,8 +879,8 @@ class Mesh:
         # PLOT PLASMA REGION ELEMENTS
         for ELEMENT in self.Elements:
             Xe = np.zeros([ELEMENT.numedges+1,2])
-            Xe[:-1,:] = ELEMENT.Xe[:self.numedges,:]
-            Xe[-1,:] = ELEMENT.Xe[0,:]
+            Xe[:-1,:] = self.X[ELEMENT.Te[:self.numedges],:]
+            Xe[-1,:] = self.X[ELEMENT.Te[0],:]
             ax.plot(Xe[:,0], Xe[:,1], color=eqplot.Black, linewidth=1)
             ax.fill(Xe[:,0], Xe[:,1], color = ELEMENT.Color())
            
@@ -899,4 +899,43 @@ class Mesh:
         return
     
     
+
+    def PlotActiveMesh(self, PlasmaLS = None, GHOSTFACES=False, **kwargs):
+        fig, ax = plt.subplots(1, 1, figsize=(5,6))
+        ax.set_aspect('equal')
+        ax.set_xlabel('R (in m)')
+        ax.set_ylabel('Z (in m)')
+        ax.set_title("Classified mesh elements")
+        if not kwargs:
+            ax.set_xlim(self.Rmin-eqplot.padx,self.Rmax+eqplot.padx)
+            ax.set_ylim(self.Zmin-eqplot.pady,self.Zmax+eqplot.pady)
+        else: 
+            ax.set_ylim(kwargs['zmin'],kwargs['zmax'])
+            ax.set_xlim(kwargs['rmin'],kwargs['rmax'])
+
+        # PLOT PLASMA REGION ELEMENTS
+        for ELEMENT in self.Elements:
+            if ELEMENT.Dom < 1:
+                color = eqplot.activemeshcolor
+            else:
+                color = eqplot.backmeshcolor
+            Xe = np.zeros([ELEMENT.numedges+1,2])
+            Xe[:-1,:] = self.X[ELEMENT.Te[:self.numedges],:]
+            Xe[-1,:] = self.X[ELEMENT.Te[0],:]
+            ax.plot(Xe[:,0], Xe[:,1], color=eqplot.Black, linewidth=1)
+            ax.fill(Xe[:,0], Xe[:,1], color = color)
+
+        # PLOT PLASMA BOUNDARY  
+        if type(PlasmaLS) != type(None):
+            ax.tricontour(self.X[:,0],self.X[:,1], PlasmaLS, levels=[0], 
+                        colors = eqplot.plasmabouncolor,
+                        linewidths = eqplot.plasmabounlinewidth)
+                
+        # PLOT GHOSTFACES 
+        if GHOSTFACES:
+            for ghostface in self.GhostFaces:
+                ax.plot(self.X[ghostface[0][:2],0],self.X[ghostface[0][:2],1],
+                         linewidth=2,
+                         color=eqplot.ghostfacescolor)
+        return
     

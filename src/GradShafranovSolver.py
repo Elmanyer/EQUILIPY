@@ -395,13 +395,12 @@ class GradShafranovSolver(EquilipyInitialisation,
             
             # COMPUTE ADEQUATE GHOST PENALTY TERM
             penalty = self.zeta*max(ELEMENT0.length,ELEMENT1.length)  #**(1-2*self.MESH.ElOrder)
-            #penalty = self.zeta
             
             # LOOP OVER GAUSS INTEGRATION NODES
             for ig in range(FACE0.ng):  
                 # SHAPE FUNCTIONS NORMAL GRADIENT IN PHYSICAL SPACE
-                n_dot_Ngrad0 = FACE0.NormalVec@FACE0.invJg[ig,:,:]@np.array([FACE0.dNdxig[ig,:],FACE0.dNdetag[ig,:]])
-                n_dot_Ngrad1 = FACE1.NormalVec@FACE1.invJg[ig,:,:]@np.array([FACE1.dNdxig[ig,:],FACE1.dNdetag[ig,:]])
+                n_dot_Ngrad0 = FACE0.NormalVec @ FACE0.invJg[ig,:,:] @ np.array([FACE0.dNdxig[ig,:], FACE0.dNdetag[ig,:]])
+                n_dot_Ngrad1 = FACE1.NormalVec @ FACE1.invJg[ig,:,:] @ np.array([FACE1.dNdxig[ig,:], FACE1.dNdetag[ig,:]])
                 n_dot_Ngrad = np.concatenate((n_dot_Ngrad0,n_dot_Ngrad1), axis=0)
                     
                 # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM    
@@ -411,7 +410,8 @@ class GradShafranovSolver(EquilipyInitialisation,
                         LHSe[i,j] += penalty*n_dot_Ngrad[i]*n_dot_Ngrad[j] * FACE0.detJg1D[ig] * FACE0.Wg[ig]
                         ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
                         #LHSe[i,j] += penalty*FACE0.Ng[ig,i]*FACE0.Ng[ig,j] * FACE0.detJg1D[ig] * FACE0.Wg[ig] 
-                        
+
+            """
             # PRESCRIBE BC
             if not type(ELEMENT0.Teboun) == type(None) or not type(ELEMENT1.Teboun) == type(None):
                 if not type(ELEMENT0.Teboun) == type(None) and type(ELEMENT1.Teboun) == type(None):
@@ -439,7 +439,8 @@ class GradShafranovSolver(EquilipyInitialisation,
                     else:
                         LHSe[ibounode,ibounode] = 1
                         RHSe[ibounode] = PSI_Bghost[ibounode]
-                                                     
+            """                                   
+
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
             Tghost = np.concatenate((ELEMENT0.Te,ELEMENT1.Te), axis=0)
             for i in range(ELEMENT0.n+ELEMENT1.n):   # ROWS ELEMENTAL MATRIX

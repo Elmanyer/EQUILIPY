@@ -11,7 +11,7 @@ Equilibrium = GradShafranovSolver()
 ## DECLARE SWITCHS:
 ##### GHOST PENALTY STABILISATION
 Equilibrium.FIXED_BOUNDARY = True
-Equilibrium.GhostStabilization = True
+Equilibrium.GhostStabilization = False
 Equilibrium.PARALLEL = False
 
 ##### OUTPUT PLOTS IN RUNTIME

@@ -69,7 +69,9 @@ phicmap = 'viridis'
 
 currentcmap = 'viridis'
 
-ghostfacescolor = Blue
+backmeshcolor = Grey
+activemeshcolor = Yellow
+ghostfacescolor = 'magenta'
 
 class EquilipyPlotting:
     
