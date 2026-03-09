@@ -1035,7 +1035,7 @@ class Element:
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
         XIg1Dstand, self.InterfApprox.Wg, self.InterfApprox.ng = GaussQuadrature(0,NumQuadOrder1D)
         #### QUADRATURE TO INTEGRATE LINES (1D)
-        N1D, dNdxi1D, foo = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder)
+        N1D, dNdxi1D = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder)
                 
         # MAP 1D REFERENCE STANDARD GAUSS INTEGRATION NODES ON THE REFERENCE INTERFACE ->> ADAPTED 1D QUADRATURE FOR INTERFACE
         self.InterfApprox.XIg = N1D @ self.InterfApprox.XIint
@@ -1049,7 +1049,7 @@ class Element:
         self.InterfApprox.detJg1D = np.zeros([self.InterfApprox.ng])
         for ig in range(self.InterfApprox.ng):
             self.InterfApprox.invJg[ig,:,:], self.InterfApprox.detJg[ig] = Jacobian(self.Xe,self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:])
-            self.InterfApprox.detJg1D[ig] = Jacobian1D(self.InterfApprox.Xint,dNdxi1D[ig,:])
+            self.InterfApprox.detJg1D[ig] = Jacobian1D(self.InterfApprox.Xint,dNdxi1D[0,ig,:])
             self.InterfApprox.detJg[ig] = abs(self.InterfApprox.detJg[ig])
             
         # CHECK NUMERICAL QUADRATURE
@@ -1131,10 +1131,10 @@ class Element:
             
         return
     
-    
+
     def ComputeGhostFacesQuadratures(self,NumQuadOrder1D):
         """
-        Computes adapted 1D Gaussian quadratures for numerical integration over elemental ghost faces.
+        Computes 1D Gaussian quadratures for numerical integration over elemental ghost faces.
 
         Input:
             - NumQuadOrder1D (int): Order of the 1D Gaussian quadrature to use.
@@ -1143,7 +1143,7 @@ class Element:
             - ng : Number of quadrature points.
             - Wg : Quadrature weights.
             - XIg : Quadrature points in reference space.
-            - Ng, dNdxig, dNdetag : Shape functions and derivatives at quadrature points.
+            - Ng, dNdxig, dNdetag: Shape functions and derivatives at quadrature points.
             - Xg : Quadrature points mapped to physical space.
             - invJg : Inverse Jacobian matrices at quadrature points.
             - detJg : Determinants of Jacobian matrices at quadrature points.
@@ -1559,11 +1559,11 @@ class Element:
         # OBTAIN 1D STANDARD GAUSS QUADRATURE
         XIg1Dstand, foo, foo = GaussQuadrature(0,self.InterfApprox.ng)
         # EVALUATE SUBELEMENTAL REFERENCE SHAPE FUNCTIONS 
-        foo, dNdxi1D, foo = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder)
+        foo, dNdxi1D = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder)
         # COMPUTE 1D MAPPING DETERMINANT 
         detJg1D = np.zeros([self.InterfApprox.ng])
         for ig in range(self.InterfApprox.ng):
-            detJg1D[ig] = Jacobian1D(self.InterfApprox.XIint,dNdxi1D[ig,:])
+            detJg1D[ig] = Jacobian1D(self.InterfApprox.XIint,dNdxi1D[0,ig,:])
         
         integral = 0
         for ig in range(self.InterfApprox.ng):

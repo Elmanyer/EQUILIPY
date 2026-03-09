@@ -23,7 +23,7 @@
 
 import numpy as np
 
-def ShapeFunctionsReference(X, elemType, elemOrder, node):
+def ShapeFunctionsReference(X, elemType, elemOrder, node, deriv=1):
     """ 
     Nodal shape function in reference element, for element type and order elemType and elemOrder respectively, evaluated at point X.
     
@@ -32,6 +32,7 @@ def ShapeFunctionsReference(X, elemType, elemOrder, node):
         - elemType: 0=line, 1=tri, 2=quad
         - elemOrder: order of element
         - node: local nodal index 
+        - deriv: order of derivative to evaluate (default=1, only first derivatives are implemented)
     
     Output: 
         - N: nodal shape function evaluated at X
@@ -49,47 +50,85 @@ def ShapeFunctionsReference(X, elemType, elemOrder, node):
             match elemOrder:
                 case 0:
                     # --1--
-                    match node:
-                        case 1:
-                            N = 1
-                            dNdxi = 0
+                    N = 1
                 case 1:
                     # 1---2
                     match node:
                         case 1:
                             N = (1-xi)/2
-                            dNdxi = -1/2
+                            if deriv >= 1:
+                                dNdxi = -1/2
                         case 2:
                             N = (1+xi)/2
-                            dNdxi = 1/2       
+                            if deriv >= 1:
+                                dNdxi = 1/2 
                 case 2:         
                     # 1---3---2
                     match node:
                         case 1:
                             N = -xi*(1-xi)/2
-                            dNdxi = xi-0.5
-                        case 2:
+                            if deriv >= 1:
+                                dNdxi = xi - 0.5
+                            if deriv >= 2:
+                                d2Ndxi2 = 1.0
+                        case 2: 
                             N = xi*(xi+1)/2
-                            dNdxi = xi+0.5
-                        case 3:
-                            N = 1-xi**2
-                            dNdxi = -2*xi
+                            if deriv >= 1:
+                                dNdxi = xi + 0.5
+                            if deriv >= 2:
+                                d2Ndxi2 = 1.0
+                        case 3: 
+                            N = 1 - xi**2
+                            if deriv >= 1:
+                                dNdxi = -2*xi
+                            if deriv >= 2:
+                                d2Ndxi2 = -2.0
                 case 3:         
                     # 1-3-4-2
                     match node:
                         case 1:
                             N = -9/16*(xi+1/3)*(xi-1/3)*(xi-1)
-                            dNdxi = -9/16*((xi-1/3)*(xi-1)+(xi+1/3)*(xi-1)+(xi+1/3)*(xi-1/3))
+                            if deriv >= 1:
+                                dNdxi = -9/16*((xi-1/3)*(xi-1)+(xi+1/3)*(xi-1)+(xi+1/3)*(xi-1/3))
+                            if deriv >= 2:
+                                d2Ndxi2 = -9/16 * (6*xi - 2)
+                            if deriv >= 3:
+                                d3Ndxi3 = -27/8
                         case 2:
                             N =  9/16*(xi+1)*(xi+1/3)*(xi-1/3)
-                            dNdxi = 9/16*((xi+1/3)*(xi-1/3)+(xi+1)*(xi-1/3)+(xi+1)*(xi+1/3))
+                            if deriv >= 1:
+                                dNdxi = 9/16*((xi+1/3)*(xi-1/3)+(xi+1)*(xi-1/3)+(xi+1)*(xi+1/3))
+                            if deriv >= 2:
+                                d2Ndxi2 = 9/16 * (6*xi + 2)
+                            if deriv >= 3:
+                                d3Ndxi3 = 27/8   
                         case 3:
                             N = 27/16*(xi+1)*(xi-1/3)*(xi-1)
-                            dNdxi = 27/16*((xi-1/3)*(xi-1)+ (xi+1)*(xi-1)+ (xi+1)*(xi-1/3))
+                            if deriv >= 1:
+                                dNdxi = 27/16*((xi-1/3)*(xi-1)+ (xi+1)*(xi-1)+ (xi+1)*(xi-1/3))
+                            if deriv >= 2:
+                                d2Ndxi2 = 27/16 * (6*xi - 2/3)
+                            if deriv >= 3:
+                                d3Ndxi3 = 81/8   
                         case 4:
                             N = -27/16*(xi+1)*(xi+1/3)*(xi-1)
-                            dNdxi = -27/16*((xi+1/3)*(xi-1)+(xi+1)*(xi-1)+(xi+1)*(xi+1/3))
-    
+                            if deriv >= 1:
+                                dNdxi = -27/16*((xi+1/3)*(xi-1)+(xi+1)*(xi-1)+(xi+1)*(xi+1/3))
+                            if deriv >= 2:
+                                d2Ndxi2 = -27/16 * (6*xi + 2/3)
+                            if deriv >= 3:
+                                d3Ndxi3 = -81/8  
+
+            match deriv:
+                case 0:
+                    return N
+                case 1:
+                    return N, dNdxi
+                case 2:
+                    return N, dNdxi, d2Ndxi2
+                case 3:
+                    return N, dNdxi, d2Ndxi2, d3Ndxi3
+
         case 1:   # TRIANGLE
             xi = X[0]
             eta = X[1]
@@ -102,16 +141,19 @@ def ShapeFunctionsReference(X, elemType, elemOrder, node):
                     match node:
                         case 1:
                             N = xi
-                            dNdxi = 1
-                            dNdeta = 0
+                            if deriv >= 1:
+                                dNdxi = 1
+                                dNdeta = 0
                         case 2:
                             N = eta
-                            dNdxi = 0
-                            dNdeta = 1
+                            if deriv >= 1:
+                                dNdxi = 0
+                                dNdeta = 1
                         case 3:
                             N = 1-(xi+eta)
-                            dNdxi = -1
-                            dNdeta = -1
+                            if deriv >= 1:
+                                dNdxi = -1
+                                dNdeta = -1
                 case 2:
                     # 2
                     # |\
@@ -121,28 +163,46 @@ def ShapeFunctionsReference(X, elemType, elemOrder, node):
                     match node:
                         case 1:
                             N = xi*(2*xi-1)
-                            dNdxi = 4*xi-1
-                            dNdeta = 0
+                            if deriv >= 1:
+                                dNdxi = 4*xi-1
+                                dNdeta = 0
+                            if deriv >= 2:
+                                Hess = np.array([[4.0, 0.0], [0.0, 0.0]])
                         case 2:
                             N = eta*(2*eta-1)
-                            dNdxi = 0
-                            dNdeta = 4*eta-1
+                            if deriv >= 1:
+                                dNdxi = 0
+                                dNdeta = 4*eta-1
+                            if deriv >= 2:
+                                Hess = np.array([[0.0, 0.0], [0.0, 4.0]])
                         case 3:
                             N = (1-2*(xi+eta))*(1-(xi+eta))
-                            dNdxi = -3+4*(xi+eta)
-                            dNdeta = -3+4*(xi+eta)
+                            if deriv >= 1:
+                                dNdxi = -3+4*(xi+eta)
+                                dNdeta = -3+4*(xi+eta)
+                            if deriv >= 2:
+                                Hess = np.array([[-4.0, -4.0], [-4.0, -4.0]])
                         case 4:
                             N = 4*xi*eta
-                            dNdxi = 4*eta
-                            dNdeta = 4*xi
+                            if deriv >= 1:
+                                dNdxi = 4*eta
+                                dNdeta = 4*xi
+                            if deriv >= 2:
+                                Hess = np.array([[0.0, 4.0], [4.0, 0.0]])
                         case 5:
                             N = 4*eta*(1-(xi+eta))
-                            dNdxi = -4*eta
-                            dNdeta = 4*(1-xi-2*eta)
+                            if deriv >= 1:
+                                dNdxi = -4*eta
+                                dNdeta = 4*(1-xi-2*eta)
+                            if deriv >= 2:
+                                Hess = np.array([[0.0, -4.0], [-4.0, -8.0]])
                         case 6:
                             N = 4*xi*(1-(xi+eta))
-                            dNdxi = 4*(1-2*xi-eta)
-                            dNdeta = -4*xi
+                            if deriv >= 1:
+                                dNdxi = 4*(1-2*xi-eta)
+                                dNdeta = -4*xi
+                            if deriv >= 2:
+                                Hess = np.array([[-8.0, -4.0], [-4.0, 0.0]])
                 case 3:
                     #  2
                     # | \
@@ -154,45 +214,105 @@ def ShapeFunctionsReference(X, elemType, elemOrder, node):
                     match node:
                         case 1:
                             N = (9/2)*(1/3-xi)*(2/3-xi)*xi
-                            dNdxi = -(9/2)*((2/3-xi)*xi+(1/3-xi)*xi-(1/3-xi)*(2/3-xi))
-                            dNdeta = 0
-                        case 2:
+                            if deriv >= 1:
+                                dNdxi = -(9/2)*((2/3-xi)*xi+(1/3-xi)*xi-(1/3-xi)*(2/3-xi))
+                                dNdeta = 0
+                            if deriv >= 2:
+                                Hess = np.array([[27*xi - 9, 0], [0, 0]])
+                            if deriv >= 3:
+                                J3 = np.array([[[27, 0], [0, 0]], [[0, 0], [0,0]]])
+                        case 2: 
                             N = (9/2)*(1/3-eta)*(2/3-eta)*eta 
-                            dNdxi = 0
-                            dNdeta = -(9/2)*((2/3-eta)*eta+(1/3-eta)*eta-(1/3-eta)*(2/3-eta))
-                        case 3:
+                            if deriv >= 1:
+                                dNdxi = 0
+                                dNdeta = -(9/2)*((2/3-eta)*eta+(1/3-eta)*eta-(1/3-eta)*(2/3-eta))
+                            if deriv >= 2:
+                                Hess = np.array([[0, 0], [0, 27*eta - 9]])
+                            if deriv >= 3:
+                                J3 = np.array([[[0, 0], [0, 0]], [[0, 0], [0, 27]]])
+                        case 3: 
                             N = (9/2)*(1-xi-eta)*(2/3-xi-eta)*(1/3-xi-eta)  
-                            dNdxi = -(9/2)*((1-xi-eta)*(2/3-xi-eta)+(1-xi-eta)*(1/3-xi-eta)+(2/3-xi-eta)*(1/3-xi-eta))
-                            dNdeta = -(9/2)*((1-xi-eta)*(2/3-xi-eta)+(1-xi-eta)*(1/3-xi-eta)+(2/3-xi-eta)*(1/3-xi-eta))
-                        case 4:
+                            if deriv >= 1:
+                                dNdxi = -(9/2)*((1-xi-eta)*(2/3-xi-eta)+(1-xi-eta)*(1/3-xi-eta)+(2/3-xi-eta)*(1/3-xi-eta))
+                                dNdeta = -(9/2)*((1-xi-eta)*(2/3-xi-eta)+(1-xi-eta)*(1/3-xi-eta)+(2/3-xi-eta)*(1/3-xi-eta))
+                            if deriv >= 2:
+                                val = 27*(1 - xi - eta) - 9 
+                                Hess = np.array([[val, val], [val, val]])
+                            if deriv >= 3:
+                                    J3 = np.full((2, 2, 2), -27.0)
+                        case 4: 
                             N = -3*(9/2)*(1/3-xi)*xi*eta
-                            dNdxi = -3*(9/2)*((1/3-xi)*eta-xi*eta)
-                            dNdeta = -3*(9/2)*((1/3-xi)*xi)
-                        case 5:
+                            if deriv >= 1:
+                                dNdxi = -3*(9/2)*((1/3-xi)*eta-xi*eta)
+                                dNdeta = -3*(9/2)*((1/3-xi)*xi)
+                            if deriv >= 2:
+                                Hess = np.array([[27*eta, 27*xi - 4.5], [27*xi - 4.5, 0]])
+                            if deriv >= 3:
+                                    # d3N/dxi2deta = 27, others 0
+                                    J3 = np.zeros((2,2,2))
+                                    J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = 27
+                        case 5: 
                             N = -3*(9/2)*xi*(1/3-eta)*eta 
-                            dNdxi = -3*(9/2)*((1/3-eta)*eta)
-                            dNdeta = -3*(9/2)*((1/3-eta)*xi-xi*eta)
-                        case 6:
+                            if deriv >= 1:
+                                dNdxi = -3*(9/2)*((1/3-eta)*eta)
+                                dNdeta = -3*(9/2)*((1/3-eta)*xi-xi*eta)
+                            if deriv >= 2:
+                                    Hess = np.array([[0, 27*eta - 4.5], [27*eta - 4.5, 27*xi]])
+                            if deriv >= 3:
+                                # d3N/dxi deta2 = 27
+                                J3 = np.zeros((2,2,2))
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = 27
+                        case 6: 
                             N = -3*(9/2)*(1-xi-eta)*(1/3-eta)*eta
-                            dNdxi = 3*(9/2)*((1/3-eta)*eta)
-                            dNdeta = -3*(9/2)*(-(1/3-eta)*eta-(1-xi-eta)*eta+(1-xi-eta)*(1/3-eta))
-                        case 7:
+                            if deriv >= 1:
+                                dNdxi = 3*(9/2)*((1/3-eta)*eta)
+                                dNdeta = -3*(9/2)*(-(1/3-eta)*eta-(1-xi-eta)*eta+(1-xi-eta)*(1/3-eta))
+                            if deriv >= 2:
+                                Hess = np.array([[0, -27*eta + 4.5], [-27*eta + 4.5, 54*eta - 27*(1-xi-eta) - 9]])
+                            if deriv >= 3:
+                                    J3 = np.zeros((2,2,2))
+                                    J3[1,1,1], J3[1,1,0], J3[1,0,1], J3[0,1,1] = 81, -27, -27, -27
+                        case 7: 
                             N = 3*(9/2)*(1-xi-eta)*(2/3-xi-eta)*eta
-                            dNdxi = 3*(9/2)*(-(1-xi-eta)*eta-(2/3-xi-eta)*eta)
-                            dNdeta = 3*(9/2)*(-(1-xi-eta)*eta-(2/3-xi-eta)*eta+(1-xi-eta)*(2/3-xi-eta))
-                        case 8:
+                            if deriv >= 1:
+                                dNdxi = 3*(9/2)*(-(1-xi-eta)*eta-(2/3-xi-eta)*eta)
+                                dNdeta = 3*(9/2)*(-(1-xi-eta)*eta-(2/3-xi-eta)*eta+(1-xi-eta)*(2/3-xi-eta))
+                            if deriv >= 2:
+                                Hess = np.array([[27*eta, 27*(1-xi-eta) + 27*eta - 4.5], [27*(1-xi-eta) + 27*eta - 4.5, 54*eta - 54*(1-xi-eta) + 9]])
+                            if deriv >= 3:
+                                J3 = np.array([[ [0, -27], [-27, 54] ], [ [-27, 54], [54, -81] ]])
+                        case 8: 
                             N = 3*(9/2)*(1-xi-eta)*(2/3-xi-eta)*xi 
-                            dNdxi = 3*(9/2)*((1-xi-eta)*(2/3-xi-eta)-(1-xi-eta)*xi-(2/3-xi-eta)*xi)
-                            dNdeta = 3*(9/2)*(-(1-xi-eta)*xi-(2/3-xi-eta)*xi)
-                        case 9:
+                            if deriv >= 1:
+                                dNdxi = 3*(9/2)*((1-xi-eta)*(2/3-xi-eta)-(1-xi-eta)*xi-(2/3-xi-eta)*xi)
+                                dNdeta = 3*(9/2)*(-(1-xi-eta)*xi-(2/3-xi-eta)*xi)
+                            if deriv >= 2:
+                                Hess = np.array([[54*xi - 54*(1-xi-eta) + 9, 27*xi + 27*(1-xi-eta) - 4.5], [27*xi + 27*(1-xi-eta) - 4.5, 27*xi]])
+                            if deriv >= 3:
+                                J3 = np.array([[ [-81, 54], [54, -27] ], [ [54, -27], [-27, 0] ]])
+                        case 9: 
                             N = -3*(9/2)*(1-xi-eta)*(1/3-xi)*xi 
-                            dNdxi = -3*(9/2)*((1-xi-eta)*(1/3-xi)-(1-xi-eta)*xi-(1/3-xi)*xi)
-                            dNdeta = -3*(9/2)*(-(1/3-xi)*xi)
-                        case 10:
+                            if deriv >= 1:
+                                dNdxi = -3*(9/2)*((1-xi-eta)*(1/3-xi)-(1-xi-eta)*xi-(1/3-xi)*xi)
+                                dNdeta = -3*(9/2)*(-(1/3-xi)*xi)
+                            if deriv >= 2:
+                                Hess = np.array([[27*(1-xi-eta) - 54*xi + 9, -27*xi + 4.5], [-27*xi + 4.5, 0]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0], J3[0,0,1], J3[0,1,0], J3[1,0,0] = 81, -27, -27, -27
+                        case 10: 
                             N = 6*(9/2)*(1-xi-eta)*xi*eta
-                            dNdxi = 6*(9/2)*((1-xi-eta)*eta-xi*eta)
-                            dNdeta = 6*(9/2)*((1-xi-eta)*xi-xi*eta)
-                            
+                            if deriv >= 1:
+                                dNdxi = 6*(9/2)*((1-xi-eta)*eta-xi*eta)
+                                dNdeta = 6*(9/2)*((1-xi-eta)*xi-xi*eta)
+                            if deriv >= 2:
+                                Hess = np.array([[-54*eta, 27*((1-xi-eta) - xi - eta)], [27*((1-xi-eta) - xi - eta), -54*xi]])
+                            if deriv >= 3:
+                                # Pure derivatives are zero, cross derivatives are -54
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -54
+                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = -54
+
         case 2:    # QUADRILATERAL
             xi = X[0]
             eta = X[1]
@@ -205,20 +325,24 @@ def ShapeFunctionsReference(X, elemType, elemOrder, node):
                     match node:
                         case 1:
                             N = (1-xi)*(1-eta)/4
-                            dNdxi = (eta-1)/4
-                            dNdeta = (xi-1)/4
+                            if deriv >= 1:
+                                dNdxi = (eta-1)/4
+                                dNdeta = (xi-1)/4
                         case 2:
                             N = (1+xi)*(1-eta)/4
-                            dNdxi = (1-eta)/4
-                            dNdeta = -(1+xi)/4
+                            if deriv >= 1:
+                                dNdxi = (1-eta)/4
+                                dNdeta = -(1+xi)/4
                         case 3:
                             N = (1+xi)*(1+eta)/4
-                            dNdxi = (1+eta)/4
-                            dNdeta = (1+xi)/4
+                            if deriv >= 1:
+                                dNdxi = (1+eta)/4
+                                dNdeta = (1+xi)/4
                         case 4:
                             N = (1-xi)*(1+eta)/4
-                            dNdxi = -(1+eta)/4
-                            dNdeta = (1-xi)/4
+                            if deriv >= 1:
+                                dNdxi = -(1+eta)/4
+                                dNdeta = (1-xi)/4
                 case 2:
                     # 4---7---3
                     # |       |
@@ -228,40 +352,68 @@ def ShapeFunctionsReference(X, elemType, elemOrder, node):
                     match node: 
                         case 1:
                             N = xi*(xi-1)*eta*(eta-1)/4
-                            dNdxi = (xi-1/2)*eta*(eta-1)/2
-                            dNdeta = xi*(xi-1)*(eta-1/2)/2
+                            if deriv >= 1:
+                                dNdxi = (xi-1/2)*eta*(eta-1)/2
+                                dNdeta = xi*(xi-1)*(eta-1/2)/2
+                            if deriv >= 2:
+                                Hess = np.array([[eta*(eta-1)/2, (xi-1/2)*(eta-1/2)], [(xi-1/2)*(eta-1/2), xi*(xi-1)/2]])
                         case 2:
                             N = xi*(xi+1)*eta*(eta-1)/4
-                            dNdxi = (xi+1/2)*eta*(eta-1)/2
-                            dNdeta = xi*(xi+1)*(eta-1/2)/2
+                            if deriv >= 1:
+                                dNdxi = (xi+1/2)*eta*(eta-1)/2
+                                dNdeta = xi*(xi+1)*(eta-1/2)/2
+                            if deriv >= 2:
+                                Hess = np.array([[eta*(eta-1)/2, (xi+1/2)*(eta-1/2)], [(xi+1/2)*(eta-1/2), xi*(xi+1)/2]])
                         case 3:
                             N = xi*(xi+1)*eta*(eta+1)/4
-                            dNdxi = (xi+1/2)*eta*(eta+1)/2
-                            dNdeta = xi*(xi+1)*(eta+1/2)/2
+                            if deriv >= 1:
+                                dNdxi = (xi+1/2)*eta*(eta+1)/2
+                                dNdeta = xi*(xi+1)*(eta+1/2)/2
+                            if deriv >= 2:
+                                Hess = np.array([[eta*(eta+1)/2, (xi+1/2)*(eta+1/2)], [(xi+1/2)*(eta+1/2), xi*(xi+1)/2]])
                         case 4:
                             N = xi*(xi-1)*eta*(eta+1)/4
-                            dNdxi = (xi-1/2)*eta*(eta+1)/2
-                            dNdeta = xi*(xi-1)*(eta+1/2)/2
+                            if deriv >= 1:
+                                dNdxi = (xi-1/2)*eta*(eta+1)/2
+                                dNdeta = xi*(xi-1)*(eta+1/2)/2
+                            if deriv >= 2:
+                                Hess = np.array([[eta*(eta+1)/2, (xi-1/2)*(eta+1/2)], [(xi-1/2)*(eta+1/2), xi*(xi-1)/2]])
                         case 5:
                             N = (1-xi**2)*eta*(eta-1)/2
-                            dNdxi = -xi*eta*(eta-1)
-                            dNdeta = (1-xi**2)*(eta-1/2)
+                            if deriv >= 1:
+                                dNdxi = -xi*eta*(eta-1)
+                                dNdeta = (1-xi**2)*(eta-1/2)
+                            if deriv >= 2:
+                                Hess = np.array([[-eta*(eta-1), -2*xi*eta + xi], [-2*xi*eta + xi, 1-xi**2]])
                         case 6:
                             N = xi*(xi+1)*(1-eta**2)/2
-                            dNdxi = (xi+1/2)*(1-eta**2)
-                            dNdeta = xi*(xi+1)*(-eta)
+                            if deriv >= 1:
+                                dNdxi = (xi+1/2)*(1-eta**2)
+                                dNdeta = xi*(xi+1)*(-eta)
+                            if deriv >= 2:
+                                # Calculating the Hessian for the quadratic terms
+                                Hess = np.array([[1 - eta**2,    -2*xi*eta - eta], [-2*xi*eta - eta,   -xi**2 - xi]])
                         case 7:
                             N = (1-xi**2)*eta*(eta+1)/2
-                            dNdxi = -xi*eta*(eta+1)
-                            dNdeta = (1-xi**2)*(eta+1/2)
+                            if deriv >= 1:
+                                dNdxi = -xi*eta*(eta+1)
+                                dNdeta = (1-xi**2)*(eta+1/2)
+                            if deriv >= 2:
+                                Hess = np.array([[-eta*(eta+1), -2*xi*eta - xi], [-2*xi*eta - xi, 1-xi**2]])
                         case 8:
                             N = xi*(xi-1)*(1-eta**2)/2
-                            dNdxi = (xi-1/2)*(1-eta**2)
-                            dNdeta = xi*(xi-1)*(-eta)
+                            if deriv >= 1:
+                                dNdxi = (xi-1/2)*(1-eta**2)
+                                dNdeta = xi*(xi-1)*(-eta)
+                            if deriv >= 2:
+                                Hess = np.array([[1 - eta**2,    -2*xi*eta - eta], [-2*xi*eta - eta,   -xi**2 - xi]])
                         case 9:
                             N = (1-xi**2)*(1-eta**2)
-                            dNdxi = -2*xi*(1-eta**2)
-                            dNdeta = (1-xi**2)*(-2*eta)
+                            if deriv >= 1:
+                                dNdxi = -2*xi*(1-eta**2)
+                                dNdeta = (1-xi**2)*(-2*eta)
+                            if deriv >= 2:
+                                Hess = np.array([[-2*(1-eta**2), -2*xi*(-2*eta)], [-2*xi*(-2*eta), -2*(1-xi**2)]])
                 case 3:
                     # 4---10--9---3
                     # |           |
@@ -283,71 +435,294 @@ def ShapeFunctionsReference(X, elemType, elemOrder, node):
                     match node:
                         case 1:
                             N = a*s2*s3*s4*t2*t3*t4
-                            dNdxi = a*t2*t3*t4*(-s2*s3-s2*s4+s3*s4)
-                            dNdeta = a*s2*s3*s4*(-t2*t3-t2*t4+t3*t4)
+                            if deriv >= 1:
+                                dNdxi = a*t2*t3*t4*(-s2*s3-s2*s4+s3*s4)
+                                dNdeta = a*s2*s3*s4*(-t2*t3-t2*t4+t3*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[a*t2*t3*t4*(-s2 - s3 - s4), a*(-s2*s3-s2*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4)], 
+                                                    [a*(-s2*s3-s2*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4), a*s2*s3*s4*(-t2 - t3 - t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = a*t2*t3*t4*(-s2 - s3 - s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = a*(-s2*s3-s2*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4)
+                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = a*s2*s3*s4*(-t2 - t3 - t4)
                         case 2:
                             N = a*s1*s2*s3*t2*t3*t4
-                            dNdxi = a*t2*t3*t4*(-s1*s2+s1*s3+s2*s3)
-                            dNdeta = a*s1*s2*s3*(-t2*t3-t2*t4+t3*t4)
+                            if deriv >= 1:
+                                dNdxi = a*t2*t3*t4*(-s1*s2+s1*s3+s2*s3)
+                                dNdeta = a*s1*s2*s3*(-t2*t3-t2*t4+t3*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[a*t2*t3*t4*(-s1 - s2 - s3), a*(-s1*s2-s1*s3+s2*s3)*(-t2*t3-t2*t4+t3*t4)], 
+                                                     [a*(-s1*s2-s1*s3+s2*s3)*(-t2*t3-t2*t4+t3*t4), a*s1*s2*s3*(-t2 - t3 - t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = a*t2*t3*t4*(-s1 - s2 - s3)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = a*(-s1*s2-s1*s3+s2*s3)*(-t2*t3-t2*t4+t3*t4)
+                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = a*s1*s2*s3*(-t2 - t3 - t4)
+
                         case 3:
                             N = a*s1*s2*s3*t1*t2*t3
-                            dNdxi = a*t1*t2*t3*(-s1*s2+s1*s3+s2*s3)
-                            dNdeta = a*s1*s2*s3*(-t1*t2+t1*t3+t2*t3)
+                            if deriv >= 1:
+                                dNdxi = a*t1*t2*t3*(-s1*s2+s1*s3+s2*s3)
+                                dNdeta = a*s1*s2*s3*(-t1*t2+t1*t3+t2*t3)
+                            if deriv >= 2:
+                                Hess = np.array([[a*t1*t2*t3*(-s1 - s2 - s3), a*(-s1*s2-s1*s3+s2*s3)*(-t1*t2+t1*t3+t2*t3)],
+                                                     [a*(-s1*s2-s1*s3+s2*s3)*(-t1*t2+t1*t3+t2*t3), a*s1*s2*s3*(-t1 - t2 - t3)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = a*t1*t2*t3*(-s1 - s2 - s3)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = a*(-s1*s2-s1*s3+s2*s3)*(-t1*t2+t1*t3+t2*t3)
+                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = a*s1*s2*s3*(-t1 - t2 - t3)
                         case 4:
                             N = a*s2*s3*s4*t1*t2*t3
-                            dNdxi = a*t1*t2*t3*(-s2*s3-s2*s4+s3*s4)
-                            dNdeta = a*s2*s3*s4*(-t1*t2+t1*t3+t2*t3)
+                            if deriv >= 1:
+                                dNdxi = a*t1*t2*t3*(-s2*s3-s2*s4+s3*s4)
+                                dNdeta = a*s2*s3*s4*(-t1*t2+t1*t3+t2*t3)
+                            if deriv >= 2:
+                                Hess = np.array([[a*t1*t2*t3*(-s2 - s3 - s4), a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3)],
+                                                     [a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3), a*s2*s3*s4*(-t1 - t2 - t3)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = a*t1*t2*t3*(-s2 - s3 - s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3)
+                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = a*s2*s3*s4*(-t1 - t2 - t3)
                         case 5:
                             N = -3.0*a*s1*s3*s4*t2*t3*t4 
-                            dNdxi = -3.0*a*t2*t3*t4*(-s1*s3-s1*s4+s3*s4)
-                            dNdeta = -3.0*a *s1*s3*s4*(-t2*t3-t2*t4+t3*t4)
+                            if deriv >= 1:
+                                dNdxi = -3.0*a*t2*t3*t4*(-s1*s3-s1*s4+s3*s4)
+                                dNdeta = -3.0*a *s1*s3*s4*(-t2*t3-t2*t4+t3*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[-3.0*a*t2*t3*t4*(-s1 - s3 - s4), -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4)], 
+                                                     [-3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4), -3.0*a*s1*s3*s4*(-t2 - t3 - t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = -3.0*a*t2*t3*t4*(-s1 - s3 - s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4)
+                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = -3.0*a*s1*s3*s4*(-t2 - t3 - t4)
                         case 6:
                             N = -3.0*a*s1*s2*s4*t2*t3*t4
-                            dNdxi = -3.0*a*t2*t3*t4*(-s1*s2+s1*s4+s2*s4)
-                            dNdeta = -3.0*a *s1*s2*s4*(-t2*t3-t2*t4+t3*t4)
-                        case 7:
-                            N = -3.0*a*s1*s2*s3*t1*t3*t4
-                            dNdxi = -3.0*a*t1*t3*t4*(-s1*s2+s1*s3+s2*s3)
-                            dNdeta = -3.0*a *s1*s2*s3*(-t1*t3-t1*t4+t3*t4)
+                            if deriv >= 1:
+                                dNdxi = -3.0*a*t2*t3*t4*(-s1*s2+s1*s4+s2*s4)
+                                dNdeta = -3.0*a *s1*s2*s4*(-t2*t3-t2*t4+t3*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[-3.0*a*t2*t3*t4*(-s1 - s2 + s4), -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4)], 
+                                                    [-3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4), -3.0*a*s1*s2*s4*(-t2 - t3 - t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = -3.0*a*t2*t3*t4*(-s1 - s2 + s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s2*s4*(-t2 - t3 - t4)
                         case 8:
                             N = -3.0*a*s1*s2*s3*t1*t2*t4
-                            dNdxi = -3.0*a*t1*t2*t4*(-s1*s2+s1*s3+s2*s3)
-                            dNdeta = -3.0*a *s1*s2*s3*(-t1*t2+t1*t4+t2*t4)
+                            if deriv >= 1:
+                                dNdxi = -3.0*a*t1*t2*t4*(-s1*s2+s1*s3+s2*s3)
+                                dNdeta = -3.0*a *s1*s2*s3*(-t1*t2+t1*t4+t2*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[-3.0*a*t1*t2*t4*(-s1 - s2 + s3), -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t2+t1*t4+t2*t4)], 
+                                                     [-3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t2+t1*t4+t2*t4), -3.0*a*s1*s2*s3*(-t1 - t2 + t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = -3.0*a*t1*t2*t4*(-s1 - s2 + s3)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t2+t1*t4+t2*t4)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s2*s3*(-t1 - t2 + t4)
                         case 9:
                             N = -3.0*a*s1*s2*s4*t1*t2*t3  
-                            dNdxi = -3.0*a*t1*t2*t3*(-s1*s2+s1*s4+s2*s4)
-                            dNdeta = -3.0*a *s1*s2*s4*(-t1*t2+t1*t3+t2*t3)
+                            if deriv >= 1:
+                                dNdxi = -3.0*a*t1*t2*t3*(-s1*s2+s1*s4+s2*s4)
+                                dNdeta = -3.0*a *s1*s2*s4*(-t1*t2+t1*t3+t2*t3)
+                            if deriv >= 2:
+                                Hess = np.array([[-3.0*a*t1*t2*t3*(-s1 - s2 + s4), -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t1*t2+t1*t3+t2*t3)], 
+                                                     [-3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t1*t2+t1*t3+t2*t3), -3.0*a*s1*s2*s4*(-t1 - t2 + t3)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = -3.0*a*t1*t2*t3*(-s1 - s2 + s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t1*t2+t1*t3+t2*t3)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s2*s4*(-t1 - t2 + t3)
                         case 10:
                             N = -3.0*a*s1*s3*s4*t1*t2*t3 
-                            dNdxi = -3.0*a*t1*t2*t3*(-s1*s3-s1*s4+s3*s4)
-                            dNdeta = -3.0*a *s1*s3*s4*(-t1*t2+t1*t3+t2*t3)
+                            if deriv >= 1:
+                                dNdxi = -3.0*a*t1*t2*t3*(-s1*s3-s1*s4+s3*s4)
+                                dNdeta = -3.0*a *s1*s3*s4*(-t1*t2+t1*t3+t2*t3)
+                            if deriv >= 2:
+                                Hess = np.array([[-3.0*a*t1*t2*t3*(-s1 - s3 + s4), -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3)], 
+                                                     [-3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3), -3.0*a*s1*s3*s4*(-t1 - t2 + t3)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = -3.0*a*t1*t2*t3*(-s1 - s3 + s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s3*s4*(-t1 - t2 + t3)
                         case 11:
                             N = -3.0*a*s2*s3*s4*t1*t2*t4
-                            dNdxi = -3.0*a*t1*t2*t4*(-s2*s3-s2*s4+s3*s4)
-                            dNdeta = -3.0*a *s2*s3*s4*(-t1*t2+t1*t4+t2*t4)
+                            if deriv >= 1:
+                                dNdxi = -3.0*a*t1*t2*t4*(-s2*s3-s2*s4+s3*s4)
+                                dNdeta = -3.0*a *s2*s3*s4*(-t1*t2+t1*t4+t2*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[-3.0*a*t1*t2*t4*(-s2 - s3 + s4), -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t4+t2*t4)], 
+                                                     [-3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t4+t2*t4), -3.0*a*s2*s3*s4*(-t1 - t2 + t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = -3.0*a*t1*t2*t4*(-s2 - s3 + s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t4+t2*t4)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s2*s3*s4*(-t1 - t2 + t4)
                         case 12:
                             N = -3.0*a*s2*s3*s4*t1*t3*t4
-                            dNdxi = -3.0*a*t1*t3*t4*(-s2*s3-s2*s4+s3*s4)
-                            dNdeta = -3.0*a *s2*s3*s4*(-t1*t3-t1*t4+t3*t4)
+                            if deriv >= 1:
+                                dNdxi = -3.0*a*t1*t3*t4*(-s2*s3-s2*s4+s3*s4)
+                                dNdeta = -3.0*a *s2*s3*s4*(-t1*t3-t1*t4+t3*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[-3.0*a*t1*t3*t4*(-s2 - s3 + s4), -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4)], 
+                                                     [-3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4), -3.0*a*s2*s3*s4*(-t1 - t3 + t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = -3.0*a*t1*t3*t4*(-s2 - s3 + s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s2*s3*s4*(-t1 - t3 + t4)
                         case 13:
                             N = 9.0*a*s1*s3*s4*t1*t3*t4
-                            dNdxi = 9.0*a*t1*t3*t4*(-s1*s3-s1*s4+s3*s4)
-                            dNdeta = 9.0*a *s1*s3*s4*(-t1*t3-t1*t4+t3*t4)
+                            if deriv >= 1:
+                                dNdxi = 9.0*a*t1*t3*t4*(-s1*s3-s1*s4+s3*s4)
+                                dNdeta = 9.0*a *s1*s3*s4*(-t1*t3-t1*t4+t3*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[9.0*a*t1*t3*t4*(-s1 - s3 + s4), 9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4)], 
+                                                     [9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4), 9.0*a*s1*s3*s4*(-t1 - t3 + t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = 9.0*a*t1*t3*t4*(-s1 - s3 + s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = 9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = 9.0*a*s1*s3*s4*(-t1 - t3 + t4)
                         case 14:
                             N = 9.0*a*s1*s2*s4*t1*t3*t4
-                            dNdxi = 9.0*a*t1*t3*t4*(-s1*s2+s1*s4+s2*s4)
-                            dNdeta = 9.0*a *s1*s2*s4*(-t1*t3-t1*t4+t3*t4)
+                            if deriv >= 1:
+                                dNdxi = 9.0*a*t1*t3*t4*(-s1*s2+s1*s4+s2*s4)
+                                dNdeta = 9.0*a *s1*s2*s4*(-t1*t3-t1*t4+t3*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[9.0*a*t1*t3*t4*(-s1 - s2 + s4), 9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t3-t1*t4+t3*t4)], 
+                                                     [9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t3-t1*t4+t3*t4), 9.0*a*s1*s2*s4*(-t1 - t3 + t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = 9.0*a*t1*t3*t4*(-s1 - s2 + s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = 9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t3-t1*t4+t3*t4)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = 9.0*a*s1*s2*s4*(-t1 - t3 + t4)
                         case 15:
                             N = 9.0*a*s1*s2*s4*t1*t2*t4
-                            dNdxi = 9.0*a*t1*t2*t4*(-s1*s2+s1*s4+s2*s4)
-                            dNdeta = 9.0*a *s1*s2*s4*(-t1*t2+t1*t4+t2*t4)
+                            if deriv >= 1:
+                                dNdxi = 9.0*a*t1*t2*t4*(-s1*s2+s1*s4+s2*s4)
+                                dNdeta = 9.0*a *s1*s2*s4*(-t1*t2+t1*t4+t2*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[9.0*a*t1*t2*t4*(-s1 - s2 + s4), 9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t2-t1*t4+t2*t4)], 
+                                                     [9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t2-t1*t4+t2*t4), 9.0*a*s1*s2*s4*(-t1 - t2 + t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = 9.0*a*t1*t2*t4*(-s1 - s2 + s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = 9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t2-t1*t4+t2*t4)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = 9.0*a*s1*s2*s4*(-t1 - t2 + t4)
                         case 16:
                             N = 9.0*a*s1*s3*s4*t1*t2*t4
-                            dNdxi = 9.0*a*t1*t2*t4*(-s1*s3-s1*s4+s3*s4)
-                            dNdeta = 9.0*a *s1*s3*s4*(-t1*t2+t1*t4+t2*t4)
-    return N, dNdxi, dNdeta
+                            if deriv >= 1:
+                                dNdxi = 9.0*a*t1*t2*t4*(-s1*s3-s1*s4+s3*s4)
+                                dNdeta = 9.0*a *s1*s3*s4*(-t1*t2+t1*t4+t2*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[9.0*a*t1*t2*t4*(-s1 - s3 + s4), 9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2-t1*t4+t2*t4)], 
+                                                     [9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2-t1*t4+t2*t4), 9.0*a*s1*s3*s4*(-t1 - t2 + t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = 9.0*a*t1*t2*t4*(-s1 - s3 + s4)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = 9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2-t1*t4+t2*t4)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = 9.0*a*s1*s3*s4*(-t1 - t2 + t4)
+    match deriv:
+        case 0:
+            return N
+        case 1:
+            return N, (dNdxi, dNdeta)
+        case 2:
+            return N, (dNdxi, dNdeta), Hess
+        case 3:
+            return N, (dNdxi, dNdeta), Hess, J3
 
-def EvaluateReferenceShapeFunctions(X, elemType, elemOrder):
+
+def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
+    """ 
+    Evaluates nodal shape functions in the reference space for the selected element type and order at points defined by coordinates X
+    
+    Input: 
+        - X: coordinates of points on which to evaluate shape functions
+        - elemType: 0=line, 1=tri, 2=quad
+        - elemOrder: order of element
+        - deriv: 0=only shape functions, 1=shape functions and first derivatives, 2=shape functions, first and second derivatives, 3=shape functions, first, second and third derivatives
+
+    Output: 
+        - N: shape functions evaluated at points with coordinates X
+        - dNdxi: shape functions derivatives respect to xi evaluated at points with coordinates X
+        - dNdeta: shape functions derivatives respect to eta evaluated at points with coordinates X
+    """
+    
+    from Element import ElementalNumberOfNodes
+    ## NUMBER OF NODAL SHAPE FUNCTIONS
+    n, foo = ElementalNumberOfNodes(elemType, elemOrder)
+    ## NUMBER OF GAUSS INTEGRATION NODES
+    if elemType == 0:
+        ng = len(X)
+        N = np.zeros([ng,n])
+        match deriv:
+            case 0:
+                for i in range(n):
+                    for ig in range(ng):
+                        N[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
+                return N
+            case 1:
+                dNdxi = np.zeros([ng,n])
+                for i in range(n):
+                    for ig in range(ng):
+                        N[ig,i], dNdxi[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
+                return N, dNdxi
+            case 2:
+                dNdxi = np.zeros([ng,n])
+                dN2dxi2 = np.zeros([ng,n])
+                for i in range(n):
+                    for ig in range(ng):
+                        N[ig,i], dNdxi[ig,i], dN2dxi2[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
+                return N, dNdxi, dN2dxi2
+            case 3:
+                dNdxi = np.zeros([ng,n])
+                dN2dxi2 = np.zeros([ng,n])
+                dN3dxi3 = np.zeros([ng,n])
+                for i in range(n):
+                    for ig in range(ng):
+                        N[ig,i], dNdxi[ig,i], dN2dxi2[ig,i], dN3dxi3[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
+                return N, dNdxi, dN2dxi2, dN3dxi3
+    else:
+        ng = len(X[:,0])
+        N = np.zeros([ng,n])
+        match deriv:
+            case 0:
+                for i in range(n):
+                    for ig in range(ng):
+                        N[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
+                return N
+            case 1:
+                gradN = np.zeros([ng,n,2])
+                for i in range(n):
+                    for ig in range(ng):
+                        N[ig,i], gradN[ig,i,:] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
+                return N, gradN
+            case 2:
+                gradN = np.zeros([ng,n,2])
+                HessN = np.zeros([ng,n,2,2])
+                for i in range(n):
+                    for ig in range(ng):
+                        N[ig,i], gradN[ig,i,:], HessN[ig,i,:,:]  = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
+                return N, gradN, HessN
+            case 3:
+                gradN = np.zeros([ng,n,2])
+                HessN = np.zeros([ng,n,2,2])
+                J3N = np.zeros([ng,n,2,2,2])
+                for i in range(n):
+                    for ig in range(ng):
+                        N[ig,i], gradN[ig,i,:], HessN[ig,i,:,:], J3N[ig,i,:,:,:]  = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
+                return N, gradN, HessN, J3N
+
+
+def EvaluateReferenceShapeFunctions_old(X, elemType, elemOrder, deriv=1):
     """ 
     Evaluates nodal shape functions in the reference space for the selected element type and order at points defined by coordinates X
     

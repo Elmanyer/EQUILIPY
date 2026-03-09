@@ -394,7 +394,7 @@ class GradShafranovSolver(EquilipyInitialisation,
             RHSe = np.zeros([ELEMENT0.n+ELEMENT1.n])
             
             # COMPUTE ADEQUATE GHOST PENALTY TERM
-            penalty = self.zeta*max(ELEMENT0.length,ELEMENT1.length)  #**(1-2*self.MESH.ElOrder)
+            penalty = self.zeta*max(ELEMENT0.length,ELEMENT1.length)**(2*self.MESH.ElOrder + 1)
             
             # LOOP OVER GAUSS INTEGRATION NODES
             for ig in range(FACE0.ng):  

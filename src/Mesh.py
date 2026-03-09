@@ -682,11 +682,13 @@ class Mesh:
                 ELEM2.GhostFaces = list()
                 
             # ADD GHOST FACE TO ELEMENT 1
+            # Find local connectivities of ghost face nodes in element 1
             nodes1 = np.zeros([ELEM1.nedge],dtype=int)
             nodes1[0] = iedge1
             nodes1[1] = (iedge1+1)%ELEM1.numedges
             for knode in range(ELEM1.ElOrder-1):
                 nodes1[2+knode] = ELEM1.numedges + iedge1*(ELEM1.ElOrder-1)+knode
+            # Add ghost face to element 1
             ELEM1.GhostFaces.append(Segment(index = iedge1,
                                             ElOrder = ELEM1.ElOrder,
                                             Tseg = nodes1,
@@ -694,11 +696,13 @@ class Mesh:
                                             XIseg = XIe[nodes1,:]))
             
             # ADD GHOST FACE TO ELEMENT 2
+            # Find local connectivities of ghost face nodes in element 2
             nodes2 = np.zeros([ELEM2.nedge],dtype=int)
             nodes2[0] = iedge2
             nodes2[1] = (iedge2+1)%ELEM2.numedges
             for knode in range(ELEM2.ElOrder-1):
                 nodes2[2+knode] = ELEM2.numedges + iedge2*(ELEM2.ElOrder-1)+knode
+            # Add ghost face to element 2
             ELEM2.GhostFaces.append(Segment(index = iedge2,
                                             ElOrder = ELEM2.ElOrder,
                                             Tseg = nodes2,
