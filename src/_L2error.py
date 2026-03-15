@@ -177,23 +177,23 @@ class EquilipyL2error:
                 XIgplus = INTAPPROX.XIg[ig,:] + dn*INTAPPROX.NormalVecREF[ig]
                 XIgminus = INTAPPROX.XIg[ig,:] - dn*INTAPPROX.NormalVecREF[ig]
                 # EVALUATE GRADIENTS
-                Ngplus, dNdxigplus, dNdetagplus = EvaluateReferenceShapeFunctions(XIgplus.reshape((1,2)), ELEMENT.ElType, ELEMENT.ElOrder)
-                Ngminus, dNdxigminus, dNdetagminus = EvaluateReferenceShapeFunctions(XIgminus.reshape((1,2)), ELEMENT.ElType, ELEMENT.ElOrder)
+                Ngplus, gradNplus = EvaluateReferenceShapeFunctions(XIgplus.reshape((1,2)), ELEMENT.ElType, ELEMENT.ElOrder)
+                Ngminus, gradNminus = EvaluateReferenceShapeFunctions(XIgminus.reshape((1,2)), ELEMENT.ElType, ELEMENT.ElOrder)
                 # EVALUATE JACOBIAN
-                invJgplus, detJgplus = Jacobian(ELEMENT.Xe,dNdxigplus[0],dNdetagplus[0])
-                invJgminus, detJgminus = Jacobian(ELEMENT.Xe,dNdxigminus[0],dNdetagminus[0])
+                invJgplus, detJgplus = Jacobian(ELEMENT.Xe,gradNplus[0],gradNplus[1])
+                invJgminus, detJgminus = Jacobian(ELEMENT.Xe,gradNminus[0],gradNminus[1])
                 # COMPUTE PSI VALUES
                 PSIgplus = Ngplus@ELEMENT.PSIe
                 PSIgminus = Ngminus@ELEMENT.PSIe
                 # COMPUTE PHYSICAL GRADIENT
-                Ngradplus = invJgplus@np.array([dNdxigplus[0],dNdetagplus[0]])
-                Ngradminus = invJgminus@np.array([dNdxigminus[0],dNdetagminus[0]])
+                Ngradplus = invJgplus@gradNplus
+                Ngradminus = invJgminus@gradNminus
                 # COMPUTE GRADIENT DIFFERENCE
                 diffgrad = 0
                 grad = 0
                 for inode in range(ELEMENT.n):
                     diffgrad += (Ngradplus[:,inode]*PSIgplus - Ngradminus[:,inode]*PSIgminus)@INTAPPROX.NormalVec[ig]
-                    grad += INTAPPROX.NormalVec[ig]@np.array([INTAPPROX.dNdxig[ig,inode],INTAPPROX.dNdetag[ig,inode]])*PSIg[ig]
+                    grad += INTAPPROX.NormalVec[ig]@INTAPPROX.gradNg[ig,inode,:]*PSIg[ig]
                 JumpError[knode] = diffgrad
                 JumpRelError[knode] = diffgrad/abs(grad)
                 knode += 1

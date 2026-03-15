@@ -681,7 +681,7 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
                 for i in range(n):
                     for ig in range(ng):
                         N[ig,i], dNdxi[ig,i], dN2dxi2[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
-                return N, dNdxi, dN2dxi2
+                return N, tuple(dNdxi, dN2dxi2)
             case 3:
                 dNdxi = np.zeros([ng,n])
                 dN2dxi2 = np.zeros([ng,n])
@@ -689,7 +689,7 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
                 for i in range(n):
                     for ig in range(ng):
                         N[ig,i], dNdxi[ig,i], dN2dxi2[ig,i], dN3dxi3[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
-                return N, dNdxi, dN2dxi2, dN3dxi3
+                return N, tuple(dNdxi, dN2dxi2, dN3dxi3)
     else:
         ng = len(X[:,0])
         N = np.zeros([ng,n])
@@ -711,7 +711,7 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
                 for i in range(n):
                     for ig in range(ng):
                         N[ig,i], gradN[ig,i,:], HessN[ig,i,:,:]  = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
-                return N, gradN, HessN
+                return N, tuple(gradN, HessN)
             case 3:
                 gradN = np.zeros([ng,n,2])
                 HessN = np.zeros([ng,n,2,2])
@@ -719,7 +719,7 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
                 for i in range(n):
                     for ig in range(ng):
                         N[ig,i], gradN[ig,i,:], HessN[ig,i,:,:], J3N[ig,i,:,:,:]  = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
-                return N, gradN, HessN, J3N
+                return N, tuple(gradN, HessN, J3N)
 
 
 def EvaluateReferenceShapeFunctions_old(X, elemType, elemOrder, deriv=1):
@@ -757,14 +757,13 @@ def EvaluateReferenceShapeFunctions_old(X, elemType, elemOrder, deriv=1):
     return N, dNdxi, dNdeta
     
 
-def Jacobian(X,dNdxi,dNdeta):
+def Jacobian(X,gradN):
     """ 
     Function that computes the Jacobian of the mapping between physical and natural coordinates 
         
     Input: 
         - X: elemental physical coordinates 
-        - dNdxi: shape functions derivatives respect to xi evaluated at Gauss integration nodes
-        - dNdeta: shape functions derivatives respect to eta evaluated at Gauss integration nodes
+        - gradN: shape functions gradients evaluated at Gauss integration node -> [n x dim]
     
     Output: 
         - invJ: Jacobian inverse
@@ -774,8 +773,8 @@ def Jacobian(X,dNdxi,dNdeta):
     J = np.zeros([2,2])
     # COMPUTE JACOBIAN
     for i in range(len(X[:,0])):
-        J += np.array([[X[i,0]*dNdxi[i], X[i,1]*dNdxi[i]] ,
-                       [X[i,0]*dNdeta[i], X[i,1]*dNdeta[i]]])
+        J += np.array([[X[i,0]*gradN[i,0], X[i,1]*gradN[i,0]] ,
+                       [X[i,0]*gradN[i,1], X[i,1]*gradN[i,1]]])
         # COMPUTE INVERSE MATRIX AND JACOBIAN
     invJ = np.linalg.inv(J)
     detJ = np.linalg.det(J)
