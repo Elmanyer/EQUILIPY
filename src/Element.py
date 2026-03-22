@@ -82,9 +82,7 @@ class Element:
         self.XIg = None             # GAUSS INTEGRATION NODES 
         self.Wg = None              # GAUSS INTEGRATION WEIGTHS
         self.Ng = None              # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES -> [ng x n]
-        self.gradNg = None          # REFERENCE SHAPE FUNCTIONS GRADIENTS EVALUATED AT GAUSS INTEGRATION NODES -> [ng x n x dim]
-        self.HessNg = None          # REFERENCE SHAPE FUNCTIONS HESSIANS EVALUATED AT GAUSS INTEGRATION NODES -> [ng x n x dim x dim]
-        self.J3Ng = None            # REFERENCE SHAPE FUNCTIONS THIRD DERIVATIVES EVALUATED AT GAUSS INTEGRATION NODES -> [ng x n x dim x dim x dim]
+        self.dNg = None             # LIST OF REFERENCE SHAPE FUNCTIONS DERIVATES (GRADIENT, HESSIAN, J3) EVALUATED AT GAUSS INTEGRATION NODES -> [ng x n x (dim X dim xdim)]
         self.Xg = None              # PHYSICAL GAUSS INTEGRATION NODES MAPPED FROM 2D REFERENCE ELEMENT
         self.invJg = None           # INVERSE MATRIX OF JACOBIAN OF TRANSFORMATION FROM 2D REFERENCE ELEMENT TO 2D PHYSICAL ELEMENT, EVALUATED AT GAUSS INTEGRATION NODES
         self.detJg = None           # MATRIX DETERMINANT OF JACOBIAN OF TRANSFORMATION FROM 2D REFERENCE ELEMENT TO 2D PHYSICAL ELEMENT, EVALUATED AT GAUSS INTEGRATION NODES 
@@ -354,11 +352,11 @@ class Element:
         # MAP PHYSICAL POINT TO REFERENCE ELEMENT
         XI = self.InverseMapping(X)
         # COMPUTE REFERENCE SHAPE FUNCTIONS DERIVATIVES AT MAPPED POINT
-        foo, gradN = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
+        foo, dN = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
         # EVALUATE JACOBIAN OF TRANSFORMATION AT POINT
-        invJ, foo = Jacobian(self.Xe,gradN[0])
+        invJ, foo = Jacobian(self.Xe,dN[0][0])
         # OBTAIN GRADIENT IN PHYSICAL SPACE 
-        gradphysN = invJ@gradN
+        gradphysN = invJ@dN[0]
         # COMPUTE RADIAL MAGNETIC COMPONENT
         Br = - gradphysN[1,:]@self.PSIe/X[0]
         return Br
@@ -371,7 +369,7 @@ class Element:
         # LOOP OVER INTEGRATION NODES
         for ig in range(self.ng):
             # COMPUTE GRADIENT IN PHYSICAL SPACE
-            gradphysN = self.invJg[ig,:,:]@self.gradNg[ig,:,:]
+            gradphysN = self.invJg[ig,:,:]@self.dNg[0][ig,:,:]
             # COMPUTE RADIAL MAGNETIC COMPONENT
             Brg[ig] = - gradphysN[1,:]@self.PSIe/self.Xg[ig,0]
         return Brg
@@ -384,11 +382,11 @@ class Element:
         # MAP PHYSICAL POINT TO REFERENCE ELEMENT
         XI = self.InverseMapping(X)
         # COMPUTE REFERENCE SHAPE FUNCTIONS DERIVATIVES AT MAPPED POINT
-        foo, gradN = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
+        foo, dN = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
         # EVALUATE JACOBIAN OF TRANSFORMATION AT POINT
-        invJ, foo = Jacobian(self.Xe,gradN[0])
+        invJ, foo = Jacobian(self.Xe,dN[0][0])
         # OBTAIN GRADIENT IN PHYSICAL SPACE 
-        gradphysN = invJ@gradN
+        gradphysN = invJ@dN[0]
         # COMPUTE VERTICAL MAGNETIC COMPONENT
         Bz = gradphysN[0,:]@self.PSIe/X[0]
         return Bz
@@ -401,7 +399,7 @@ class Element:
         # LOOP OVER INTEGRATION NODES
         for ig in range(self.ng):
             # COMPUTE GRADIENT IN PHYSICAL SPACE
-            gradphysN = self.invJg[ig,:,:]@self.gradNg[ig,:,:]
+            gradphysN = self.invJg[ig,:,:]@self.dNg[0][ig,:,:]
             # COMPUTE VERTICAL MAGNETIC COMPONENT
             Bzg[ig] = gradphysN[0,:]@self.PSIe/self.Xg[ig,0]
         return Bzg
@@ -413,11 +411,11 @@ class Element:
         # MAP PHYSICAL POINT TO REFERENCE ELEMENT
         XI = self.InverseMapping(X)
         # COMPUTE REFERENCE SHAPE FUNCTIONS DERIVATIVES AT MAPPED POINT
-        foo, gradN = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
+        foo, dN = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
         # EVALUATE JACOBIAN OF TRANSFORMATION AT POINT
-        invJ, foo = Jacobian(self.Xe,gradN[0])
+        invJ, foo = Jacobian(self.Xe,dN[0][0])
         # OBTAIN GRADIENT IN PHYSICAL SPACE  
-        gradphysN = invJ@gradN
+        gradphysN = invJ@dN[0]
         # COMPUTE MAGNETIC VECTOR
         Brz = gradphysN[[1,0],:]@self.PSIe/X[0]
         Brz[0] *= -1
@@ -431,7 +429,7 @@ class Element:
         # LOOP OVER INTEGRATION NODES
         for ig in range(self.ng):
             # COMPUTE GRADIENT IN PHYSICAL SPACE
-            gradphysN = self.invJg[ig,:,:]@self.gradNg[ig,:,:]
+            gradphysN = self.invJg[ig,:,:]@self.dNg[0][ig,:,:]
             # COMPUTE MAGNETIC VECTOR
             Brzg[ig,:] = gradphysN[[1,0],:]@self.PSIe/self.Xg[ig,0]
             Brzg[0] *= -1
@@ -911,7 +909,7 @@ class Element:
         
         # EVALUATE THE REFERENCE SHAPE FUNCTIONS ON THE STANDARD REFERENCE QUADRATURE ->> STANDARD FEM APPROACH
         # EVALUATE REFERENCE SHAPE FUNCTIONS 
-        self.Ng, self.gradNg = EvaluateReferenceShapeFunctions(self.XIg, self.ElType, self.ElOrder)
+        self.Ng, self.dNg = EvaluateReferenceShapeFunctions(self.XIg, self.ElType, self.ElOrder, deriv=1)
         
         # PRECOMPUTE THE NECESSARY INTEGRATION ENTITIES EVALUATED AT THE STANDARD GAUSS INTEGRATION NODES ->> STANDARD FEM APPROACH
         # WE COMPUTE THUS:
@@ -925,7 +923,7 @@ class Element:
         self.invJg = np.zeros([self.ng,self.dim,self.dim])
         self.detJg = np.zeros([self.ng])
         for ig in range(self.ng):
-            self.invJg[ig,:,:], self.detJg[ig] = Jacobian(self.Xe,self.gradNg[ig,:,:])
+            self.invJg[ig,:,:], self.detJg[ig] = Jacobian(self.Xe,self.dNg[0][ig,:,:])
             self.detJg[ig] = abs(self.detJg[ig])
         
         # CHECK NUMERICAL QUADRATURE
@@ -993,11 +991,11 @@ class Element:
             # STANDARD REFERENCE ELEMENT QUADRATURE (2D)
             XIg2Dstand, SUBELEM.Wg, SUBELEM.ng = GaussQuadrature(SUBELEM.ElType,NumQuadOrder2D)
             # EVALUATE SUBELEMENTAL REFERENCE SHAPE FUNCTIONS 
-            Nstand2D, gradNstand2D = EvaluateReferenceShapeFunctions(XIg2Dstand, SUBELEM.ElType, SUBELEM.ElOrder)
+            Nstand2D, dNstand2D = EvaluateReferenceShapeFunctions(XIg2Dstand, SUBELEM.ElType, SUBELEM.ElOrder)
             # MAP 2D REFERENCE GAUSS INTEGRATION NODES ON THE REFERENCE SUBELEMENTS  ->> ADAPTED 2D QUADRATURE FOR SUBELEMENTS
             SUBELEM.XIg = Nstand2D @ SUBELEM.XIe
             # EVALUATE ELEMENTAL REFERENCE SHAPE FUNCTIONS ON ADAPTED REFERENCE QUADRATURE
-            SUBELEM.Ng, SUBELEM.gradNg = EvaluateReferenceShapeFunctions(SUBELEM.XIg, self.ElType, self.ElOrder)
+            SUBELEM.Ng, SUBELEM.dNg = EvaluateReferenceShapeFunctions(SUBELEM.XIg, self.ElType, self.ElOrder)
             # MAPP ADAPTED REFERENCE QUADRATURE ON PHYSICAL ELEMENT
             SUBELEM.Xg = SUBELEM.Ng @ self.Xe
             
@@ -1005,7 +1003,7 @@ class Element:
             SUBELEM.invJg = np.zeros([SUBELEM.ng,SUBELEM.dim,SUBELEM.dim])
             SUBELEM.detJg = np.zeros([SUBELEM.ng])
             for ig in range(SUBELEM.ng):
-                SUBELEM.invJg[ig,:,:], SUBELEM.detJg[ig] = Jacobian(SUBELEM.Xe,gradNstand2D[ig,:])
+                SUBELEM.invJg[ig,:,:], SUBELEM.detJg[ig] = Jacobian(SUBELEM.Xe,dNstand2D[0][ig,:])
                 SUBELEM.detJg[ig] = abs(SUBELEM.detJg[ig])
         
             # CHECK NUMERICAL QUADRATURE
@@ -1041,7 +1039,7 @@ class Element:
         # MAP 1D REFERENCE STANDARD GAUSS INTEGRATION NODES ON THE REFERENCE INTERFACE ->> ADAPTED 1D QUADRATURE FOR INTERFACE
         self.InterfApprox.XIg = N1D @ self.InterfApprox.XIint
         # EVALUATE 2D REFERENCE SHAPE FUNCTION ON INTERFACE ADAPTED QUADRATURE
-        self.InterfApprox.Ng, self.InterfApprox.gradNg = EvaluateReferenceShapeFunctions(self.InterfApprox.XIg, self.ElType, self.ElOrder, deriv=1)
+        self.InterfApprox.Ng, self.InterfApprox.dNg = EvaluateReferenceShapeFunctions(self.InterfApprox.XIg, self.ElType, self.ElOrder, deriv=1)
         # MAP REFERENCE INTERFACE ADAPTED QUADRATURE ON PHYSICAL ELEMENT 
         self.InterfApprox.Xg = N1D @ self.InterfApprox.Xint
         # EVALUATE INTEGRATION ENTITIES (JACOBIAN INVERSE MATRIX AND DETERMINANT) ON ADAPTED QUADRATURES NODES
@@ -1049,8 +1047,8 @@ class Element:
         self.InterfApprox.detJg = np.zeros([self.InterfApprox.ng])
         self.InterfApprox.detJg1D = np.zeros([self.InterfApprox.ng])
         for ig in range(self.InterfApprox.ng):
-            self.InterfApprox.invJg[ig,:,:], self.InterfApprox.detJg[ig] = Jacobian(self.Xe,self.InterfApprox.gradNg[ig,:,:])
-            self.InterfApprox.detJg1D[ig] = Jacobian1D(self.InterfApprox.Xint,dNdxi1D[0,ig,:])
+            self.InterfApprox.invJg[ig,:,:], self.InterfApprox.detJg[ig] = Jacobian(self.Xe,self.InterfApprox.dNg[0][ig,:,:])
+            self.InterfApprox.detJg1D[ig] = Jacobian1D(self.InterfApprox.Xint,dNdxi1D[0][0,ig,:])
             self.InterfApprox.detJg[ig] = abs(self.InterfApprox.detJg[ig])
             
         # CHECK NUMERICAL QUADRATURE
@@ -1164,7 +1162,13 @@ class Element:
             # MAP 1D REFERENCE STANDARD GAUSS INTEGRATION NODES ON ELEMENTAL CUT EDGE ->> ADAPTED 1D QUADRATURE FOR CUT EDGE
             FACE.XIg = N1D @ FACE.XIseg
             # EVALUATE 2D REFERENCE SHAPE FUNCTION ON ELEMENTAL CUT EDGE 
-            FACE.Ng, FACE.gradNg = EvaluateReferenceShapeFunctions(FACE.XIg, self.ElType, self.ElOrder, deriv=self.ElOrder)
+
+
+            # HOW TO ORGANISE THE HIGH-ORDER DERIVATIVES FOR ANY ARBITRARY ORDER OF ELEMENT?
+            FACE.Ng, FACE.dNg = EvaluateReferenceShapeFunctions(FACE.XIg, self.ElType, self.ElOrder, deriv=self.ElOrder)
+
+
+
             # MAPP REFERENCE INTERFACE ADAPTED QUADRATURE ON PHYSICAL ELEMENT 
             FACE.Xg = N1D @ FACE.Xseg
             # EVALUATE INTEGRATION ENTITIES (JACOBIAN INVERSE MATRIX AND DETERMINANT) ON ADAPTED QUADRATURES NODES
@@ -1172,9 +1176,9 @@ class Element:
             FACE.detJg = np.zeros([FACE.ng])
             FACE.detJg1D = np.zeros([FACE.ng])
             for ig in range(FACE.ng):
-                FACE.invJg[ig,:,:], FACE.detJg[ig] = Jacobian(self.Xe,FACE.gradNg[ig,:,:])
+                FACE.invJg[ig,:,:], FACE.detJg[ig] = Jacobian(self.Xe,FACE.dNg[0][ig,:,:])
                 FACE.detJg[ig] = abs(FACE.detJg[ig])
-                FACE.detJg1D[ig] = Jacobian1D(FACE.Xseg,dNdxi1D[ig,:]) 
+                FACE.detJg1D[ig] = Jacobian1D(FACE.Xseg,dNdxi1D[0][ig,:]) 
         return
     
     
@@ -1556,7 +1560,7 @@ class Element:
         # OBTAIN 1D STANDARD GAUSS QUADRATURE
         XIg1Dstand, foo, foo = GaussQuadrature(0,self.InterfApprox.ng)
         # EVALUATE SUBELEMENTAL REFERENCE SHAPE FUNCTIONS 
-        foo, dNdxi1D = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder)
+        foo, dNdxi1D = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder, deriv=1)
         # COMPUTE 1D MAPPING DETERMINANT 
         detJg1D = np.zeros([self.InterfApprox.ng])
         for ig in range(self.InterfApprox.ng):

@@ -177,8 +177,10 @@ class EquilipyL2error:
                 XIgplus = INTAPPROX.XIg[ig,:] + dn*INTAPPROX.NormalVecREF[ig]
                 XIgminus = INTAPPROX.XIg[ig,:] - dn*INTAPPROX.NormalVecREF[ig]
                 # EVALUATE GRADIENTS
-                Ngplus, gradNplus = EvaluateReferenceShapeFunctions(XIgplus.reshape((1,2)), ELEMENT.ElType, ELEMENT.ElOrder)
-                Ngminus, gradNminus = EvaluateReferenceShapeFunctions(XIgminus.reshape((1,2)), ELEMENT.ElType, ELEMENT.ElOrder)
+                Ngplus, dNgplus = EvaluateReferenceShapeFunctions(XIgplus.reshape((1,2)), ELEMENT.ElType, ELEMENT.ElOrder)
+                Ngminus, dNgminus = EvaluateReferenceShapeFunctions(XIgminus.reshape((1,2)), ELEMENT.ElType, ELEMENT.ElOrder)
+                gradNplus = dNgplus[0]
+                gradNminus = dNgminus[0]
                 # EVALUATE JACOBIAN
                 invJgplus, detJgplus = Jacobian(ELEMENT.Xe,gradNplus[0],gradNplus[1])
                 invJgminus, detJgminus = Jacobian(ELEMENT.Xe,gradNminus[0],gradNminus[1])
@@ -193,7 +195,7 @@ class EquilipyL2error:
                 grad = 0
                 for inode in range(ELEMENT.n):
                     diffgrad += (Ngradplus[:,inode]*PSIgplus - Ngradminus[:,inode]*PSIgminus)@INTAPPROX.NormalVec[ig]
-                    grad += INTAPPROX.NormalVec[ig]@INTAPPROX.gradNg[ig,inode,:]*PSIg[ig]
+                    grad += INTAPPROX.NormalVec[ig]@INTAPPROX.dNg[0][ig,inode,:]*PSIg[ig]
                 JumpError[knode] = diffgrad
                 JumpRelError[knode] = diffgrad/abs(grad)
                 knode += 1

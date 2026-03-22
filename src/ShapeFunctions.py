@@ -674,14 +674,14 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
                 for i in range(n):
                     for ig in range(ng):
                         N[ig,i], dNdxi[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
-                return N, dNdxi
+                return N, [dNdxi]
             case 2:
                 dNdxi = np.zeros([ng,n])
                 dN2dxi2 = np.zeros([ng,n])
                 for i in range(n):
                     for ig in range(ng):
                         N[ig,i], dNdxi[ig,i], dN2dxi2[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
-                return N, tuple(dNdxi, dN2dxi2)
+                return N, [dNdxi, dN2dxi2]
             case 3:
                 dNdxi = np.zeros([ng,n])
                 dN2dxi2 = np.zeros([ng,n])
@@ -689,7 +689,7 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
                 for i in range(n):
                     for ig in range(ng):
                         N[ig,i], dNdxi[ig,i], dN2dxi2[ig,i], dN3dxi3[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
-                return N, tuple(dNdxi, dN2dxi2, dN3dxi3)
+                return N, [dNdxi, dN2dxi2, dN3dxi3]
     else:
         ng = len(X[:,0])
         N = np.zeros([ng,n])
@@ -704,14 +704,14 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
                 for i in range(n):
                     for ig in range(ng):
                         N[ig,i], gradN[ig,i,:] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
-                return N, gradN
+                return N, [gradN]
             case 2:
                 gradN = np.zeros([ng,n,2])
                 HessN = np.zeros([ng,n,2,2])
                 for i in range(n):
                     for ig in range(ng):
                         N[ig,i], gradN[ig,i,:], HessN[ig,i,:,:]  = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
-                return N, tuple(gradN, HessN)
+                return N, [gradN, HessN]
             case 3:
                 gradN = np.zeros([ng,n,2])
                 HessN = np.zeros([ng,n,2,2])
@@ -719,7 +719,7 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
                 for i in range(n):
                     for ig in range(ng):
                         N[ig,i], gradN[ig,i,:], HessN[ig,i,:,:], J3N[ig,i,:,:,:]  = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
-                return N, tuple(gradN, HessN, J3N)
+                return N, [gradN, HessN, J3N]
 
 
 def EvaluateReferenceShapeFunctions_old(X, elemType, elemOrder, deriv=1):

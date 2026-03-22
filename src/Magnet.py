@@ -331,7 +331,7 @@ class QuadrilateralCoil:
         #### REFERENCE ELEMENT QUADRATURE TO INTEGRATE SURFACES
         self.XIg, self.Wg, self.ng = GaussQuadrature(self.ElType,QuadOrder)
         # EVALUATE REFERENCE SHAPE FUNCTIONS 
-        self.Ng, self.gradNg = EvaluateReferenceShapeFunctions(self.XIg, self.ElType, self.ElOrder, deriv=1)
+        self.Ng, self.dNg = EvaluateReferenceShapeFunctions(self.XIg, self.ElType, self.ElOrder, deriv=1)
         
         # COMPUTE MAPPED GAUSS NODES
         self.Xg = self.Ng @ self.Xe       
@@ -339,7 +339,7 @@ class QuadrilateralCoil:
         self.invJg = np.zeros([self.ng,self.dim,self.dim])
         self.detJg = np.zeros([self.ng])
         for ig in range(self.ng):
-            self.invJg[ig,:,:], self.detJg[ig] = Jacobian(self.Xe,self.gradNg[ig,:,:])
+            self.invJg[ig,:,:], self.detJg[ig] = Jacobian(self.Xe,self.dNg[0][ig,:,:])
             self.detJg[ig] = abs(self.detJg[ig])
         return
     
