@@ -393,53 +393,63 @@ class GradShafranovSolver(EquilipyInitialisation,
             LHSe = np.zeros([ELEMENT0.n+ELEMENT1.n,ELEMENT0.n+ELEMENT1.n])
             RHSe = np.zeros([ELEMENT0.n+ELEMENT1.n])
             
-            # COMPUTE ADEQUATE GHOST PENALTY TERM
-            penalty = self.zeta*max(ELEMENT0.length,ELEMENT1.length)**(2*self.MESH.ElOrder + 1)
-            
-            # LOOP OVER GAUSS INTEGRATION NODES
-            for ig in range(FACE0.ng):  
-                # SHAPE FUNCTIONS NORMAL GRADIENT IN PHYSICAL SPACE
-                n_dot_Ngrad0 = FACE0.NormalVec @ FACE0.invJg[ig,:,:] @ np.array([FACE0.dNdxig[ig,:], FACE0.dNdetag[ig,:]])
-                n_dot_Ngrad1 = FACE1.NormalVec @ FACE1.invJg[ig,:,:] @ np.array([FACE1.dNdxig[ig,:], FACE1.dNdetag[ig,:]])
-                n_dot_Ngrad = np.concatenate((n_dot_Ngrad0,n_dot_Ngrad1), axis=0)
-                    
-                # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM    
-                for i in range(ELEMENT0.n+ELEMENT1.n):  # ROWS ELEMENTAL MATRIX
-                    for j in range(ELEMENT0.n+ELEMENT1.n):  # COLUMNS ELEMENTAL MATRIX
-                        ### GHOST PENALTY TERM  (GRADIENT JUMP) [ jump(nabla(N_i))*jump(nabla(N_j)) *(Jacobiano) ]  
-                        LHSe[i,j] += penalty*n_dot_Ngrad[i]*n_dot_Ngrad[j] * FACE0.detJg1D[ig] * FACE0.Wg[ig]
-                        ### GHOST PENALTY TERM  (SOLUTION JUMP) [ jump(N_i)*jump(N_j)]
-                        #LHSe[i,j] += penalty*FACE0.Ng[ig,i]*FACE0.Ng[ig,j] * FACE0.detJg1D[ig] * FACE0.Wg[ig] 
+            # LOOP OVER ELEMENT ORDER -> PENALISE ALL DERIVATIVES JUMP
+            for p in range(1,self.MESH.ElOrder+1):
+                # COMPUTE ADEQUATE GHOST PENALTY TERM
+                penalty = self.zeta*max(ELEMENT0.length,ELEMENT1.length)**(2*p + 1)
 
-            """
-            # PRESCRIBE BC
-            if not type(ELEMENT0.Teboun) == type(None) or not type(ELEMENT1.Teboun) == type(None):
-                if not type(ELEMENT0.Teboun) == type(None) and type(ELEMENT1.Teboun) == type(None):
-                    Tbounghost = ELEMENT0.Teboun[0].copy()
-                    PSI_Bghost = ELEMENT0.PSI_Be.copy()
-                elif type(ELEMENT0.Teboun) == type(None) and not type(ELEMENT1.Teboun) == type(None):
-                    Tbounghost = ELEMENT1.Teboun[0].copy()
-                    PSI_Bghost = ELEMENT1.PSI_Be.copy()
-                elif not type(ELEMENT0.Teboun) == type(None) and not type(ELEMENT1.Teboun) == type(None):
-                    Tbounghost = np.concatenate((ELEMENT0.Teboun[0],[ELEMENT0.n+index for index in ELEMENT1.Teboun[0]]), axis=0)
-                    PSI_Bghost = np.concatenate((ELEMENT0.PSI_Be, ELEMENT1.PSI_Be), axis=0)
-                
-                for ibounode in Tbounghost:
-                    adiag = LHSe[ibounode,ibounode]
-                    # PASS MATRIX COLUMN TO RIGHT-HAND-SIDE
-                    RHSe -= LHSe[:,ibounode]*PSI_Bghost[ibounode]
-                    # NULLIFY BOUNDARY NODE ROW
-                    LHSe[ibounode,:] = 0
-                    # NULLIFY BOUNDARY NODE COLUMN
-                    LHSe[:,ibounode] = 0
-                    # PRESCRIBE BOUNDARY CONDITION ON BOUNDARY NODE
-                    if abs(adiag) > 0:
-                        LHSe[ibounode,ibounode] = adiag
-                        RHSe[ibounode] = adiag*PSI_Bghost[ibounode]
-                    else:
-                        LHSe[ibounode,ibounode] = 1
-                        RHSe[ibounode] = PSI_Bghost[ibounode]
-            """                                   
+                # COMPUTE NORMAL PHYSICAL DERIVATIVE 
+                # Prepare the contraction string for einsum
+                # We need to contract p indices of the derivative 
+                # with p normal vectors and p inverse Jacobians.
+                if p == 1:
+                    # Physical Gradient: (dN/dxi) * invJ * n
+                    # dNg[0] shape: [ng, n, 2]
+                    subscripts = 'ni,ia,a->n' 
+                elif p == 2:
+                    # Physical Hessian: (d2N/dxi2) * invJ * invJ * n * n
+                    # dNg[1] shape: [ng, n, 2, 2]
+                    subscripts = 'nij,ia,jb,a,b->n'
+                elif p == 3:
+                    # Physical 3rd Order: (d3N/dxi3) * invJ * invJ * invJ * n * n * n
+                    # dNg[2] shape: [ng, n, 2, 2, 2]
+                    subscripts = 'nijk,ia,jb,kc,a,b,c->n'
+
+                # LOOP OVER GAUSS INTEGRATION NODES
+                for ig in range(FACE0.ng):
+                    # Extract local variables for this Gauss point
+                    invJ0 = FACE0.invJg[ig] 
+                    invJ1 = FACE1.invJg[ig]
+                    n = FACE0.NormalVec    # Shape (2,)
+
+                    # 2. Build the list of arguments to pass to einsum
+                    # Start with the reference derivative tensor
+                    args0 = [FACE0.dNg[p-1][ig]]
+                    args1 = [FACE1.dNg[p-1][ig]]
+
+                    # Add p copies of the Inverse Jacobian
+                    for _ in range(p):
+                        args0.append(invJ0)
+                        args1.append(invJ1)
+
+                    # Add p copies of the Normal vector
+                    for _ in range(p):
+                        args0.append(n)
+                        args1.append(n)
+                    
+                    # Perform the multi-linear contraction
+                    # Results in a vector of length n representing the p-th NORMAL PHYSICAL derivative for each basis function.
+                    n_dot_dNg0 = np.einsum(subscripts, *args0, optimize=True)
+                    n_dot_dNg1 = np.einsum(subscripts, *args1, optimize=True)  
+
+                    n_dot_dNg = np.concatenate((n_dot_dNg0,n_dot_dNg1), axis=0)
+
+                    # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM    
+                    for i in range(ELEMENT0.n+ELEMENT1.n):  # ROWS ELEMENTAL MATRIX
+                        for j in range(ELEMENT0.n+ELEMENT1.n):  # COLUMNS ELEMENTAL MATRIX
+                            ### GHOST PENALTY TERM  OVER DERIVATIVES JUMP   
+                            LHSe[i,j] += penalty*n_dot_dNg[i]*n_dot_dNg[j] * FACE0.detJg1D[ig] * FACE0.Wg[ig]
+
 
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
             Tghost = np.concatenate((ELEMENT0.Te,ELEMENT1.Te), axis=0)

@@ -52,7 +52,7 @@ class InterfaceApprox:
         self.XIg = None             # GAUSS INTEGRATION NODAL COORDINATES (REFERENCE SPACE)
         self.Xg = None              # GAUSS INTEGRATION NODAL COORDINATES (PHYSICAL SPACE)
         self.Ng = None              # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES 
-        self.gradNg = None          # REFERENCE SHAPE FUNCTIONS GRADIENTS EVALUATED AT GAUSS INTEGRATION NODES [ng x n x dim]
+        self.dNg = None             # LIST OF REFERENCE SHAPE FUNCTIONS DERIVATIVES (GRADIENTS, HESSIANS AND J3) EVALUATED AT GAUSS INTEGRATION NODES [ng x n x (dim x dim x dim)]
         self.invJg = None
         self.detJg = None           # MATRIX DETERMINANTS OF JACOBIAN OF TRANSFORMATION FROM 1D REFERENCE ELEMENT TO 2D PHYSICAL
         self.detJg1D = None

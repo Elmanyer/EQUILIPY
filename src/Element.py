@@ -275,7 +275,7 @@ class Element:
         """
         X = np.zeros([self.dim])
         for i in range(self.n):
-            Nig, foo, foo = ShapeFunctionsReference(Xi, self.ElType, self.ElOrder, i+1)
+            Nig = ShapeFunctionsReference(Xi, self.ElType, self.ElOrder, i+1, deriv=0)
             X += Nig*self.Xe[i,:]
         return X
     
@@ -296,7 +296,7 @@ class Element:
         def fun(Xi, X, Xe):
             f = np.array([-X[0],-X[1]])
             for i in range(self.n):
-                Nig, foo, foo = ShapeFunctionsReference(Xi, self.ElType, self.ElOrder, i+1)
+                Nig = ShapeFunctionsReference(Xi, self.ElType, self.ElOrder, i+1, deriv=0)
                 f[0] += Nig*Xe[i,0]
                 f[1] += Nig*Xe[i,1]
             return f
@@ -312,7 +312,7 @@ class Element:
         """
         F = 0
         for i in range(self.n):
-            N, foo, foo = ShapeFunctionsReference(XI, self.ElType, self.ElOrder, i+1)
+            N = ShapeFunctionsReference(XI, self.ElType, self.ElOrder, i+1, deriv=0)
             F += N*Fe[i]
         return F
     
@@ -322,8 +322,8 @@ class Element:
         """
         dF = np.zeros([self.dim])
         for i in range(self.n):
-            foo, dNdxi, dNdeta = ShapeFunctionsReference(XI, self.ElType, self.ElOrder, i+1)
-            dF += np.array([dNdxi,dNdeta])*Fe[i]
+            foo, dNg = ShapeFunctionsReference(XI, self.ElType, self.ElOrder, i+1, deriv=1)
+            dF += dNg[0]*Fe[i]
         return dF
     
     def ElementalInterpolationPHYSICAL(self,X,Fe):
@@ -592,16 +592,12 @@ class Element:
         self.InterfApprox.NormalVecREF = list()
         for ig in range(self.InterfApprox.ng):
             #### PREPARE NORMAL VECTOR IN PHYSICAL SPACE
-            Ngrad = self.InterfApprox.invJg[ig,:,:]@np.array([self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:]])
-            dphidr, dphidz = Ngrad@self.LSe
-            ntest_rz = np.array([dphidr,dphidz])
+            gradNphys = self.InterfApprox.invJg[ig,:,:]@self.InterfApprox.dNg[0][ig,:,:].T
+            ntest_rz = gradNphys@self.LSe
             ntest_rz = ntest_rz/np.linalg.norm(ntest_rz)
             #### PERFORM THE TEST IN REFERENCE SPACE
-            # COMPUTE DERIVATIVES OF INTERPOLATED PHI 
-            dphidxi = self.InterfApprox.dNdxig[ig,:]@self.LSe
-            dphideta = self.InterfApprox.dNdetag[ig,:]@self.LSe
             # PREPARE TEST NORMAL VECTOR 
-            ntest_xieta = np.array([dphidxi, dphideta])
+            ntest_xieta = self.LSe@self.InterfApprox.dNg[0][ig,:,:]
             ntest_xieta = ntest_xieta/np.linalg.norm(ntest_xieta)    # normalize
             # PREPARE TEST POINT              
             XItest = self.InterfApprox.XIg[ig,:] + 0.5*ntest_xieta   # point on which to test the Level-Set 
@@ -630,8 +626,8 @@ class Element:
             if np.abs(np.linalg.norm(vec)-1) > 1e-6:
                 raise Exception('Normal vector norm equals',np.linalg.norm(vec), 'for mesh element', self.index, ": Normal vector not unitary")
             # CHECK ORTHOGONALITY
-            Ngrad = self.InterfApprox.invJg[ig,:,:]@np.array([self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:]])
-            dphidr, dphidz = Ngrad@self.LSe
+            gradNphys = self.InterfApprox.invJg[ig,:,:]@self.InterfApprox.dNg[0][ig,:,:].T
+            dphidr, dphidz = gradNphys@self.LSe
             tangvec = np.array([-dphidz, dphidr]) 
             scalarprod = np.dot(tangvec,vec)
             if scalarprod > 1e-10: 
@@ -897,7 +893,7 @@ class Element:
             - self.Wg : Quadrature weights.
             - self.ng : Number of quadrature points.
             - self.Ng : Shape function values at quadrature points.
-            - self.dNdxig, self.dNdetag : Shape function derivatives w.r.t reference coordinates.
+            - self.dNg : Shape function derivatives w.r.t reference coordinates.
             - self.Xg : Quadrature points mapped to physical space.
             - self.invJg : Inverse Jacobian matrices at quadrature points.
             - self.detJg : Determinants of Jacobian matrices at quadrature points.
@@ -946,7 +942,7 @@ class Element:
             - subelem.Wg : Quadrature weights.
             - subelem.ng : Number of quadrature points.
             - subelem.Ng : Shape function values at quadrature points.
-            - subelem.dNdxig, subelem.dNdetag : Shape function derivatives w.r.t reference coordinates.
+            - subelem.dNg : Shape function derivatives w.r.t reference coordinates.
             - subelem.Xg : Quadrature points mapped to physical space.
             - subelem.invJg : Inverse Jacobian matrices at quadrature points.
             - subelem.detJg : Determinants of Jacobian matrices at quadrature points.
@@ -991,11 +987,11 @@ class Element:
             # STANDARD REFERENCE ELEMENT QUADRATURE (2D)
             XIg2Dstand, SUBELEM.Wg, SUBELEM.ng = GaussQuadrature(SUBELEM.ElType,NumQuadOrder2D)
             # EVALUATE SUBELEMENTAL REFERENCE SHAPE FUNCTIONS 
-            Nstand2D, dNstand2D = EvaluateReferenceShapeFunctions(XIg2Dstand, SUBELEM.ElType, SUBELEM.ElOrder)
+            Nstand2D, dNstand2D = EvaluateReferenceShapeFunctions(XIg2Dstand, SUBELEM.ElType, SUBELEM.ElOrder, deriv=1)
             # MAP 2D REFERENCE GAUSS INTEGRATION NODES ON THE REFERENCE SUBELEMENTS  ->> ADAPTED 2D QUADRATURE FOR SUBELEMENTS
             SUBELEM.XIg = Nstand2D @ SUBELEM.XIe
             # EVALUATE ELEMENTAL REFERENCE SHAPE FUNCTIONS ON ADAPTED REFERENCE QUADRATURE
-            SUBELEM.Ng, SUBELEM.dNg = EvaluateReferenceShapeFunctions(SUBELEM.XIg, self.ElType, self.ElOrder)
+            SUBELEM.Ng, SUBELEM.dNg = EvaluateReferenceShapeFunctions(SUBELEM.XIg, self.ElType, self.ElOrder, deriv=1)
             # MAPP ADAPTED REFERENCE QUADRATURE ON PHYSICAL ELEMENT
             SUBELEM.Xg = SUBELEM.Ng @ self.Xe
             
@@ -1048,7 +1044,7 @@ class Element:
         self.InterfApprox.detJg1D = np.zeros([self.InterfApprox.ng])
         for ig in range(self.InterfApprox.ng):
             self.InterfApprox.invJg[ig,:,:], self.InterfApprox.detJg[ig] = Jacobian(self.Xe,self.InterfApprox.dNg[0][ig,:,:])
-            self.InterfApprox.detJg1D[ig] = Jacobian1D(self.InterfApprox.Xint,dNdxi1D[0][0,ig,:])
+            self.InterfApprox.detJg1D[ig] = Jacobian1D(self.InterfApprox.Xint,dNdxi1D[0][ig,:])
             self.InterfApprox.detJg[ig] = abs(self.InterfApprox.detJg[ig])
             
         # CHECK NUMERICAL QUADRATURE
@@ -1162,13 +1158,7 @@ class Element:
             # MAP 1D REFERENCE STANDARD GAUSS INTEGRATION NODES ON ELEMENTAL CUT EDGE ->> ADAPTED 1D QUADRATURE FOR CUT EDGE
             FACE.XIg = N1D @ FACE.XIseg
             # EVALUATE 2D REFERENCE SHAPE FUNCTION ON ELEMENTAL CUT EDGE 
-
-
-            # HOW TO ORGANISE THE HIGH-ORDER DERIVATIVES FOR ANY ARBITRARY ORDER OF ELEMENT?
             FACE.Ng, FACE.dNg = EvaluateReferenceShapeFunctions(FACE.XIg, self.ElType, self.ElOrder, deriv=self.ElOrder)
-
-
-
             # MAPP REFERENCE INTERFACE ADAPTED QUADRATURE ON PHYSICAL ELEMENT 
             FACE.Xg = N1D @ FACE.Xseg
             # EVALUATE INTEGRATION ENTITIES (JACOBIAN INVERSE MATRIX AND DETERMINANT) ON ADAPTED QUADRATURES NODES
@@ -1208,13 +1198,13 @@ class Element:
         # LOOP OVER GAUSS INTEGRATION NODES
         for ig in range(self.ng):  
             # SHAPE FUNCTIONS GRADIENT IN PHYSICAL SPACE
-            Ngrad = self.invJg[ig,:,:]@np.array([self.dNdxig[ig,:],self.dNdetag[ig,:]])
+            gradphysN = (self.invJg[ig,:,:]@self.dNg[0][ig,:,:].T).T
             # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM 
             for i in range(self.n):   # ROWS ELEMENTAL MATRIX
                 for j in range(self.n):   # COLUMNS ELEMENTAL MATRIX
                     # COMPUTE LHS MATRIX TERMS
                     ### STIFFNESS TERM  [ nabla(N_i)*nabla(N_j) ]  
-                    LHSe[i,j] -= (1/self.Xg[ig,0])*Ngrad[:,j]@Ngrad[:,i]*self.detJg[ig]*self.Wg[ig]
+                    LHSe[i,j] -= (1/self.Xg[ig,0])*gradphysN[j,:]@gradphysN[i,:]*self.detJg[ig]*self.Wg[ig]
                 # COMPUTE RHS VECTOR TERMS [ (source term)*N_i ]
                 RHSe[i] += (1/self.Xg[ig,0])*SourceTermg[ig] * self.Ng[ig,i] *self.detJg[ig]*self.Wg[ig]
                 
@@ -1281,7 +1271,7 @@ class Element:
         # LOOP OVER GAUSS INTEGRATION NODES
         for ig in range(self.InterfApprox.ng):  
             # SHAPE FUNCTIONS NORMAL GRADIENT IN PHYSICAL SPACE
-            n_dot_Ngrad = self.InterfApprox.NormalVec[ig]@self.InterfApprox.invJg[ig,:,:]@np.array([self.InterfApprox.dNdxig[ig,:],self.InterfApprox.dNdetag[ig,:]])
+            n_dot_Ngrad = self.InterfApprox.NormalVec[ig]@self.InterfApprox.invJg[ig,:,:]@self.InterfApprox.dNg[0][ig,:,:].T
             # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM
             for i in range(self.n):  # ROWS ELEMENTAL MATRIX
                 for j in range(self.n):  # COLUMNS ELEMENTAL MATRIX
