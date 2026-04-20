@@ -19,6 +19,7 @@
 # Research Group: Nuclear Fusion  
 
 
+from _logging import EqPrint
 import numpy as np
 from scipy.interpolate import griddata
 from scipy.optimize import root
@@ -218,7 +219,7 @@ class EquilipyCritical:
                 
         if len(Opoint) == 0:
             # Can't order primary O-point, X-point so return
-            print("Warning: No O points found")
+            EqPrint("Warning: No O points found")
             return Opoint, Xpoint
 
         """
@@ -255,18 +256,18 @@ class EquilipyCritical:
         self.Xcrit[1,0,:-1] = Opoint[0][0] 
         self.PSI_0 = Opoint[0][1]
         self.Xcrit[1,0,-1] = Opoint[0][2] 
-        print('LOCAL EXTREMUM AT ',self.Xcrit[1,0,:-1],' (ELEMENT ', int(self.Xcrit[1,0,-1]),') WITH VALUE PSI_0 = ',self.PSI_0)
+        EqPrint('LOCAL EXTREMUM AT ',self.Xcrit[1,0,:-1],' (ELEMENT ', int(self.Xcrit[1,0,-1]),') WITH VALUE PSI_0 = ',self.PSI_0)
         
         # X-point
         if not self.FIXED_BOUNDARY: 
             if not Xpoint and self.it > 1:
-                print("SADDLE POINT NOT FOUND, TAKING PREVIOUS SOLUTION")
+                EqPrint("SADDLE POINT NOT FOUND, TAKING PREVIOUS SOLUTION")
                 self.Xcrit[1,1,:] = self.Xcrit[0,1,:]
             else:
                 self.Xcrit[1,1,:-1] = Xpoint[0][0] 
                 self.PSI_X = Xpoint[0][1]
                 self.Xcrit[1,1,-1] = Xpoint[0][2]
-            print('SADDLE POINT AT ',self.Xcrit[1,1,:-1],' (ELEMENT ', int(self.Xcrit[1,1,-1]),') WITH VALUE PSI_X = ',self.PSI_X)
+            EqPrint('SADDLE POINT AT ',self.Xcrit[1,1,:-1],' (ELEMENT ', int(self.Xcrit[1,1,-1]),') WITH VALUE PSI_X = ',self.PSI_X)
         return
 
 

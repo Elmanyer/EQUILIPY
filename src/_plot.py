@@ -19,6 +19,7 @@
 # Research Group: Nuclear Fusion  
 
 
+from _logging import EqPrint
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -173,50 +174,51 @@ class EquilipyPlotting:
                 AnaliticalNorm[inode] = self.PlasmaCurrent.PSIanalytical(self.MESH.X[inode,:])
 
             # Print standard error metrics
-            print("\n" + "="*70)
-            print("ERROR ANALYSIS REPORT")
-            print("="*70)
-            print("\n[STANDARD METRICS]")
-            print("-"*50)
-            print(f'  ||PSIerror||_L2        = {self.ErrorL2norm:.6e}')
-            print(f'  Relative ||PSIerror||_L2 = {self.RelErrorL2norm:.6e}')
-            print(f'  ||PSIerror||_Euclidean   = {np.linalg.norm(self.PSIerror):.6e}')
-            print(f'  ||PSIerror||/node        = {np.linalg.norm(self.PSIerror)/self.MESH.Nn:.6e}')
-            print(f'  Relative ||PSIerror||    = {np.linalg.norm(self.PSIrelerror):.6e}')
+            EqPrint("="*70)
+            EqPrint("ERROR ANALYSIS REPORT")
+            EqPrint("="*70)
+            EqPrint("[STANDARD METRICS]")
+            EqPrint("-"*50)
+            EqPrint(f'  ||PSIerror||_L2        = {self.ErrorL2norm:.6e}')
+            EqPrint(f'  Relative ||PSIerror||_L2 = {self.RelErrorL2norm:.6e}')
+            EqPrint(f'  ||PSIerror||_Euclidean   = {np.linalg.norm(self.PSIerror):.6e}')
+            EqPrint(f'  ||PSIerror||/node        = {np.linalg.norm(self.PSIerror)/self.MESH.Nn:.6e}')
+            EqPrint(f'  Relative ||PSIerror||    = {np.linalg.norm(self.PSIrelerror):.6e}')
 
             # Compute and display CutFEM diagnostics if enabled
             if ShowDiagnostics and self.GhostStabilization:
-                print("\n[CUTFEM DIAGNOSTICS]")
-                print("-"*50)
-                diagnostics = self.ComputeCutFEMErrorDiagnostics(verbose=False)
+                EqPrint("\n")
+                EqPrint("[CUTFEM DIAGNOSTICS]")
+                EqPrint("-"*50)
+                diagnostics = self._compute_cutfem_errors(verbose=False)
 
                 # Element-wise errors
                 cut = diagnostics['cut_elements']
                 interior = diagnostics['interior_elements']
-                print(f"  Cut elements ({cut['count']}):     L2 = {cut['L2_error']:.4e}")
-                print(f"  Interior elements ({interior['count']}):  L2 = {interior['L2_error']:.4e}")
-                print(f"  Error ratio (cut/interior): {diagnostics['summary']['error_ratio_cut_interior']:.4f}")
+                EqPrint(f"  Cut elements ({cut['count']}):     L2 = {cut['L2_error']:.4e}")
+                EqPrint(f"  Interior elements ({interior['count']}):  L2 = {interior['L2_error']:.4e}")
+                EqPrint(f"  Error ratio (cut/interior): {diagnostics['summary']['error_ratio_cut_interior']:.4f}")
 
                 # Ghost face quality
                 gf = diagnostics.get('ghost_faces', {})
                 if gf.get('count', 0) > 0:
-                    print(f"\n  Ghost faces: {gf['count']}")
-                    print(f"    Solution jump:  max = {gf['solution_jump_max']:.4e}")
-                    print(f"    Gradient jump:  max = {gf['gradient_jump_max']:.4e}")
-                    print(f"    Continuity:     {'✓ VERIFIED' if gf['continuity_ok'] else '✗ FAILED'}")
+                    EqPrint(f"    Ghost faces: {gf['count']}")
+                    EqPrint(f"    Solution jump:  max = {gf['solution_jump_max']:.4e}")
+                    EqPrint(f"    Gradient jump:  max = {gf['gradient_jump_max']:.4e}")
+                    EqPrint(f"    Continuity:     {'✓ VERIFIED' if gf['continuity_ok'] else '✗ FAILED'}")
 
                     # Normal derivative jumps
                     for p in range(1, 4):
                         key = f'normal_deriv_order_{p}'
                         if key in diagnostics:
                             d = diagnostics[key]
-                            print(f"    [[∂^{p}u/∂n^{p}]]:   L2 = {d['L2_norm']:.4e}")
+                            EqPrint(f"    [[∂^{p}u/∂n^{p}]]:   L2 = {d['L2_norm']:.4e}")
 
                 # Interface error
                 intf = diagnostics['interface']
-                print(f"\n  Interface L2 error: {intf['L2_error']:.4e}")
+                EqPrint(f"    Interface L2 error: {intf['L2_error']:.4e}")
 
-            print("="*70 + "\n")
+            EqPrint("="*70 + "\n")
 
             # Compute global min and max across both datasets
             vmin = min(AnaliticalNorm)

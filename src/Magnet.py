@@ -19,6 +19,7 @@
 # Research Group: Nuclear Fusion  
 
 
+from _logging import EqPrint
 from Greens import *
 from GaussQuadrature import *
 from ShapeFunctions import *
@@ -113,7 +114,7 @@ class RectangularMultiCoil:
         # CHECK THAT ncoils IS EQUAL TO THE DEFINED NUMBER OF COILS' POSITIONS
         if self.n != np.shape(self.Xcoils)[0]:
             self.n = np.shape(self.Xcoils)[0]
-            print('Multicoil '+self.name+': number of coils corrected to '+ str(self.n))
+            EqPrint('Multicoil '+self.name+': number of coils corrected to '+ str(self.n))
         
         self.COILS = list()
         for icoil, xcoil in enumerate(self.Xcoils):

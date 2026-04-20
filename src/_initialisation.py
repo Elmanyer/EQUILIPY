@@ -19,6 +19,7 @@
 # Research Group: Nuclear Fusion  
 
 
+from _logging import EqPrint
 import numpy as np
 from math import ceil
 from Element import *
@@ -37,7 +38,7 @@ class EquilipyInitialisation:
         based on 2D quadrature order.
         """
         
-        print("INITIALISE SIMULATION PARAMETERS...", end="")
+        EqPrint("INITIALISE SIMULATION PARAMETERS...", end="")
         # OVERRIDE CRITICAL POINT OPTIMIZATION OUTPUT WHEN FIXED-BOUNDARY PROBLEM
         if self.FIXED_BOUNDARY:
             self.out_PSIcrit = False
@@ -97,10 +98,10 @@ class EquilipyInitialisation:
             - Assigns initial PSI to the corresponding elements.
             - Assigns plasma boundary constraint values.
         """
-        print('INITIALISE PSI...')
+        EqPrint('INITIALISE PSI...')
         
         ####### INITIALISE PSI VECTORS
-        print('     -> INITIALISE PSI ARRAYS...', end="")
+        EqPrint('     -> INITIALISE PSI ARRAYS...', end="")
         # INITIALISE ITERATIVE UPDATED ARRAYS
         self.PSI = np.zeros([self.MESH.Nn],dtype=float)            # SOLUTION FROM SOLVING CutFEM SYSTEM OF EQUATIONS (INTERNAL LOOP)       
         self.PSI_NORM = np.zeros([self.MESH.Nn,2],dtype=float)     # NORMALISED PSI SOLUTION FIELD (INTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)
@@ -109,7 +110,7 @@ class EquilipyInitialisation:
         
         ####### COMPUTE INITIAL GUESS AND STORE IT IN ARRAY FOR N=0
         # COMPUTE INITIAL GUESS
-        print('     -> COMPUTE INITIAL GUESS FOR PSI_NORM...', end="")
+        EqPrint('     -> COMPUTE INITIAL GUESS FOR PSI_NORM...', end="")
         self.PSI_NORM[:,0] = self.initialPSI.PSI0
         self.PSI_NORM[:,1] = self.PSI_NORM[:,0]
         # INITIALISE CRITICAL POINTS ARRAY
@@ -128,7 +129,7 @@ class EquilipyInitialisation:
         self.UpdateElementalPSI()
         print('Done!')  
         
-        print('Done!') 
+        EqPrint('Done!') 
         return
     
         
@@ -142,24 +143,24 @@ class EquilipyInitialisation:
             - Updates the computational domain's boundary values based on the computed PSI_B.
         """
         
-        print('INITIALISE PSI_B...')
+        EqPrint('INITIALISE PSI_B...')
         
         ####### INITIALISE PSI BOUNDARY VECTOR
         self.PSI_B = np.zeros([self.MESH.Nnbound,2],dtype=float)   # COMPUTATIONAL DOMAIN BOUNDARY PSI VALUES (EXTERNAL LOOP) AT ITERATIONS N AND N+1 (COLUMN 0 -> ITERATION N ; COLUMN 1 -> ITERATION N+1)    
         
         ####### COMPUTE INITIAL COMPUTATIONAL DOMAIN BOUNDARY VALUES PSI_B AND STORE THEM IN ARRAY FOR N=0
-        print('     -> COMPUTE INITIAL COMPUTATIONAL DOMAIN BOUNDARY VALUES PSI_B...', end="")
+        EqPrint('     -> COMPUTE INITIAL COMPUTATIONAL DOMAIN BOUNDARY VALUES PSI_B...', end="")
         # COMPUTE INITIAL TOTAL PLASMA CURRENT CORRECTION FACTOR
         #self.ComputeTotalPlasmaCurrentNormalization()
         self.PSI_B[:,0] = self.ComputeBoundaryPSI()
         self.PSI_B[:,1] = self.PSI_B[:,0]
         print('Done!')
         
-        print('     -> ASSIGN INITIAL COMPUTATIONAL DOMAIN BOUNDARY VALUES...', end="")
+        EqPrint('     -> ASSIGN INITIAL COMPUTATIONAL DOMAIN BOUNDARY VALUES...', end="")
         self.UpdateElementalPSI_B()
         print('Done!')
         
-        print('Done!')  
+        EqPrint('Done!')  
         return
     
     

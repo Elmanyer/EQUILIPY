@@ -19,6 +19,7 @@
 # Research Group: Nuclear Fusion  
 
 
+from _logging import EqPrint
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
@@ -78,8 +79,8 @@ class EquilipyUpdate:
                 # UPDATE VALUES
                 
                 self.int_residu = L2residu
-                print("Internal iteration = ",self.int_it,", PSI_NORM residu = ", L2residu)
-                print(" ")
+                EqPrint("Internal iteration = ",self.int_it,", PSI_NORM residu = ", L2residu)
+                EqPrint(" ")
             
         elif VALUES == "PSI_B":
             # FOR FIXED BOUNDARY PROBLEM, THE BOUNDARY VALUES ARE ALWAYS THE SAME, THEREFORE A SINGLE EXTERNAL ITERATION IS NEEDED
@@ -98,8 +99,8 @@ class EquilipyUpdate:
                     self.ext_cvg = False
                     
                 self.ext_residu = L2residu
-                print("External iteration = ",self.ext_it,", PSI_B residu = ", L2residu)
-                print(" ")
+                EqPrint("External iteration = ",self.ext_it,", PSI_B residu = ", L2residu)
+                EqPrint(" ")
         return 
     
     def UpdatePSI_NORM(self):

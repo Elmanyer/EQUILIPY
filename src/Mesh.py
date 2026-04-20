@@ -1,3 +1,4 @@
+from _logging import EqPrint
 import numpy as np
 from os.path import basename
 from Element import *
@@ -20,7 +21,7 @@ class Mesh:
         self.directory = path_to_folder
         
         if readfiles:
-            print('Mesh folder: ' + path_to_folder)
+            EqPrint('Mesh folder: ' + path_to_folder)
         
         # INITIALISE ATTRIBUTES
         self.ElTypeALYA = None              # TYPE OF ELEMENTS CONSTITUTING THE MESH, USING ALYA NOTATION
@@ -69,7 +70,7 @@ class Mesh:
         
         # READ MESH FILES
         if readfiles:
-            print("READ MESH FILES...", end="")
+            EqPrint("READ MESH FILES...", end="")
             self.ReadMeshFile()
             self.ReadFixFile()
             print('Done!')
@@ -358,9 +359,8 @@ class Mesh:
         
         # COMPUTE MESH MEAN SIZE
         self.meanArea, self.meanLength = self.ComputeMeshElementsMeanSize()
-        print("         · MESH ELEMENTS MEAN AREA = " + str(self.meanArea) + " m^2")
-        print("         · MESH ELEMENTS MEAN LENGTH = " + str(self.meanLength) + " m")
-        print("         · RECOMMENDED NITSCHE'S PENALTY PARAMETER VALUE    beta ~ C·" + str(self.ElOrder**2/self.meanLength))
+        EqPrint("         · MESH ELEMENTS MEAN AREA = " + str(self.meanArea) + " m^2")
+        EqPrint("         · MESH ELEMENTS MEAN LENGTH = " + str(self.meanLength) + " m")
         return
     
     

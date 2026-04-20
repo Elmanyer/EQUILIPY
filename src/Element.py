@@ -19,6 +19,7 @@
 # Research Group: Nuclear Fusion  
 
 
+from _logging import EqPrint
 from GaussQuadrature import *
 from ShapeFunctions import *
 from scipy import optimize
@@ -106,7 +107,7 @@ class Element:
         them in the format: attribute_name: value.
         """
         for attribute, value in vars(self).items():
-            print(f"{attribute}: {value}")
+            EqPrint(f"{attribute}: {value}")
         return
     
     ##################################################################################################
@@ -1090,7 +1091,7 @@ class Element:
                 else:
                     raise ValueError('Element '+ str(elemindex)+', subelem '+str(self.index)+': surface integration quadrature is not accurate.')
         except ValueError as e:
-            print("Warning: ", e)
+            EqPrint("Warning: ", e)
         return 
     
     
@@ -1126,7 +1127,7 @@ class Element:
             if error:
                 raise ValueError('Element '+ str(self.index)+': arc length integration quadrature is not accurate.')
         except ValueError as e:
-            print("Warning: ", e)
+            EqPrint("Warning: ", e)
             
         return
     
@@ -1533,15 +1534,15 @@ class Element:
                     integral += SUBELEM.Ng[ig,inode]*abs(detJg[ig])*SUBELEM.Wg[ig]
                 #integral += abs(detJg[ig])*Wg2Dstand[ig]
                     
-            print("SUBELEMENT ,", isub," POLYGONAL DECOMPOSITION AREA = ", area)
+            EqPrint("SUBELEMENT ,", isub," POLYGONAL DECOMPOSITION AREA = ", area)
             totalarea += area
-            print("SUBELEMENT ,", isub," INTEGRAL AREA = ", integral)
+            EqPrint("SUBELEMENT ,", isub," INTEGRAL AREA = ", integral)
             totalintegral += abs(integral)
             
         trianglearea = compute_triangle_area(XIe)
-        print("ELEMENT AREA = ", trianglearea)
-        print("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
-        print("ELEMENTAL INTEGRAL AREA = ", totalintegral)
+        EqPrint("ELEMENT AREA = ", trianglearea)
+        EqPrint("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
+        EqPrint("ELEMENTAL INTEGRAL AREA = ", totalintegral)
         
         # LINE INTEGRATION QUADRATURES
         # PIECE-WISE LINEAR APPROXIMATION
@@ -1549,7 +1550,7 @@ class Element:
         for inode in range(self.ElOrder):
             lengthi = np.linalg.norm(self.InterfApprox.XIint[self.InterfApprox.Tint[inode+1],:]-self.InterfApprox.XIint[self.InterfApprox.Tint[inode],:])
             length += lengthi
-        print('PIECE-WISE LINEAR INTERFACE ARC LENGTH APPROXIMATION = ', length)
+        EqPrint('PIECE-WISE LINEAR INTERFACE ARC LENGTH APPROXIMATION = ', length)
         
         # OBTAIN 1D STANDARD GAUSS QUADRATURE
         XIg1Dstand, foo, foo = GaussQuadrature(0,self.InterfApprox.ng)
@@ -1564,7 +1565,7 @@ class Element:
         for ig in range(self.InterfApprox.ng):
             for inode in range(self.n):
                 integral += self.InterfApprox.Ng[ig,inode]*detJg1D[ig]*self.InterfApprox.Wg[ig]
-        print('ISOPARAMETRIC INTERFACE ARC LENGTH APPROXIMATION = ', integral)
+        EqPrint('ISOPARAMETRIC INTERFACE ARC LENGTH APPROXIMATION = ', integral)
         return
     
     
@@ -1614,8 +1615,8 @@ class Element:
                 for inode in range(self.n):
                     integral += self.Ng[ig,inode]*abs(self.detJg[ig])*self.Wg[ig]
                     
-            print("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
-            print("ELEMENTAL INTEGRAL AREA = ", integral)
+            EqPrint("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
+            EqPrint("ELEMENTAL INTEGRAL AREA = ", integral)
             
         else: 
             #### PHYSICAL SPACE
@@ -1711,15 +1712,15 @@ class Element:
                     for inode in range(SUBELEM.n):
                         integral += SUBELEM.Ng[ig,inode]*abs(SUBELEM.detJg[ig])*SUBELEM.Wg[ig]
                         
-                print("SUBELEMENT ,", isub," POLYGONAL DECOMPOSITION AREA = ", area)
+                EqPrint("SUBELEMENT ,", isub," POLYGONAL DECOMPOSITION AREA = ", area)
                 totalarea += area
-                print("SUBELEMENT ,", isub," INTEGRAL AREA = ", integral)
+                EqPrint("SUBELEMENT ,", isub," INTEGRAL AREA = ", integral)
                 totalintegral += abs(integral)
                 
             trianglearea = compute_triangle_area(self.Xe)
-            print("ELEMENT AREA = ", trianglearea)
-            print("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
-            print("ELEMENTAL INTEGRAL AREA = ", totalintegral)
+            EqPrint("ELEMENT AREA = ", trianglearea)
+            EqPrint("ELEMENTAL POLYGONAL DECOMPOSITION AREA = ", totalarea)
+            EqPrint("ELEMENTAL INTEGRAL AREA = ", totalintegral)
 
             # LINE INTEGRATION QUADRATURES
             # PIECE-WISE LINEAR APPROXIMATION
@@ -1727,13 +1728,13 @@ class Element:
             for inode in range(self.ElOrder):
                 lengthi = np.linalg.norm(self.InterfApprox.Xint[self.InterfApprox.Tint[inode+1],:]-self.InterfApprox.Xint[self.InterfApprox.Tint[inode],:])
                 length += lengthi
-            print('PIECE-WISE LINEAR INTERFACE ARC LENGTH APPROXIMATION = ', length)
+            EqPrint('PIECE-WISE LINEAR INTERFACE ARC LENGTH APPROXIMATION = ', length)
 
             integral = 0
             for ig in range(self.InterfApprox.ng):
                 for inode in range(self.n):
                     integral += self.InterfApprox.Ng[ig,inode]*self.InterfApprox.detJg1D[ig]*self.InterfApprox.Wg[ig]
-            print('ISOPARAMETRIC INTERFACE ARC LENGTH APPROXIMATION = ', integral)
+            EqPrint('ISOPARAMETRIC INTERFACE ARC LENGTH APPROXIMATION = ', integral)
         return
     
     ##################################################################################################

@@ -5,6 +5,7 @@
 # Email: pau.manyer@bsc.es
 # Institution: Barcelona Supercomputing Center (BSC)
 
+from _logging import EqPrint
 import numpy as np
 import warnings
 
@@ -101,7 +102,7 @@ def test_ghost_face_normal_opposition(mesh):
         - all_passed (bool): Whether all checks passed
     """
     if mesh.GhostFaces is None or len(mesh.GhostFaces) == 0:
-        print("No ghost faces found in mesh.")
+        EqPrint("No ghost faces found in mesh.")
         return [], True
 
     failures = []
@@ -126,13 +127,13 @@ def test_ghost_face_normal_opposition(mesh):
     all_passed = len(failures) == 0
 
     if all_passed:
-        print(f"✓ Ghost face normal opposition test PASSED ({len(mesh.GhostFaces)} faces checked)")
+        EqPrint(f"✓ Ghost face normal opposition test PASSED ({len(mesh.GhostFaces)} faces checked)")
     else:
-        print(f"✗ Ghost face normal opposition test FAILED for {len(failures)} faces:")
+        EqPrint(f"✗ Ghost face normal opposition test FAILED for {len(failures)} faces:")
         for elem1, elem2, norm in failures[:5]:  # Print first 5 failures
-            print(f"  Elements {elem1} & {elem2}: normal sum norm = {norm:.2e}")
+            EqPrint(f"  Elements {elem1} & {elem2}: normal sum norm = {norm:.2e}")
         if len(failures) > 5:
-            print(f"  ... and {len(failures)-5} more failures")
+            EqPrint(f"  ... and {len(failures)-5} more failures")
 
     return failures, all_passed
 
@@ -166,11 +167,11 @@ def test_ghost_face_normal_unitary(mesh):
     all_passed = len(failures) == 0
 
     if all_passed:
-        print(f"✓ Ghost face normal unitary test PASSED")
+        EqPrint(f"✓ Ghost face normal unitary test PASSED")
     else:
-        print(f"✗ Ghost face normal unitary test FAILED for {len(failures)} normals:")
+        EqPrint(f"✗ Ghost face normal unitary test FAILED for {len(failures)} normals:")
         for elem, face_idx, norm in failures[:5]:
-            print(f"  Element {elem}, Face {face_idx}: ||n|| = {norm:.6f}")
+            EqPrint(f"  Element {elem}, Face {face_idx}: ||n|| = {norm:.6f}")
 
     return failures, all_passed
 
@@ -212,11 +213,11 @@ def test_ghost_face_orthogonality(mesh):
     all_passed = len(failures) == 0
 
     if all_passed:
-        print(f"✓ Ghost face orthogonality test PASSED")
+        EqPrint(f"✓ Ghost face orthogonality test PASSED")
     else:
-        print(f"✗ Ghost face orthogonality test FAILED for {len(failures)} faces:")
+        EqPrint(f"✗ Ghost face orthogonality test FAILED for {len(failures)} faces:")
         for elem, face_idx, dot in failures[:5]:
-            print(f"  Element {elem}, Face {face_idx}: tangent·normal = {dot:.2e}")
+            EqPrint(f"  Element {elem}, Face {face_idx}: tangent·normal = {dot:.2e}")
 
     return failures, all_passed
 
@@ -277,9 +278,9 @@ def test_shape_functions_partition_of_unity(elemType, elemOrder, num_test_points
     all_passed = max_error < 1e-12
 
     if all_passed:
-        print(f"✓ Shape function partition of unity test PASSED (max error = {max_error:.2e})")
+        EqPrint(f"✓ Shape function partition of unity test PASSED (max error = {max_error:.2e})")
     else:
-        print(f"✗ Shape function partition of unity test FAILED (max error = {max_error:.2e})")
+        EqPrint(f"✗ Shape function partition of unity test FAILED (max error = {max_error:.2e})")
 
     return max_error, all_passed
 
@@ -320,9 +321,9 @@ def test_shape_functions_at_nodes(elemType, elemOrder):
     all_passed = max_error < 1e-12
 
     if all_passed:
-        print(f"✓ Shape function Kronecker delta test PASSED (max error = {max_error:.2e})")
+        EqPrint(f"✓ Shape function Kronecker delta test PASSED (max error = {max_error:.2e})")
     else:
-        print(f"✗ Shape function Kronecker delta test FAILED (max error = {max_error:.2e})")
+        EqPrint(f"✗ Shape function Kronecker delta test FAILED (max error = {max_error:.2e})")
 
     return max_error, all_passed
 
@@ -384,9 +385,9 @@ def test_shape_function_derivatives_consistency(elemType, elemOrder, epsilon=1e-
     all_passed = max_error < 1e-4  # Relaxed tolerance for finite differences
 
     if all_passed:
-        print(f"✓ Shape function derivative consistency test PASSED (max error = {max_error:.2e})")
+        EqPrint(f"✓ Shape function derivative consistency test PASSED (max error = {max_error:.2e})")
     else:
-        print(f"✗ Shape function derivative consistency test FAILED (max error = {max_error:.2e})")
+        EqPrint(f"✗ Shape function derivative consistency test FAILED (max error = {max_error:.2e})")
 
     return max_error, all_passed
 
@@ -462,9 +463,9 @@ def test_polynomial_reproduction(elemType, elemOrder):
     all_passed = max_error < 1e-10
 
     if all_passed:
-        print(f"✓ Polynomial reproduction test PASSED (max error = {max_error:.2e})")
+        EqPrint(f"✓ Polynomial reproduction test PASSED (max error = {max_error:.2e})")
     else:
-        print(f"✗ Polynomial reproduction test FAILED (max error = {max_error:.2e})")
+        EqPrint(f"✗ Polynomial reproduction test FAILED (max error = {max_error:.2e})")
 
     return max_error, all_passed
 
@@ -492,7 +493,7 @@ def test_jacobian_computation(elemType, elemOrder):
 
     if elemType == 0:
         # Skip 1D elements for Jacobian test
-        print(f"✓ Jacobian computation test SKIPPED for 1D elements")
+        EqPrint(f"✓ Jacobian computation test SKIPPED for 1D elements")
         return 0.0, True
 
     # Get reference element coordinates
@@ -533,9 +534,9 @@ def test_jacobian_computation(elemType, elemOrder):
     all_passed = max_error < 1e-10
 
     if all_passed:
-        print(f"✓ Jacobian computation test PASSED (max error = {max_error:.2e})")
+        EqPrint(f"✓ Jacobian computation test PASSED (max error = {max_error:.2e})")
     else:
-        print(f"✗ Jacobian computation test FAILED (max error = {max_error:.2e})")
+        EqPrint(f"✗ Jacobian computation test FAILED (max error = {max_error:.2e})")
 
     return max_error, all_passed
 
@@ -575,9 +576,9 @@ def test_jacobian_1d_arc_length():
     passed = error < 1e-12
 
     if passed:
-        print(f"✓ 1D Jacobian arc length test PASSED (error = {error:.2e})")
+        EqPrint(f"✓ 1D Jacobian arc length test PASSED (error = {error:.2e})")
     else:
-        print(f"✗ 1D Jacobian arc length test FAILED (error = {error:.2e})")
+        EqPrint(f"✗ 1D Jacobian arc length test FAILED (error = {error:.2e})")
 
     return error, passed
 
@@ -615,11 +616,11 @@ def test_jacobian_determinant_signs(mesh):
     all_passed = len(negative_jacobians) == 0
 
     if all_passed:
-        print(f"✓ Jacobian determinant sign test PASSED")
+        EqPrint(f"✓ Jacobian determinant sign test PASSED")
     else:
-        print(f"✗ Jacobian determinant sign test FAILED for {len(negative_jacobians)} quadrature points:")
+        EqPrint(f"✗ Jacobian determinant sign test FAILED for {len(negative_jacobians)} quadrature points:")
         for elem_idx, face_idx, quad_idx, detJ in negative_jacobians[:5]:
-            print(f"  Element {elem_idx}, Face {face_idx}, Quad {quad_idx}: det(J) = {detJ:.2e}")
+            EqPrint(f"  Element {elem_idx}, Face {face_idx}, Quad {quad_idx}: det(J) = {detJ:.2e}")
 
     return negative_jacobians, all_passed
 
@@ -664,9 +665,9 @@ def test_einsum_gradient_contraction():
     passed = error < 1e-14
 
     if passed:
-        print(f"✓ Einsum gradient contraction test PASSED (error = {error:.2e})")
+        EqPrint(f"✓ Einsum gradient contraction test PASSED (error = {error:.2e})")
     else:
-        print(f"✗ Einsum gradient contraction test FAILED (error = {error:.2e})")
+        EqPrint(f"✗ Einsum gradient contraction test FAILED (error = {error:.2e})")
 
     return error, passed
 
@@ -709,9 +710,9 @@ def test_einsum_hessian_contraction():
     passed = error < 1e-14
 
     if passed:
-        print(f"✓ Einsum Hessian contraction test PASSED (error = {error:.2e})")
+        EqPrint(f"✓ Einsum Hessian contraction test PASSED (error = {error:.2e})")
     else:
-        print(f"✗ Einsum Hessian contraction test FAILED (error = {error:.2e})")
+        EqPrint(f"✗ Einsum Hessian contraction test FAILED (error = {error:.2e})")
 
     return error, passed
 
@@ -754,9 +755,9 @@ def test_einsum_third_derivative_contraction():
     passed = error < 1e-13
 
     if passed:
-        print(f"✓ Einsum third derivative contraction test PASSED (error = {error:.2e})")
+        EqPrint(f"✓ Einsum third derivative contraction test PASSED (error = {error:.2e})")
     else:
-        print(f"✗ Einsum third derivative contraction test FAILED (error = {error:.2e})")
+        EqPrint(f"✗ Einsum third derivative contraction test FAILED (error = {error:.2e})")
 
     return error, passed
 
@@ -775,7 +776,7 @@ def test_normal_derivative_jump_symmetry(mesh):
         - all_passed (bool): Whether test passed
     """
     if mesh.GhostFaces is None or len(mesh.GhostFaces) == 0:
-        print("No ghost faces to test.")
+        EqPrint("No ghost faces to test.")
         return 0.0, True
 
     max_asymmetry = 0.0
@@ -818,9 +819,9 @@ def test_normal_derivative_jump_symmetry(mesh):
     all_passed = max_asymmetry < 1e-12
 
     if all_passed:
-        print(f"✓ Ghost penalty matrix symmetry test PASSED (max asymmetry = {max_asymmetry:.2e})")
+        EqPrint(f"✓ Ghost penalty matrix symmetry test PASSED (max asymmetry = {max_asymmetry:.2e})")
     else:
-        print(f"✗ Ghost penalty matrix symmetry test FAILED (max asymmetry = {max_asymmetry:.2e})")
+        EqPrint(f"✗ Ghost penalty matrix symmetry test FAILED (max asymmetry = {max_asymmetry:.2e})")
 
     return max_asymmetry, all_passed
 
@@ -865,11 +866,11 @@ def test_ghost_face_node_permutation(mesh):
     all_passed = len(failures) == 0
 
     if all_passed:
-        print(f"✓ Ghost face node permutation test PASSED ({len(mesh.GhostFaces)} faces checked)")
+        EqPrint(f"✓ Ghost face node permutation test PASSED ({len(mesh.GhostFaces)} faces checked)")
     else:
-        print(f"✗ Ghost face node permutation test FAILED for {len(failures)} faces:")
+        EqPrint(f"✗ Ghost face node permutation test FAILED for {len(failures)} faces:")
         for elem1, elem2, diff in failures[:5]:
-            print(f"  Elements {elem1} & {elem2}: coordinate mismatch = {diff:.2e}")
+            EqPrint(f"  Elements {elem1} & {elem2}: coordinate mismatch = {diff:.2e}")
 
     return failures, all_passed
 
@@ -915,11 +916,11 @@ def test_edge_node_ordering(mesh):
     all_passed = len(inconsistencies) == 0
 
     if all_passed:
-        print(f"✓ Edge node ordering test PASSED ({mesh.Ne} elements checked)")
+        EqPrint(f"✓ Edge node ordering test PASSED ({mesh.Ne} elements checked)")
     else:
-        print(f"✗ Edge node ordering test FOUND {len(inconsistencies)} degenerate edges:")
+        EqPrint(f"✗ Edge node ordering test FOUND {len(inconsistencies)} degenerate edges:")
         for elem_idx, edge_idx in inconsistencies[:5]:
-            print(f"  Element {elem_idx}, Edge {edge_idx}")
+            EqPrint(f"  Element {elem_idx}, Edge {edge_idx}")
 
     return inconsistencies, all_passed
 
@@ -968,9 +969,9 @@ def test_ghost_face_reference_physical_consistency(mesh):
     all_passed = max_error < 1e-10
 
     if all_passed:
-        print(f"✓ Ghost face reference-physical consistency test PASSED (max error = {max_error:.2e})")
+        EqPrint(f"✓ Ghost face reference-physical consistency test PASSED (max error = {max_error:.2e})")
     else:
-        print(f"✗ Ghost face reference-physical consistency test FAILED (max error = {max_error:.2e})")
+        EqPrint(f"✗ Ghost face reference-physical consistency test FAILED (max error = {max_error:.2e})")
 
     return max_error, all_passed
 
@@ -1017,11 +1018,11 @@ def test_ghost_face_quadrature_accuracy(mesh, tolerance=1e-8):
     all_passed = len(errors) == 0
 
     if all_passed:
-        print(f"✓ Ghost face quadrature accuracy test PASSED")
+        EqPrint(f"✓ Ghost face quadrature accuracy test PASSED")
     else:
-        print(f"✗ Ghost face quadrature accuracy test FAILED for {len(errors)} faces:")
+        EqPrint(f"✗ Ghost face quadrature accuracy test FAILED for {len(errors)} faces:")
         for elem_idx, face_idx, exact, quad, err in errors[:5]:
-            print(f"  Element {elem_idx}, Face {face_idx}: error = {err:.2e} "
+            EqPrint(f"  Element {elem_idx}, Face {face_idx}: error = {err:.2e} "
                   f"(exact={exact:.6f}, quad={quad:.6f})")
 
     return errors, all_passed
@@ -1085,9 +1086,9 @@ def test_quadrature_polynomial_exactness(elemType, order, degree):
     passed = error < 1e-10
 
     if passed:
-        print(f"✓ Quadrature polynomial exactness test PASSED (type={elemType}, order={order}, error={error:.2e})")
+        EqPrint(f"✓ Quadrature polynomial exactness test PASSED (type={elemType}, order={order}, error={error:.2e})")
     else:
-        print(f"✗ Quadrature polynomial exactness test FAILED (type={elemType}, order={order}, error={error:.2e})")
+        EqPrint(f"✗ Quadrature polynomial exactness test FAILED (type={elemType}, order={order}, error={error:.2e})")
 
     return error, passed
 
@@ -1128,9 +1129,9 @@ def test_system_matrix_symmetry(LHS_matrix, tolerance=1e-10):
     is_symmetric = max_asymmetry < tolerance
 
     if is_symmetric:
-        print(f"✓ System matrix symmetry test PASSED (max asymmetry = {max_asymmetry:.2e})")
+        EqPrint(f"✓ System matrix symmetry test PASSED (max asymmetry = {max_asymmetry:.2e})")
     else:
-        print(f"✗ System matrix symmetry test FAILED (max asymmetry = {max_asymmetry:.2e})")
+        EqPrint(f"✗ System matrix symmetry test FAILED (max asymmetry = {max_asymmetry:.2e})")
 
     return max_asymmetry, is_symmetric
 
@@ -1173,14 +1174,14 @@ def test_system_matrix_conditioning(LHS_matrix, RHS_vector):
         }
 
         if is_well_conditioned:
-            print(f"✓ System matrix conditioning test PASSED (diag. dominance = {dominance:.4f})")
+            EqPrint(f"✓ System matrix conditioning test PASSED (diag. dominance = {dominance:.4f})")
         else:
             warnings.warn(f"System matrix may be ill-conditioned (diag. dominance = {dominance:.4f})")
 
         return info_dict
 
     except Exception as e:
-        print(f"⚠ Could not analyze matrix conditioning: {str(e)}")
+        EqPrint(f"⚠ Could not analyze matrix conditioning: {str(e)}")
         return {'error': str(e)}
 
 
@@ -1215,14 +1216,14 @@ def test_ghost_penalty_contribution_magnitude(LHS_matrix_with_ghost, LHS_matrix_
         is_reasonable = 0.001 < ghost_contribution_ratio < 0.9
 
         if is_reasonable:
-            print(f"✓ Ghost penalty contribution test PASSED (ratio = {ghost_contribution_ratio:.4f})")
+            EqPrint(f"✓ Ghost penalty contribution test PASSED (ratio = {ghost_contribution_ratio:.4f})")
         else:
             warnings.warn(f"Ghost penalty contribution may be unreasonable (ratio = {ghost_contribution_ratio:.4f})")
 
         return ghost_contribution_ratio, is_reasonable
 
     except Exception as e:
-        print(f"⚠ Could not compare matrices: {str(e)}")
+        EqPrint(f"⚠ Could not compare matrices: {str(e)}")
         return None, False
 
 
@@ -1242,7 +1243,7 @@ def test_ghost_penalty_matrix_positive_semidefinite(mesh, zeta=1.0):
         - is_psd (bool): Whether matrix is positive semi-definite
     """
     if mesh.GhostFaces is None or len(mesh.GhostFaces) == 0:
-        print("No ghost faces to test.")
+        EqPrint("No ghost faces to test.")
         return 0.0, True
 
     # Build a small test matrix from one ghost face
@@ -1286,9 +1287,9 @@ def test_ghost_penalty_matrix_positive_semidefinite(mesh, zeta=1.0):
     is_psd = min_eigenvalue >= -1e-12
 
     if is_psd:
-        print(f"✓ Ghost penalty PSD test PASSED (min eigenvalue = {min_eigenvalue:.2e})")
+        EqPrint(f"✓ Ghost penalty PSD test PASSED (min eigenvalue = {min_eigenvalue:.2e})")
     else:
-        print(f"✗ Ghost penalty PSD test FAILED (min eigenvalue = {min_eigenvalue:.2e})")
+        EqPrint(f"✗ Ghost penalty PSD test FAILED (min eigenvalue = {min_eigenvalue:.2e})")
 
     return min_eigenvalue, is_psd
 
@@ -1456,7 +1457,7 @@ def test_solution_continuity_across_ghost_faces(mesh, PSI, tolerance=1e-10):
         - all_continuous: Whether all jumps are within tolerance
     """
     if mesh.GhostFaces is None or len(mesh.GhostFaces) == 0:
-        print("No ghost faces to test.")
+        EqPrint("No ghost faces to test.")
         return 0.0, True
 
     max_jump = 0.0
@@ -1476,11 +1477,11 @@ def test_solution_continuity_across_ghost_faces(mesh, PSI, tolerance=1e-10):
     all_continuous = len(failures) == 0
 
     if all_continuous:
-        print(f"✓ Solution continuity test PASSED (max jump = {max_jump:.2e})")
+        EqPrint(f"✓ Solution continuity test PASSED (max jump = {max_jump:.2e})")
     else:
-        print(f"✗ Solution continuity test FAILED ({len(failures)} faces with jumps > {tolerance:.0e})")
+        EqPrint(f"✗ Solution continuity test FAILED ({len(failures)} faces with jumps > {tolerance:.0e})")
         for elem1, elem2, jump in failures[:3]:
-            print(f"  Elements {elem1} & {elem2}: jump = {jump:.2e}")
+            EqPrint(f"  Elements {elem1} & {elem2}: jump = {jump:.2e}")
 
     return max_jump, all_continuous
 
@@ -1502,20 +1503,20 @@ def test_normal_derivative_jumps(mesh, PSI, deriv_orders=[1, 2, 3], verbose=True
         - results: Dict with L2 norms and max jumps for each derivative order
     """
     if mesh.GhostFaces is None or len(mesh.GhostFaces) == 0:
-        print("No ghost faces to test.")
+        EqPrint("No ghost faces to test.")
         return {}
 
     results = {}
 
     if verbose:
-        print("\n" + "-"*60)
-        print("NORMAL DERIVATIVE JUMP ANALYSIS ACROSS GHOST FACES")
-        print("-"*60)
+        EqPrint("\n" + "-"*60)
+        EqPrint("NORMAL DERIVATIVE JUMP ANALYSIS ACROSS GHOST FACES")
+        EqPrint("-"*60)
 
     for p in deriv_orders:
         if p > mesh.ElOrder:
             if verbose:
-                print(f"  Order {p}: Skipped (exceeds element order {mesh.ElOrder})")
+                EqPrint(f"  Order {p}: Skipped (exceeds element order {mesh.ElOrder})")
             continue
 
         total_L2_squared = 0.0
@@ -1532,7 +1533,7 @@ def test_normal_derivative_jumps(mesh, PSI, deriv_orders=[1, 2, 3], verbose=True
                 num_faces += 1
             except Exception as e:
                 if verbose:
-                    print(f"  Warning: Could not compute order {p} derivative for face: {e}")
+                    EqPrint(f"  Warning: Could not compute order {p} derivative for face: {e}")
 
         total_L2 = np.sqrt(total_L2_squared)
 
@@ -1543,10 +1544,10 @@ def test_normal_derivative_jumps(mesh, PSI, deriv_orders=[1, 2, 3], verbose=True
         }
 
         if verbose:
-            print(f"  Order {p} (∂^{p}u/∂n^{p}): L2 = {total_L2:.4e}, Max = {max_jump_all:.4e}")
+            EqPrint(f"  Order {p} (∂^{p}u/∂n^{p}): L2 = {total_L2:.4e}, Max = {max_jump_all:.4e}")
 
     if verbose:
-        print("-"*60)
+        EqPrint("-"*60)
 
     return results
 
@@ -1581,15 +1582,15 @@ def test_ghost_penalty_stabilization_effectiveness(mesh, PSI_with_ghost, PSI_wit
     }
 
     if verbose:
-        print("\n" + "="*70)
-        print("GHOST PENALTY STABILIZATION EFFECTIVENESS ANALYSIS")
+        EqPrint("\n" + "="*70)
+        EqPrint("GHOST PENALTY STABILIZATION EFFECTIVENESS ANALYSIS")
         if zeta is not None:
-            print(f"Ghost penalty parameter: zeta = {zeta}")
-        print("="*70)
+            EqPrint(f"Ghost penalty parameter: zeta = {zeta}")
+        EqPrint("="*70)
 
     # Test 1: Solution continuity
     if verbose:
-        print("\n[Test 1] Solution Continuity (C0)")
+        EqPrint("\n[Test 1] Solution Continuity (C0)")
     max_jump, is_continuous = test_solution_continuity_across_ghost_faces(
         mesh, PSI_with_ghost, tolerance=1e-10
     )
@@ -1603,7 +1604,7 @@ def test_ghost_penalty_stabilization_effectiveness(mesh, PSI_with_ghost, PSI_wit
 
     # Test 2: Normal derivative jumps for solution with ghost penalty
     if verbose:
-        print("\n[Test 2] Normal Derivative Jumps (WITH Ghost Penalty)")
+        EqPrint("\n[Test 2] Normal Derivative Jumps (WITH Ghost Penalty)")
 
     deriv_orders = list(range(1, mesh.ElOrder + 1))
     results_with = test_normal_derivative_jumps(mesh, PSI_with_ghost, deriv_orders, verbose)
@@ -1612,15 +1613,15 @@ def test_ghost_penalty_stabilization_effectiveness(mesh, PSI_with_ghost, PSI_wit
     # Test 3: Compare with solution without ghost penalty (if provided)
     if PSI_without_ghost is not None:
         if verbose:
-            print("\n[Test 3] Normal Derivative Jumps (WITHOUT Ghost Penalty)")
+            EqPrint("\n[Test 3] Normal Derivative Jumps (WITHOUT Ghost Penalty)")
 
         results_without = test_normal_derivative_jumps(mesh, PSI_without_ghost, deriv_orders, verbose)
         report['tests']['derivative_jumps_without_ghost'] = results_without
 
         # Compute reduction ratios
         if verbose:
-            print("\n[Test 4] Stabilization Improvement Ratios")
-            print("-"*60)
+            EqPrint("\n[Test 4] Stabilization Improvement Ratios")
+            EqPrint("-"*60)
 
         improvement_ratios = {}
         for p in deriv_orders:
@@ -1635,7 +1636,7 @@ def test_ghost_penalty_stabilization_effectiveness(mesh, PSI_with_ghost, PSI_wit
 
                     if verbose:
                         status = "✓ IMPROVED" if ratio < 1.0 else "✗ WORSE"
-                        print(f"  Order {p}: Ratio = {ratio:.4f} ({status})")
+                        EqPrint(f"  Order {p}: Ratio = {ratio:.4f} ({status})")
 
                     if ratio >= 1.0:
                         report['warnings'].append(
@@ -1645,25 +1646,25 @@ def test_ghost_penalty_stabilization_effectiveness(mesh, PSI_with_ghost, PSI_wit
         report['tests']['improvement_ratios'] = improvement_ratios
 
         if verbose:
-            print("-"*60)
+            EqPrint("-"*60)
 
     # Summary
     if verbose:
-        print("\n" + "="*70)
-        print("SUMMARY")
-        print("="*70)
+        EqPrint("\n" + "="*70)
+        EqPrint("SUMMARY")
+        EqPrint("="*70)
 
         if report['passed'] and len(report['warnings']) == 0:
-            print("✓ Ghost penalty stabilization is working correctly")
+            EqPrint("✓ Ghost penalty stabilization is working correctly")
         else:
             if not report['passed']:
-                print("✗ Critical issues detected:")
+                EqPrint("✗ Critical issues detected:")
             if report['warnings']:
-                print("⚠ Warnings:")
+                EqPrint("⚠ Warnings:")
                 for w in report['warnings']:
-                    print(f"  - {w}")
+                    EqPrint(f"  - {w}")
 
-        print("="*70 + "\n")
+        EqPrint("="*70 + "\n")
 
     return report
 
@@ -1683,15 +1684,15 @@ def test_manufactured_solution_ghost_penalty(mesh, verbose=True):
         - report: Test results
     """
     if mesh.GhostFaces is None or len(mesh.GhostFaces) == 0:
-        print("No ghost faces to test.")
+        EqPrint("No ghost faces to test.")
         return {'passed': True, 'skipped': True}
 
     report = {'passed': True, 'tests': {}}
 
     if verbose:
-        print("\n" + "="*70)
-        print("MANUFACTURED SOLUTION TEST FOR GHOST PENALTY")
-        print("="*70)
+        EqPrint("\n" + "="*70)
+        EqPrint("MANUFACTURED SOLUTION TEST FOR GHOST PENALTY")
+        EqPrint("="*70)
 
     # Create a smooth manufactured solution: u(x,y) = x^2 + y^2
     # This is exactly representable by quadratic (or higher) elements
@@ -1701,13 +1702,13 @@ def test_manufactured_solution_ghost_penalty(mesh, verbose=True):
         PSI_manufactured[i] = x**2 + y**2
 
     if verbose:
-        print("\nManufactured solution: u(x,y) = x² + y²")
-        print("Expected: Derivative jumps should be at machine precision for")
-        print("          elements of order >= 2 (since solution is quadratic)")
+        EqPrint("\nManufactured solution: u(x,y) = x² + y²")
+        EqPrint("Expected: Derivative jumps should be at machine precision for")
+        EqPrint("          elements of order >= 2 (since solution is quadratic)")
 
     # Test continuity
     if verbose:
-        print("\n[1] Solution Continuity Test")
+        EqPrint("\n[1] Solution Continuity Test")
     max_jump, is_continuous = test_solution_continuity_across_ghost_faces(
         mesh, PSI_manufactured, tolerance=1e-10
     )
@@ -1715,7 +1716,7 @@ def test_manufactured_solution_ghost_penalty(mesh, verbose=True):
 
     # Test derivative jumps
     if verbose:
-        print("\n[2] Derivative Jump Analysis")
+        EqPrint("\n[2] Derivative Jump Analysis")
 
     deriv_results = test_normal_derivative_jumps(
         mesh, PSI_manufactured,
@@ -1734,12 +1735,12 @@ def test_manufactured_solution_ghost_penalty(mesh, verbose=True):
                 )
 
     if verbose:
-        print("\n" + "="*70)
+        EqPrint("\n" + "="*70)
         if report['passed']:
-            print("✓ Manufactured solution test PASSED")
+            EqPrint("✓ Manufactured solution test PASSED")
         else:
-            print("✗ Manufactured solution test FAILED")
-        print("="*70 + "\n")
+            EqPrint("✗ Manufactured solution test FAILED")
+        EqPrint("="*70 + "\n")
 
     return report
 
@@ -1806,19 +1807,19 @@ def run_ghost_penalty_jump_tests(mesh, PSI, zeta=None, h=None, verbose=True):
     results = {}
 
     if verbose:
-        print("\n" + "="*70)
-        print("RUNNING GHOST PENALTY JUMP ANALYSIS TESTS")
-        print("="*70)
+        EqPrint("\n" + "="*70)
+        EqPrint("RUNNING GHOST PENALTY JUMP ANALYSIS TESTS")
+        EqPrint("="*70)
 
     # Test 1: Solution continuity
     if verbose:
-        print("\n[1] Testing solution continuity across ghost faces...")
+        EqPrint("\n[1] Testing solution continuity across ghost faces...")
     max_jump, is_continuous = test_solution_continuity_across_ghost_faces(mesh, PSI)
     results['continuity'] = {'max_jump': max_jump, 'passed': is_continuous}
 
     # Test 2: Normal derivative jumps
     if verbose:
-        print("\n[2] Analyzing normal derivative jumps...")
+        EqPrint("\n[2] Analyzing normal derivative jumps...")
     results['derivative_jumps'] = test_normal_derivative_jumps(
         mesh, PSI,
         deriv_orders=list(range(1, mesh.ElOrder + 1)),
@@ -1828,26 +1829,26 @@ def run_ghost_penalty_jump_tests(mesh, PSI, zeta=None, h=None, verbose=True):
     # Test 3: Ghost penalty energy norm (if parameters provided)
     if zeta is not None and h is not None:
         if verbose:
-            print("\n[3] Computing ghost penalty energy norm...")
+            EqPrint("\n[3] Computing ghost penalty energy norm...")
         energy_norm, contributions = compute_ghost_penalty_energy_norm(mesh, PSI, zeta, h)
         results['energy_norm'] = {
             'total': energy_norm,
             'contributions': contributions
         }
         if verbose:
-            print(f"  Total energy norm: {energy_norm:.4e}")
+            EqPrint(f"  Total energy norm: {energy_norm:.4e}")
             for order, contrib in contributions.items():
-                print(f"    {order}: {np.sqrt(contrib):.4e}")
+                EqPrint(f"    {order}: {np.sqrt(contrib):.4e}")
 
     # Summary
     if verbose:
-        print("\n" + "="*70)
+        EqPrint("\n" + "="*70)
         all_passed = results['continuity']['passed']
         if all_passed:
-            print("✓ ALL GHOST PENALTY JUMP TESTS PASSED")
+            EqPrint("✓ ALL GHOST PENALTY JUMP TESTS PASSED")
         else:
-            print("✗ SOME TESTS FAILED")
-        print("="*70 + "\n")
+            EqPrint("✗ SOME TESTS FAILED")
+        EqPrint("="*70 + "\n")
 
     return results
 
@@ -1864,9 +1865,9 @@ def run_all_shape_function_tests(verbose=True):
         - results (dict): Test results
     """
     if verbose:
-        print("\n" + "="*70)
-        print("RUNNING SHAPE FUNCTION VALIDATION TESTS")
-        print("="*70)
+        EqPrint("\n" + "="*70)
+        EqPrint("RUNNING SHAPE FUNCTION VALIDATION TESTS")
+        EqPrint("="*70)
 
     results = {}
 
@@ -1879,7 +1880,7 @@ def run_all_shape_function_tests(verbose=True):
             key = f"{type_name}_Order{elemOrder}"
 
             if verbose:
-                print(f"\n--- Testing {type_name}, Order {elemOrder} ---")
+                EqPrint(f"\n--- Testing {type_name}, Order {elemOrder} ---")
 
             results[f'{key}_partition'] = test_shape_functions_partition_of_unity(elemType, elemOrder)
             results[f'{key}_kronecker'] = test_shape_functions_at_nodes(elemType, elemOrder)
@@ -1890,13 +1891,13 @@ def run_all_shape_function_tests(verbose=True):
             results[f'{key}_polynomial'] = test_polynomial_reproduction(elemType, elemOrder)
 
     if verbose:
-        print("\n" + "="*70)
+        EqPrint("\n" + "="*70)
         all_passed = all(r[1] for r in results.values() if isinstance(r, tuple))
         if all_passed:
-            print("✓ ALL SHAPE FUNCTION TESTS PASSED")
+            EqPrint("✓ ALL SHAPE FUNCTION TESTS PASSED")
         else:
-            print("✗ SOME SHAPE FUNCTION TESTS FAILED")
-        print("="*70)
+            EqPrint("✗ SOME SHAPE FUNCTION TESTS FAILED")
+        EqPrint("="*70)
 
     return results
 
@@ -1909,9 +1910,9 @@ def run_all_einsum_tests(verbose=True):
         - results (dict): Test results
     """
     if verbose:
-        print("\n" + "="*70)
-        print("RUNNING EINSUM CONTRACTION VALIDATION TESTS")
-        print("="*70 + "\n")
+        EqPrint("\n" + "="*70)
+        EqPrint("RUNNING EINSUM CONTRACTION VALIDATION TESTS")
+        EqPrint("="*70 + "\n")
 
     results = {}
 
@@ -1920,13 +1921,13 @@ def run_all_einsum_tests(verbose=True):
     results['third_derivative'] = test_einsum_third_derivative_contraction()
 
     if verbose:
-        print("\n" + "="*70)
+        EqPrint("\n" + "="*70)
         all_passed = all(r[1] for r in results.values())
         if all_passed:
-            print("✓ ALL EINSUM TESTS PASSED")
+            EqPrint("✓ ALL EINSUM TESTS PASSED")
         else:
-            print("✗ SOME EINSUM TESTS FAILED")
-        print("="*70)
+            EqPrint("✗ SOME EINSUM TESTS FAILED")
+        EqPrint("="*70)
 
     return results
 
@@ -1939,9 +1940,9 @@ def run_all_jacobian_tests(verbose=True):
         - results (dict): Test results
     """
     if verbose:
-        print("\n" + "="*70)
-        print("RUNNING JACOBIAN VALIDATION TESTS")
-        print("="*70 + "\n")
+        EqPrint("\n" + "="*70)
+        EqPrint("RUNNING JACOBIAN VALIDATION TESTS")
+        EqPrint("="*70 + "\n")
 
     results = {}
 
@@ -1954,13 +1955,13 @@ def run_all_jacobian_tests(verbose=True):
     results['arc_length_1d'] = test_jacobian_1d_arc_length()
 
     if verbose:
-        print("\n" + "="*70)
+        EqPrint("\n" + "="*70)
         all_passed = all(r[1] for r in results.values())
         if all_passed:
-            print("✓ ALL JACOBIAN TESTS PASSED")
+            EqPrint("✓ ALL JACOBIAN TESTS PASSED")
         else:
-            print("✗ SOME JACOBIAN TESTS FAILED")
-        print("="*70)
+            EqPrint("✗ SOME JACOBIAN TESTS FAILED")
+        EqPrint("="*70)
 
     return results
 
@@ -1975,39 +1976,39 @@ def run_all_mesh_tests(mesh):
     Returns:
         - test_results (dict): Dictionary with results of each test
     """
-    print("\n" + "="*70)
-    print("RUNNING MESH VALIDATION TESTS")
-    print("="*70)
+    EqPrint("\n" + "="*70)
+    EqPrint("RUNNING MESH VALIDATION TESTS")
+    EqPrint("="*70)
 
     results = {}
 
-    print("\n1. Testing ghost face normal vectors...")
+    EqPrint("\n1. Testing ghost face normal vectors...")
     results['normal_unitary'] = test_ghost_face_normal_unitary(mesh)
     results['normal_orthogonal'] = test_ghost_face_orthogonality(mesh)
     results['normal_opposition'] = test_ghost_face_normal_opposition(mesh)
 
-    print("\n2. Testing edge and node ordering...")
+    EqPrint("\n2. Testing edge and node ordering...")
     results['edge_ordering'] = test_edge_node_ordering(mesh)
     results['node_permutation'] = test_ghost_face_node_permutation(mesh)
     results['ref_phys_consistency'] = test_ghost_face_reference_physical_consistency(mesh)
 
-    print("\n3. Testing Jacobian determinants...")
+    EqPrint("\n3. Testing Jacobian determinants...")
     results['jacobian_signs'] = test_jacobian_determinant_signs(mesh)
 
-    print("\n4. Testing ghost face quadratures...")
+    EqPrint("\n4. Testing ghost face quadratures...")
     results['quadrature_accuracy'] = test_ghost_face_quadrature_accuracy(mesh)
 
-    print("\n5. Testing ghost penalty matrix properties...")
+    EqPrint("\n5. Testing ghost penalty matrix properties...")
     results['matrix_symmetry'] = test_normal_derivative_jump_symmetry(mesh)
     results['matrix_psd'] = test_ghost_penalty_matrix_positive_semidefinite(mesh)
 
-    print("\n" + "="*70)
+    EqPrint("\n" + "="*70)
     all_passed = all(res[1] for res in results.values() if isinstance(res, tuple))
     if all_passed:
-        print("✓ ALL MESH TESTS PASSED")
+        EqPrint("✓ ALL MESH TESTS PASSED")
     else:
-        print("✗ SOME TESTS FAILED - see details above")
-    print("="*70 + "\n")
+        EqPrint("✗ SOME TESTS FAILED - see details above")
+    EqPrint("="*70 + "\n")
 
     return results
 
@@ -2023,19 +2024,19 @@ def run_all_system_tests(LHS, RHS):
     Returns:
         - test_results (dict): Dictionary with results of each test
     """
-    print("\n" + "="*70)
-    print("RUNNING SYSTEM VALIDATION TESTS")
-    print("="*70)
+    EqPrint("\n" + "="*70)
+    EqPrint("RUNNING SYSTEM VALIDATION TESTS")
+    EqPrint("="*70)
 
     results = {}
 
-    print("\n1. Testing system matrix properties...")
+    EqPrint("\n1. Testing system matrix properties...")
     results['matrix_symmetry'] = test_system_matrix_symmetry(LHS)
     results['matrix_conditioning'] = test_system_matrix_conditioning(LHS, RHS)
 
-    print("\n" + "="*70)
-    print("✓ SYSTEM TESTS COMPLETED")
-    print("="*70 + "\n")
+    EqPrint("\n" + "="*70)
+    EqPrint("✓ SYSTEM TESTS COMPLETED")
+    EqPrint("="*70 + "\n")
 
     return results
 
@@ -2046,9 +2047,9 @@ def run_standalone_tests():
 
     This is useful for quick validation of fundamental components.
     """
-    print("\n" + "="*70)
-    print("RUNNING STANDALONE VALIDATION TESTS")
-    print("="*70)
+    EqPrint("\n" + "="*70)
+    EqPrint("RUNNING STANDALONE VALIDATION TESTS")
+    EqPrint("="*70)
 
     all_results = {}
 
@@ -2062,9 +2063,9 @@ def run_standalone_tests():
     all_results['jacobian'] = run_all_jacobian_tests(verbose=True)
 
     # Quadrature tests
-    print("\n" + "="*70)
-    print("RUNNING QUADRATURE VALIDATION TESTS")
-    print("="*70 + "\n")
+    EqPrint("\n" + "="*70)
+    EqPrint("RUNNING QUADRATURE VALIDATION TESTS")
+    EqPrint("="*70 + "\n")
 
     quadrature_results = {}
     for elemType in [0, 1, 2]:
@@ -2074,9 +2075,9 @@ def run_standalone_tests():
             quadrature_results[key] = test_quadrature_polynomial_exactness(elemType, order, 0)
     all_results['quadrature'] = quadrature_results
 
-    print("\n" + "="*70)
-    print("STANDALONE TESTS COMPLETED")
-    print("="*70 + "\n")
+    EqPrint("\n" + "="*70)
+    EqPrint("STANDALONE TESTS COMPLETED")
+    EqPrint("="*70 + "\n")
 
     return all_results
 
@@ -2108,24 +2109,24 @@ def verify_ghost_penalty_implementation(mesh, solver=None, verbose=True):
     }
 
     if verbose:
-        print("\n" + "="*70)
-        print("GHOST PENALTY IMPLEMENTATION VERIFICATION")
-        print("="*70)
+        EqPrint("\n" + "="*70)
+        EqPrint("GHOST PENALTY IMPLEMENTATION VERIFICATION")
+        EqPrint("="*70)
 
     # 1. Check ghost face identification
     if verbose:
-        print("\n[1/6] Verifying ghost face identification...")
+        EqPrint("\n[1/6] Verifying ghost face identification...")
 
     if mesh.GhostFaces is None or len(mesh.GhostFaces) == 0:
         report['warnings'].append("No ghost faces found - ghost penalty may be disabled")
     else:
         report['tests']['num_ghost_faces'] = len(mesh.GhostFaces)
         if verbose:
-            print(f"     Found {len(mesh.GhostFaces)} ghost faces")
+            EqPrint(f"     Found {len(mesh.GhostFaces)} ghost faces")
 
     # 2. Check normal vector opposition (CRITICAL)
     if verbose:
-        print("\n[2/6] Verifying normal vector opposition (CRITICAL)...")
+        EqPrint("\n[2/6] Verifying normal vector opposition (CRITICAL)...")
 
     failures, passed = test_ghost_face_normal_opposition(mesh)
     report['tests']['normal_opposition'] = {'passed': passed, 'failures': len(failures)}
@@ -2136,7 +2137,7 @@ def verify_ghost_penalty_implementation(mesh, solver=None, verbose=True):
 
     # 3. Check normal vector properties
     if verbose:
-        print("\n[3/6] Verifying normal vector properties...")
+        EqPrint("\n[3/6] Verifying normal vector properties...")
 
     failures, passed = test_ghost_face_normal_unitary(mesh)
     report['tests']['normal_unitary'] = {'passed': passed}
@@ -2152,7 +2153,7 @@ def verify_ghost_penalty_implementation(mesh, solver=None, verbose=True):
 
     # 4. Check node permutation
     if verbose:
-        print("\n[4/6] Verifying node permutation correctness...")
+        EqPrint("\n[4/6] Verifying node permutation correctness...")
 
     failures, passed = test_ghost_face_node_permutation(mesh)
     report['tests']['node_permutation'] = {'passed': passed}
@@ -2162,7 +2163,7 @@ def verify_ghost_penalty_implementation(mesh, solver=None, verbose=True):
 
     # 5. Check quadrature accuracy
     if verbose:
-        print("\n[5/6] Verifying quadrature accuracy...")
+        EqPrint("\n[5/6] Verifying quadrature accuracy...")
 
     errors, passed = test_ghost_face_quadrature_accuracy(mesh)
     report['tests']['quadrature_accuracy'] = {'passed': passed}
@@ -2171,7 +2172,7 @@ def verify_ghost_penalty_implementation(mesh, solver=None, verbose=True):
 
     # 6. Check matrix properties
     if verbose:
-        print("\n[6/6] Verifying ghost penalty matrix properties...")
+        EqPrint("\n[6/6] Verifying ghost penalty matrix properties...")
 
     asymmetry, passed = test_normal_derivative_jump_symmetry(mesh)
     report['tests']['matrix_symmetry'] = {'passed': passed, 'asymmetry': asymmetry}
@@ -2187,29 +2188,29 @@ def verify_ghost_penalty_implementation(mesh, solver=None, verbose=True):
 
     # Summary
     if verbose:
-        print("\n" + "="*70)
-        print("VERIFICATION SUMMARY")
-        print("="*70)
+        EqPrint("\n" + "="*70)
+        EqPrint("VERIFICATION SUMMARY")
+        EqPrint("="*70)
 
         if report['passed']:
-            print("\n✓ GHOST PENALTY IMPLEMENTATION VERIFIED SUCCESSFULLY")
+            EqPrint("\n✓ GHOST PENALTY IMPLEMENTATION VERIFIED SUCCESSFULLY")
         else:
-            print("\n✗ GHOST PENALTY IMPLEMENTATION HAS CRITICAL ISSUES:")
+            EqPrint("\n✗ GHOST PENALTY IMPLEMENTATION HAS CRITICAL ISSUES:")
             for failure in report['critical_failures']:
-                print(f"  - {failure}")
+                EqPrint(f"  - {failure}")
 
         if report['warnings']:
-            print("\n⚠ Warnings:")
+            EqPrint("\n⚠ Warnings:")
             for warning in report['warnings']:
-                print(f"  - {warning}")
+                EqPrint(f"  - {warning}")
 
-        print("\n" + "="*70 + "\n")
+        EqPrint("\n" + "="*70 + "\n")
 
     return report
 
 
 # Main entry point for running tests
 if __name__ == "__main__":
-    print("Running standalone EQUILIPY validation tests...")
+    EqPrint("Running standalone EQUILIPY validation tests...")
     results = run_standalone_tests()
-    print("\nAll standalone tests completed.")
+    EqPrint("\nAll standalone tests completed.")

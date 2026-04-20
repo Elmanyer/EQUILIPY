@@ -37,6 +37,7 @@ from _update import *
 from _Bfield import *
 from _L2error import *
 from _output import *
+from _logging import EqPrint
 from _plot import *
 from InitialPlasmaBoundary import *
 from InitialPSIGuess import *
@@ -123,7 +124,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         # WORKING DIRECTORY
         pwd = os.getcwd()
         self.pwd = pwd[:-6]    # -6 CORRESPONDS TO 6 CHARACTERS IN '/TESTs'
-        print('Working directory: ' + self.pwd)
+        EqPrint('Working directory: ' + self.pwd)
         
         # INITIALISE PARALLEL PROCESSING COMMUNICATOR AND ARRAYS
         #if self.PARALLEL:
@@ -139,7 +140,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         them in the format: attribute_name: value.
         """
         for attribute, value in vars(self).items():
-            print(f"{attribute}: {value}")
+            EqPrint(f"{attribute}: {value}")
         return
     
     
@@ -230,84 +231,84 @@ class GradShafranovSolver(EquilipyInitialisation,
                 - Identifies ghost faces and computes associated quadrature rules (if enabled).
         """
         
-        print('PERFORM DOMAIN DISCRETISATION...')
+        EqPrint('PERFORM DOMAIN DISCRETISATION...')
         
         ####################### INITIALISATION TASKS ########################
         
         # THE FOLLOWING COMMANDS ARE ONLY EXECUTED WHEN INITIALISING THE SIMULATION
         if INITIALISATION:
-            print('INITIALISATION TASKS...')
+            EqPrint('INITIALISATION TASKS...')
         
             # INITIALISE LEVEL-SET FUNCTION
-            print("     -> INITIALISE LEVEL-SET...", end="")
+            EqPrint("     -> INITIALISE LEVEL-SET...", end="")
             self.InitialisePlasmaLevelSet()
             print('Done!')
             
             # INITIALISE ELEMENTS 
-            print("     -> INITIALISE ELEMENTS...")
+            EqPrint("     -> INITIALISE ELEMENTS...")
             self.MESH.InitialiseElements(self.PlasmaLS)
             if type(self.PlasmaCurrent) != type(None) and self.PlasmaCurrent.DIMENSIONLESS:
                 self.MESH.DimensionlessCoordinates(self.PlasmaCurrent.R0)
-            print('     Done!')
+            EqPrint('     Done!')
             
             # IDENTIFY ELEMENTS MESH RELATION   
-            print("     -> IDENTIFY ELEMENTS MESH RELATION...", end="")
+            EqPrint("     -> IDENTIFY ELEMENTS MESH RELATION...", end="")
             self.MESH.IdentifyBoundaries()
             self.MESH.IdentifyNearestNeighbors()
-            print("Done!")
+            print('Done!')
             
             # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR ALL ELEMENTS 
-            print('     -> COMPUTE STANDARD NUMERICAL INTEGRATION QUADRATURES...', end="")
+            EqPrint('     -> COMPUTE STANDARD NUMERICAL INTEGRATION QUADRATURES...', end="")
             self.MESH.ComputeStandardQuadratures(self.QuadratureOrder2D)
-            print("Done!")
+            print('Done!')
                 
             # DEFINE STANDARD SURFACE QUADRATURE NUMBER OF INTEGRATION NODES
             self.nge = self.MESH.Elements[0].ng
             
-            print("Done!")
+            EqPrint('Done!')
             
         #####################################################################
         ################# RUN-TIME DOMAIN DISCRETISATION ####################
         
         # CLASSIFY ELEMENTS   
-        print("     -> CLASSIFY ELEMENTS...", end="")
+        EqPrint("     -> CLASSIFY ELEMENTS...", end="")
         self.PlasmaLS = self.MESH.ClassifyElements(self.PlasmaLS)
-        print("Done!")
+        print('Done!')
 
         # COMPUTE PLASMA BOUNDARY APPROXIMATION
-        print("     -> APPROXIMATE PLASMA BOUNDARY INTERFACE...", end="")
+        EqPrint("     -> APPROXIMATE PLASMA BOUNDARY INTERFACE...", end="")
         self.MESH.ObtainPlasmaBoundaryElementalPath()
         self.MESH.ObtainPlasmaBoundaryActiveElements(numelements = self.Nconstrainedges)
         self.MESH.ComputePlasmaBoundaryApproximation()
-        print("Done!")
+        print('Done!')
         
         # COMPUTE ADAPTED QUADRATURE ENTITIES FOR CUT ELEMENTS
-        print('     -> COMPUTE PLASMA BOUNDARY APPROXIMATION QUADRATURES...', end="")
+        EqPrint('     -> COMPUTE PLASMA BOUNDARY APPROXIMATION QUADRATURES...', end="")
         self.MESH.ComputeAdaptedQuadratures(self.QuadratureOrder2D,self.QuadratureOrder1D)
-        print("Done!")
+        print('Done!')
         
         # FIXED CONSTRAINTS PSI_P ON PLASMA BOUNDARY
-        print('     -> ASSIGN PLASMA BOUNDARY CONSTRAINT VALUES...', end="") 
+        EqPrint('     -> ASSIGN PLASMA BOUNDARY CONSTRAINT VALUES...', end="") 
         self.FixElementalPSI_P()     
         print('Done!')          
             
         # CUT ELEMENTS GHOST FACES 
         if self.GhostStabilization:
             # IDENTIFY GHOST FACES
-            print("     -> IDENTIFY GHOST FACES...", end="")
+            EqPrint("     -> IDENTIFY GHOST FACES...", end="")
             self.MESH.ComputePlasmaBoundaryGhostFaces()
-            print("Done!")
+            print('Done!')
             # COMPUTE QUADRATURES FOR GHOST FACES ON PLASMA BOUNDARY ELEMENTS
-            print("     -> COMPUTE GHOST FACES QUADRATURES...", end="")
+            EqPrint("     -> COMPUTE GHOST FACES QUADRATURES...", end="")
             self.MESH.ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
-            print("Done!")
+            print('Done!')
             
             # RUN VALIDATION TESTS
             if self.RunTests:
-                print("     -> RUNNING MESH VALIDATION TESTS...")
+                EqPrint("     -> RUNNING MESH VALIDATION TESTS...")
                 run_all_mesh_tests(self.MESH)
       
-        print('Done!')
+        EqPrint('Done!')
         return
         
     
@@ -391,7 +392,7 @@ class GradShafranovSolver(EquilipyInitialisation,
             for p in range(1, self.MESH.ElOrder + 1):
                 _, is_correct = test_penalty_scaling_formula(self.zeta, self.MESH.meanLength, p, self.dim)
                 if not is_correct:
-                    print(f"⚠ Warning: Penalty scaling for p={p} may be problematic")
+                    EqPrint(f"⚠ Warning: Penalty scaling for p={p} may be problematic")
         
         if self.out_elemsys:
             self.file_elemsys.write('GHOST_FACES\n')
@@ -515,7 +516,7 @@ class GradShafranovSolver(EquilipyInitialisation,
             self.file_elemsys.write('NON_CUT_ELEMENTS\n')
         
         # INTEGRATE OVER THE SURFACE OF ELEMENTS WHICH ARE NOT CUT BY ANY INTERFACE (STANDARD QUADRATURES)
-        print("     Integrate over non-cut elements...", end="")
+        EqPrint("     Integrate non-cut elements contributions...", end="")
         
         for ielem in self.MESH.NonCutElems: 
             # ISOLATE ELEMENT 
@@ -551,14 +552,14 @@ class GradShafranovSolver(EquilipyInitialisation,
                     self.LHS[ELEMENT.Te[i],ELEMENT.Te[j]] += LHSe[i,j]
                 self.RHS[ELEMENT.Te[i]] += RHSe[i]
                 
-        print("Done!")
+        print('Done!')
         
         if self.out_elemsys:
             self.file_elemsys.write('END_NON_CUT_ELEMENTS\n')
             self.file_elemsys.write('CUT_ELEMENTS_SURFACE\n')
         
         # INTEGRATE OVER THE SURFACES OF SUBELEMENTS IN ELEMENTS CUT BY INTERFACES (ADAPTED QUADRATURES)
-        print("     Integrate over cut-elements subelements...", end="")
+        EqPrint("     Integrate cut-elements subelements contributions...", end="")
         
         for ielem in self.MESH.PlasmaBoundElems:
             # ISOLATE ELEMENT 
@@ -599,14 +600,14 @@ class GradShafranovSolver(EquilipyInitialisation,
                         self.LHS[SUBELEM.Te[i],SUBELEM.Te[j]] += LHSe[i,j]
                     self.RHS[SUBELEM.Te[i]] += RHSe[i]
                 
-        print("Done!")
+        print('Done!')
         
         if self.out_elemsys:
             self.file_elemsys.write('END_CUT_ELEMENTS_SURFACE\n')
             self.file_elemsys.write('CUT_ELEMENTS_INTERFACE\n')
         
         # INTEGRATE OVER THE CUT EDGES IN ELEMENTS CUT BY INTERFACES (ADAPTED QUADRATURES)
-        print("     Integrate along cut-elements interface edges...", end="")
+        EqPrint("     Integrate cut-elements interface contributions...", end="")
 
         if self.beta is None:
             raise ValueError("Nitsche penalty parameter 'beta' must be set before assembling interface terms.")
@@ -637,16 +638,16 @@ class GradShafranovSolver(EquilipyInitialisation,
                     self.LHS[ELEMENT.Te[i],ELEMENT.Te[j]] += LHSe[i,j]
                 self.RHS[ELEMENT.Te[i]] += RHSe[i]
         
-        print("Done!")
+        print('Done!')
         
         if self.out_elemsys:
             self.file_elemsys.write('END_CUT_ELEMENTS_INTERFACE\n')
       
         # INTEGRATE GHOST PENALTY TERM OVER CUT ELEMENTS INTERNAL CUT EDGES
         if self.GhostStabilization:
-            print("     Integrate ghost penalty term along cut elements internal ghost faces...", end="")
+            EqPrint("     Integrate ghost faces contributions...", end="")
             self.IntegrateGhostStabilizationTerms()
-            print("Done!") 
+            print('Done!') 
             
         # WRITE GLOBAL SYSTEM MATRICES
         if self.out_elemsys:
@@ -666,10 +667,10 @@ class GradShafranovSolver(EquilipyInitialisation,
         
         # RUN VALIDATION TESTS ON ASSEMBLED SYSTEM
         if self.RunTests:
-            print("     RUNNING SYSTEM VALIDATION TESTS...")
+            EqPrint("     RUNNING SYSTEM VALIDATION TESTS...")
             run_all_system_tests(self.LHS, self.RHS)
         
-        print("Done!")   
+        EqPrint('Done!')   
         return
     
     
@@ -733,7 +734,7 @@ class GradShafranovSolver(EquilipyInitialisation,
             - Output files and plots (as per configuration).
         """
         
-        print("PREPARE OUTPUT DIRECTORY...",end='')
+        EqPrint("PREPARE OUTPUT DIRECTORY...",end='')
         # INITIALISE SIMULATION CASE NAME
         self.CASE = CASE
         self.InitialiseOutput()
@@ -748,7 +749,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.InitialisePSI_B()          
         
         # WRITE INITIAL SIMULATION DATA
-        print("WRITE INITIAL SIMULATION DATA...",end='')
+        EqPrint("WRITE INITIAL SIMULATION DATA...",end='')
         self.writeboundaries()
         if self.GhostStabilization:
             self.writeNeighbours()
@@ -763,7 +764,7 @@ class GradShafranovSolver(EquilipyInitialisation,
             self.PlotSolutionPSI()  # PLOT INITIAL SOLUTION
 
         # START DOBLE LOOP STRUCTURE
-        print('START ITERATION...')
+        EqPrint('START ITERATION...')
         self.ext_cvg = False
         self.ext_it = 0
         
@@ -780,8 +781,8 @@ class GradShafranovSolver(EquilipyInitialisation,
             while (self.int_cvg == False and self.int_it < self.int_maxiter):
                 self.int_it += 1
                 self.it += 1
-                print('OUTER ITERATION = '+str(self.ext_it)+' , INNER ITERATION = '+str(self.int_it))
-                print('     Total current = ', self.IntegratePlasmaDomain(self.PlasmaCurrent.Jphi))
+                EqPrint('OUTER ITERATION = '+str(self.ext_it)+' , INNER ITERATION = '+str(self.int_it))
+                EqPrint('     Total current = ', self.IntegratePlasmaDomain(self.PlasmaCurrent.Jphi))
                 
                 if self.plotelemsClas:
                     self.PlotClassifiedElements(GHOSTFACES=self.GhostStabilization)
@@ -808,8 +809,8 @@ class GradShafranovSolver(EquilipyInitialisation,
                         self.DomainDiscretisation()         #       -> DISCRETISE DOMAIN ACCORDING TO NEW PLASMA REGION
                         self.writePlasmaBoundaryData()      #       -> WRITE NEW PLASMA REGION DATA
                     else:
-                        print("Plasma region unchanged: distance between consecutive saddle points = ", self.SADDLE_dist)
-                        print(" ")   
+                        EqPrint("Plasma region unchanged: distance between consecutive saddle points = ", self.SADDLE_dist)
+                        EqPrint(" ")   
                 
                 self.UpdatePSI_NORM()                       # 7. UPDATE PSI_NORM ARRAY
                 self.UpdateElementalPSI()                   # 8. UPDATE PSI_NORM VALUES IN CORRESPONDING ELEMENTS 
@@ -820,12 +821,12 @@ class GradShafranovSolver(EquilipyInitialisation,
                 #######################################################
                 
             if not self.FIXED_BOUNDARY:
-                print('COMPUTE COMPUTATIONAL BOUNDARY VALUES PSI_B...', end="")
+                EqPrint('COMPUTE COMPUTATIONAL BOUNDARY VALUES PSI_B...', end="")
                 self.PSI_B[:,1] = self.ComputeBoundaryPSI()     # COMPUTE COMPUTATIONAL BOUNDARY VALUES PSI_B WITH INTERNALLY CONVERGED PSI_NORM
                 self.writePSI_B()                               #       -> WRITE NEW BOUNDARY CONDITIONS PSI_B
                 print('Done!')
             
-                print('UPDATE COMPUTATIONAL DOMAIN BOUNDARY VALUES...', end="")
+                EqPrint('UPDATE COMPUTATIONAL DOMAIN BOUNDARY VALUES...', end="")
                 self.UpdateElementalPSI_B()                     # UPDATE BOUNDARY CONDITIONS PSI_B ON BOUNDARY ELEMENTS
                 print('Done!')
             
@@ -837,7 +838,7 @@ class GradShafranovSolver(EquilipyInitialisation,
             ################ END EXTERNAL LOOP ####################
             #######################################################
             
-        print('SOLUTION CONVERGED')
+        EqPrint('SOLUTION CONVERGED')
         if self.plotPSI:
             self.PlotSolutionPSI()
         
@@ -851,7 +852,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         return
 
 
-    def GetCutFEMDiagnostics(self, verbose=True):
+    def GetDiagnostics(self, verbose=True):
         """
         Computes and returns comprehensive CutFEM error diagnostics.
 
@@ -876,18 +877,18 @@ class GradShafranovSolver(EquilipyInitialisation,
 
         Example usage:
             equilibrium.EQUILI('MY_CASE')
-            diagnostics = equilibrium.GetCutFEMDiagnostics(verbose=True)
-            print(f"Cut element error: {diagnostics['cut_elements']['L2_error']}")
-            print(f"Continuity OK: {diagnostics['ghost_faces']['continuity_ok']}")
+            diagnostics = equilibrium.GetDiagnostics(verbose=True)
+            EqPrint(f"Cut element error: {diagnostics['cut_elements']['L2_error']}")
+            EqPrint(f"Continuity OK: {diagnostics['ghost_faces']['continuity_ok']}")
         """
         if not self.FIXED_BOUNDARY:
-            print("Warning: CutFEM diagnostics require FIXED_BOUNDARY=True")
+            EqPrint("Warning: CutFEM diagnostics require FIXED_BOUNDARY=True")
             return {}
 
         if not self.GhostStabilization:
-            print("Note: Ghost stabilization was disabled for this simulation")
+            EqPrint("Note: Ghost stabilization was disabled for this simulation")
 
-        return self.ComputeCutFEMErrorDiagnostics(verbose=verbose)
+        return self._compute_cutfem_errors(verbose=verbose)
 
 
     def PrintErrorSummary(self):
@@ -896,13 +897,13 @@ class GradShafranovSolver(EquilipyInitialisation,
 
         This is a quick way to get an overview of solution quality after running EQUILI().
         """
-        print("\n" + "="*70)
-        print("SOLUTION ERROR SUMMARY")
-        print("="*70)
+        EqPrint("="*70)
+        EqPrint("SOLUTION ERROR SUMMARY")
+        EqPrint("="*70)
 
         if hasattr(self, 'ErrorL2norm') and self.ErrorL2norm is not None:
-            print(f"  Total L2 error:           {self.ErrorL2norm:.6e}")
-            print(f"  Total relative L2 error:  {self.RelErrorL2norm:.6e}")
+            EqPrint(f"  Total L2 error:           {self.ErrorL2norm:.6e}")
+            EqPrint(f"  Total relative L2 error:  {self.RelErrorL2norm:.6e}")
 
         if hasattr(self, 'CutFEMDiagnostics') and self.CutFEMDiagnostics:
             diag = self.CutFEMDiagnostics
@@ -911,34 +912,34 @@ class GradShafranovSolver(EquilipyInitialisation,
             gf = diag.get('ghost_faces', {})
 
             if cut:
-                print(f"\n  Cut elements ({cut.get('count', 0)}):")
-                print(f"    L2 error:               {cut.get('L2_error', 0):.6e}")
+                EqPrint(f"    Cut elements ({cut.get('count', 0)}):")
+                EqPrint(f"    L2 error:               {cut.get('L2_error', 0):.6e}")
 
             if interior:
-                print(f"  Interior elements ({interior.get('count', 0)}):")
-                print(f"    L2 error:               {interior.get('L2_error', 0):.6e}")
+                EqPrint(f"    Interior elements ({interior.get('count', 0)}):")
+                EqPrint(f"    L2 error:               {interior.get('L2_error', 0):.6e}")
 
             ratio = diag.get('summary', {}).get('error_ratio_cut_interior', 0)
-            print(f"  Error ratio (cut/int):    {ratio:.4f}")
+            EqPrint(f"  Error ratio (cut/int):    {ratio:.4f}")
 
             if gf and gf.get('count', 0) > 0:
-                print(f"\n  Ghost faces ({gf.get('count', 0)}):")
-                print(f"    Solution continuity:    {'✓ OK' if gf.get('continuity_ok', False) else '✗ FAILED'}")
-                print(f"    Max solution jump:      {gf.get('solution_jump_max', 0):.4e}")
-                print(f"    Max gradient jump:      {gf.get('gradient_jump_max', 0):.4e}")
+                EqPrint(f"    Ghost faces ({gf.get('count', 0)}):")
+                EqPrint(f"    Solution continuity:    {'✓ OK' if gf.get('continuity_ok', False) else '✗ FAILED'}")
+                EqPrint(f"    Max solution jump:      {gf.get('solution_jump_max', 0):.4e}")
+                EqPrint(f"    Max gradient jump:      {gf.get('gradient_jump_max', 0):.4e}")
 
             intf = diag.get('interface', {})
             if intf:
-                print(f"\n  Interface L2 error:       {intf.get('L2_error', 0):.6e}")
+                EqPrint(f"    Interface L2 error:       {intf.get('L2_error', 0):.6e}")
         else:
             # Compute diagnostics if not already done
             if self.FIXED_BOUNDARY and self.GhostStabilization:
-                print("\n  (Computing CutFEM diagnostics...)")
-                self.GetCutFEMDiagnostics(verbose=False)
+                EqPrint("    (Computing CutFEM diagnostics...)")
+                self.GetDiagnostics(verbose=False)
                 self.PrintErrorSummary()
                 return
 
-        print("="*70 + "\n")
+        EqPrint("="*70 + "\n")
     
     
     

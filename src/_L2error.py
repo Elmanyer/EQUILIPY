@@ -19,6 +19,7 @@
 # Research Group: Nuclear Fusion  
 
 
+from _logging import EqPrint
 import numpy as np
 from Element import *
 
@@ -121,7 +122,7 @@ class EquilipyL2error:
 
         Integrates the squared difference between analytical and numerical solutions
         along the plasma boundary (interface line). Used internally by
-        ComputeCutFEMErrorDiagnostics to avoid redundant computation.
+        _compute_cutfem_errors to avoid redundant computation.
 
         This error measures how well the solution fits on the interface itself,
         independent of element-wise errors. It's particularly important for CutFEM
@@ -220,7 +221,7 @@ class EquilipyL2error:
         by integrating the squared difference at all quadrature points. The 1/R factor
         accounts for the axisymmetric geometry (Grad-Shafranov problem is in (R,Z) cylindrical coordinates).
 
-        This function is refactored from duplicated code in ComputeCutFEMErrorDiagnostics
+        This function is refactored from duplicated code in _compute_cutfem_errors
         to compute errors for both cut and interior elements without code repetition.
 
         Args:
@@ -270,7 +271,7 @@ class EquilipyL2error:
             [[∂^p u/∂n^p]] = (n·∇)^p u+ + (n·∇)^p u-  (normals are opposite)
 
         This function refactors the repetitive derivative jump computation loop
-        (previously duplicated for orders 1, 2, 3 in ComputeCutFEMErrorDiagnostics).
+        (previously duplicated for orders 1, 2, 3 in _compute_cutfem_errors).
 
         Args:
             deriv_order: Derivative order (1=gradient jump, 2=hessian jump, 3=3rd deriv jump)
@@ -340,7 +341,7 @@ class EquilipyL2error:
 
         return np.sqrt(total_L2_squared), max_jump
 
-    def ComputeCutFEMErrorDiagnostics(self, verbose=True):
+    def _compute_cutfem_errors(self, verbose=True):
         """
         Computes comprehensive error diagnostics for CutFEM solutions, including:
         - L2 error in cut elements vs interior elements
@@ -497,42 +498,42 @@ class EquilipyL2error:
         # 6. PRINT REPORT IF VERBOSE
         # ==========================================================================
         if verbose:
-            print("\n" + "="*70)
-            print("CUTFEM ERROR DIAGNOSTICS REPORT")
-            print("="*70)
+            EqPrint("="*70)
+            EqPrint("CUTFEM ERROR DIAGNOSTICS REPORT")
+            EqPrint("="*70)
 
-            print("\n[1] ELEMENT-WISE ERROR DISTRIBUTION")
-            print("-"*50)
-            print(f"  Cut elements ({len(cut_elements)}):     L2 = {cut_L2:.4e}, Rel = {cut_rel_L2:.4e}")
-            print(f"  Interior elements ({len(interior_elements)}):  L2 = {interior_L2:.4e}, Rel = {interior_rel_L2:.4e}")
-            print(f"  Error ratio (cut/interior): {diagnostics['summary']['error_ratio_cut_interior']:.4f}")
+            EqPrint("[1] ELEMENT-WISE ERROR DISTRIBUTION")
+            EqPrint("-"*50)
+            EqPrint(f"  Cut elements ({len(cut_elements)}):     L2 = {cut_L2:.4e}, Rel = {cut_rel_L2:.4e}")
+            EqPrint(f"  Interior elements ({len(interior_elements)}):  L2 = {interior_L2:.4e}, Rel = {interior_rel_L2:.4e}")
+            EqPrint(f"  Error ratio (cut/interior): {diagnostics['summary']['error_ratio_cut_interior']:.4f}")
 
             if 'ghost_faces' in diagnostics and diagnostics['ghost_faces'].get('count', 0) > 0:
                 gf = diagnostics['ghost_faces']
-                print(f"\n[2] GHOST FACE SOLUTION QUALITY ({gf['count']} faces)")
-                print("-"*50)
-                print(f"  Solution jump:   max = {gf['solution_jump_max']:.4e}, mean = {gf['solution_jump_mean']:.4e}")
-                print(f"  Gradient jump:   max = {gf['gradient_jump_max']:.4e}, mean = {gf['gradient_jump_mean']:.4e}")
-                print(f"  Continuity OK:   {'✓ YES' if gf['continuity_ok'] else '✗ NO'}")
+                EqPrint(f"[2] GHOST FACE SOLUTION QUALITY ({gf['count']} faces)")
+                EqPrint("-"*50)
+                EqPrint(f"  Solution jump:   max = {gf['solution_jump_max']:.4e}, mean = {gf['solution_jump_mean']:.4e}")
+                EqPrint(f"  Gradient jump:   max = {gf['gradient_jump_max']:.4e}, mean = {gf['gradient_jump_mean']:.4e}")
+                EqPrint(f"  Continuity OK:   {'✓ YES' if gf['continuity_ok'] else '✗ NO'}")
 
-                print(f"\n[3] NORMAL DERIVATIVE JUMPS")
-                print("-"*50)
+                EqPrint(f"[3] NORMAL DERIVATIVE JUMPS")
+                EqPrint("-"*50)
                 for p in range(1, 4):
                     key = f'normal_deriv_order_{p}'
                     if key in diagnostics:
                         d = diagnostics[key]
-                        print(f"  Order {p}: [[∂^{p}u/∂n^{p}]]  L2 = {d['L2_norm']:.4e}, Max = {d['max_jump']:.4e}")
+                        EqPrint(f"  Order {p}: [[∂^{p}u/∂n^{p}]]  L2 = {d['L2_norm']:.4e}, Max = {d['max_jump']:.4e}")
 
-            print(f"\n[4] INTERFACE ERROR")
-            print("-"*50)
-            print(f"  Interface L2 error:     {interface_L2:.4e}")
-            print(f"  Interface relative L2:  {interface_rel_L2:.4e}")
+            EqPrint(f"[4] INTERFACE ERROR")
+            EqPrint("-"*50)
+            EqPrint(f"  Interface L2 error:     {interface_L2:.4e}")
+            EqPrint(f"  Interface relative L2:  {interface_rel_L2:.4e}")
 
-            print("\n" + "="*70)
+            EqPrint("="*70)
             if diagnostics['ghost_faces'].get('continuity_ok', True):
-                print("✓ Solution continuity verified - CutFEM stabilization working")
+                EqPrint("✓ Solution continuity verified - CutFEM stabilization working")
             else:
-                print("✗ Solution discontinuity detected - check ghost penalty parameters")
-            print("="*70 + "\n")
+                EqPrint("✗ Solution discontinuity detected - check ghost penalty parameters")
+            EqPrint("="*70 + "\n")
 
         return diagnostics
