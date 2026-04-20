@@ -46,7 +46,8 @@ def ShapeFunctionsReference(X, elemType, elemOrder, node, deriv=1):
 
     match elemType:
         case 0:    # LINE (1D ELEMENT)
-            xi = X
+            # Extract scalar from array for 1D case
+            xi = float(X.flat[0]) if hasattr(X, 'flat') else float(X)
             match elemOrder:
                 case 0:
                     # --1--
@@ -512,6 +513,20 @@ def ShapeFunctionsReference(X, elemType, elemOrder, node, deriv=1):
                                 J3[0,0,0] = -3.0*a*t2*t3*t4*(-s1 - s2 + s4)
                                 J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4)
                                 J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s2*s4*(-t2 - t3 - t4)
+                        case 7:
+                            # Node 7 at (1, -1/3) - right edge, s4=0 and t2=0
+                            N = -3.0*a*s1*s2*s3*t1*t3*t4
+                            if deriv >= 1:
+                                dNdxi = -3.0*a*t1*t3*t4*(-s1*s2+s1*s3+s2*s3)
+                                dNdeta = -3.0*a*s1*s2*s3*(-t1*t3+t1*t4+t3*t4)
+                            if deriv >= 2:
+                                Hess = np.array([[-3.0*a*t1*t3*t4*(-s1 - s2 + s3), -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t3+t1*t4+t3*t4)],
+                                                     [-3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t3+t1*t4+t3*t4), -3.0*a*s1*s2*s3*(-t1 - t3 + t4)]])
+                            if deriv >= 3:
+                                J3 = np.zeros((2,2,2))
+                                J3[0,0,0] = -3.0*a*t1*t3*t4*(-s1 - s2 + s3)
+                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t3+t1*t4+t3*t4)
+                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s2*s3*(-t1 - t3 + t4)
                         case 8:
                             N = -3.0*a*s1*s2*s3*t1*t2*t4
                             if deriv >= 1:

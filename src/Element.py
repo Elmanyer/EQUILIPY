@@ -134,21 +134,23 @@ class Element:
                 else:
                     Xepoly = np.zeros([3+self.ElOrder-1,2])
                     ipoint = 0
-                    for iedge in range(self.nedge):
+                    # Note: use self.numedges (=3 for triangles) for loop and HO node indexing,
+                    # not self.nedge which is nodes-per-edge (=ElOrder+1)
+                    for iedge in range(self.numedges):
                         inode = iedge
-                        jnode = int((iedge+1)%self.nedge)
+                        jnode = int((iedge+1)%self.numedges)
                         if iedge == 0:
                             Xepoly[ipoint,:] = self.Xe[inode,:]
                             Xepoly[ipoint+1,:] = self.Xe[jnode,:]
                             ipoint += 2
                         elif iedge == self.interfedge:
-                            inodeHO = self.nedge+(self.ElOrder-1)*inode
+                            inodeHO = self.numedges+(self.ElOrder-1)*inode
                             Xepoly[ipoint:ipoint+(self.ElOrder-1),:] = self.Xe[inodeHO:inodeHO+(self.ElOrder-1),:]
                             ipoint += self.ElOrder-1
                         else:
                             Xepoly[ipoint,:] = self.Xe[inode,:]
                             ipoint += 1
-                            
+
                     area = polygon_area(Xepoly,self.ElOrder,self.interfedge)
 
             case 2:
@@ -524,10 +526,12 @@ class Element:
             def fun(X):
                 F = np.zeros([X.shape[0]])
                 # SEPARATE GUESS VECTOR INTO INDIVIDUAL NODAL COORDINATES
-                XHO = X.reshape((self.ElOrder-1,self.dim)) 
+                XHO = X.reshape((self.ElOrder-1,self.dim))
                 # PHI = 0 ON NODES
                 for inode in range(self.ElOrder-1):
-                    F[inode] = self.PHI(XHO[inode,:].reshape((1,2)))
+                    phi_val = self.PHI(XHO[inode,:].reshape((1,2)))
+                    # Extract scalar from array
+                    F[inode] = float(phi_val.flat[0]) if hasattr(phi_val, 'flat') else float(phi_val)
                 # EQUAL DISTANCES BETWEEN INTERFACE NODES
                 if self.ElOrder == 2:
                     F[-1] = np.linalg.norm(XIintEND[0,:]-X)-np.linalg.norm(XIintEND[1,:]-X)
@@ -1281,13 +1285,13 @@ class Element:
                     ### SYMMETRIC NITSCHE'S METHOD TERM   [ N_j*(n dot nabla(N_i)) ]
                     LHSe[i,j] += (1/self.InterfApprox.Xg[ig,0])*n_dot_Ngrad[i]*self.InterfApprox.Ng[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     ### PENALTY TERM   [ beta * (N_i*N_j) ]
-                    LHSe[i,j] += beta * (1/self.length) * self.InterfApprox.Ng[ig,i] * self.InterfApprox.Ng[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                    LHSe[i,j] += beta * (1/self.length) * (1/self.InterfApprox.Xg[ig,0]) * self.InterfApprox.Ng[ig,i] * self.InterfApprox.Ng[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     
                 # COMPUTE RHS VECTOR TERMS 
                 ### SYMMETRIC NITSCHE'S METHOD TERM  [ PSI_D * (n dot nabla(N_i)) ]
                 RHSe[i] +=  (1/self.InterfApprox.Xg[ig,0])*self.InterfApprox.PSIg[ig] * n_dot_Ngrad[i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                 ### PENALTY TERM   [ beta * N_i * PSI_D ]
-                RHSe[i] +=  beta * (1/self.length) * self.InterfApprox.PSIg[ig] * self.InterfApprox.Ng[ig,i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                RHSe[i] +=  beta * (1/self.length) * (1/self.InterfApprox.Xg[ig,0]) * self.InterfApprox.PSIg[ig] * self.InterfApprox.Ng[ig,i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
         
         return LHSe, RHSe
     
@@ -1685,15 +1689,15 @@ class Element:
                 else:
                     Xepoly = np.zeros([3+SUBELEM.ElOrder-1,2])
                     ipoint = 0
-                    for iedge in range(SUBELEM.nedge):
+                    for iedge in range(SUBELEM.numedges):
                         inode = iedge
-                        jnode = int((iedge+1)%SUBELEM.nedge)
+                        jnode = int((iedge+1)%SUBELEM.numedges)
                         if iedge == 0:
                             Xepoly[ipoint,:] = SUBELEM.Xe[inode,:]
                             Xepoly[ipoint+1,:] = SUBELEM.Xe[jnode,:]
                             ipoint += 2
                         elif iedge == SUBELEM.interfedge:
-                            inodeHO = SUBELEM.nedge+(SUBELEM.ElOrder-1)*inode
+                            inodeHO = SUBELEM.numedges+(SUBELEM.ElOrder-1)*inode
                             Xepoly[ipoint:ipoint+(SUBELEM.ElOrder-1),:] = SUBELEM.Xe[inodeHO:inodeHO+(SUBELEM.ElOrder-1),:]
                             ipoint += SUBELEM.ElOrder-1
                         else:

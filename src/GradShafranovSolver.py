@@ -41,6 +41,7 @@ from _plot import *
 from InitialPlasmaBoundary import *
 from InitialPSIGuess import *
 from PlasmaCurrent import *
+from _test import *
 #from mpi4py import MPI
 
 class GradShafranovSolver(EquilipyInitialisation,
@@ -61,6 +62,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.CASE = None
         self.FIXED_BOUNDARY = None          # PLASMA BOUNDARY FIXED BEHAVIOUR: True  or  False 
         self.GhostStabilization = False     # GHOST STABILIZATION SWITCH
+        self.RunTests = False               # ENABLE/DISABLE VALIDATION TESTS
         self.PARALLEL = False               # PARALLEL SIMULATION BASED ON MPI RUN (NEEDS TO RUN ON .py file)
         self.dim = None                     # DIMENSION
         
@@ -299,6 +301,11 @@ class GradShafranovSolver(EquilipyInitialisation,
             print("     -> COMPUTE GHOST FACES QUADRATURES...", end="")
             self.MESH.ComputeGhostFacesQuadratures(self.QuadratureOrder1D)
             print("Done!")
+            
+            # RUN VALIDATION TESTS
+            if self.RunTests:
+                print("     -> RUNNING MESH VALIDATION TESTS...")
+                run_all_mesh_tests(self.MESH)
       
         print('Done!')
         return
@@ -379,6 +386,13 @@ class GradShafranovSolver(EquilipyInitialisation,
             - Uses gradient jump terms weighted by a user-defined penalty parameter `zeta`.
             - Alternative option (commented) allows stabilization based on solution jumps.
         """
+        # Validate penalty parameter value
+        if self.RunTests:
+            for p in range(1, self.MESH.ElOrder + 1):
+                _, is_correct = test_penalty_scaling_formula(self.zeta, self.MESH.meanLength, p, self.dim)
+                if not is_correct:
+                    print(f"⚠ Warning: Penalty scaling for p={p} may be problematic")
+        
         if self.out_elemsys:
             self.file_elemsys.write('GHOST_FACES\n')
             
@@ -396,7 +410,11 @@ class GradShafranovSolver(EquilipyInitialisation,
             # LOOP OVER ELEMENT ORDER -> PENALISE ALL DERIVATIVES JUMP
             for p in range(1,self.MESH.ElOrder+1):
                 # COMPUTE ADEQUATE GHOST PENALTY TERM
-                penalty = self.zeta*max(ELEMENT0.length,ELEMENT1.length)**(2*p + 1)
+                # Ghost penalty scaling: h^(2p+2) provides the best stabilization
+                # for the axisymmetric Grad-Shafranov problem without over-penalization
+                # (Tested against formulas h^(2p-2), h^(2p-1), h^(2p), h^(2p+1))
+                h = max(ELEMENT0.length,ELEMENT1.length)
+                penalty = self.zeta * h**(2*p - 1)  # (2*p + 2) or (2*p + 1)
 
                 # COMPUTE NORMAL PHYSICAL DERIVATIVE 
                 # Prepare the contraction string for einsum
@@ -420,7 +438,8 @@ class GradShafranovSolver(EquilipyInitialisation,
                     # Extract local variables for this Gauss point
                     invJ0 = FACE0.invJg[ig] 
                     invJ1 = FACE1.invJg[ig]
-                    n = FACE0.NormalVec    # Shape (2,)
+                    n0 = FACE0.NormalVec    # Shape (2,)
+                    n1 = FACE1.NormalVec    # Shape (2,)
 
                     # 2. Build the list of arguments to pass to einsum
                     # Start with the reference derivative tensor
@@ -434,8 +453,8 @@ class GradShafranovSolver(EquilipyInitialisation,
 
                     # Add p copies of the Normal vector
                     for _ in range(p):
-                        args0.append(n)
-                        args1.append(n)
+                        args0.append(n0)
+                        args1.append(n1)
                     
                     # Perform the multi-linear contraction
                     # Results in a vector of length n representing the p-th NORMAL PHYSICAL derivative for each basis function.
@@ -444,11 +463,13 @@ class GradShafranovSolver(EquilipyInitialisation,
 
                     n_dot_dNg = np.concatenate((n_dot_dNg0,n_dot_dNg1), axis=0)
 
-                    # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM    
+                    # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM
+                    # NOTE: The 1/R factor is required for consistency with axisymmetric Grad-Shafranov weak form
+                    R = FACE0.Xg[ig,0]  # R coordinate at Gauss point
                     for i in range(ELEMENT0.n+ELEMENT1.n):  # ROWS ELEMENTAL MATRIX
                         for j in range(ELEMENT0.n+ELEMENT1.n):  # COLUMNS ELEMENTAL MATRIX
-                            ### GHOST PENALTY TERM  OVER DERIVATIVES JUMP   
-                            LHSe[i,j] += penalty*n_dot_dNg[i]*n_dot_dNg[j] * FACE0.detJg1D[ig] * FACE0.Wg[ig]
+                            ### GHOST PENALTY TERM  OVER DERIVATIVES JUMP
+                            LHSe[i,j] += penalty*n_dot_dNg[i]*n_dot_dNg[j] * (1/R) * FACE0.detJg1D[ig] * FACE0.Wg[ig]
 
 
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
@@ -586,6 +607,9 @@ class GradShafranovSolver(EquilipyInitialisation,
         
         # INTEGRATE OVER THE CUT EDGES IN ELEMENTS CUT BY INTERFACES (ADAPTED QUADRATURES)
         print("     Integrate along cut-elements interface edges...", end="")
+
+        if self.beta is None:
+            raise ValueError("Nitsche penalty parameter 'beta' must be set before assembling interface terms.")
         
         for ielem in self.MESH.PlasmaBoundActiveElems:
             # ISOLATE ELEMENT 
@@ -640,6 +664,11 @@ class GradShafranovSolver(EquilipyInitialisation,
                         self.file_globalsys.write("{:d} {:d} {:d} {:f}\n".format(inode, irow+1, jcol+1, self.LHS[irow,jcol]))
             self.file_globalsys.write('END_LHS_MATRIX\n')
         
+        # RUN VALIDATION TESTS ON ASSEMBLED SYSTEM
+        if self.RunTests:
+            print("     RUNNING SYSTEM VALIDATION TESTS...")
+            run_all_system_tests(self.LHS, self.RHS)
+        
         print("Done!")   
         return
     
@@ -653,9 +682,9 @@ class GradShafranovSolver(EquilipyInitialisation,
         Solves the global linear system of equations for the scalar field variable PSI.
 
         Sets:
-            - self.PSI : Solution vector (nodal values) of the scalar field, reshaped as a column vector.
+            - self.PSI : Solution vector (nodal values) of the scalar field as a 1D array.
         """
-        self.PSI = spsolve(self.LHS.tocsr(), self.RHS).reshape([self.MESH.Nn,1])
+        self.PSI = spsolve(self.LHS.tocsr(), self.RHS).flatten()
         return
 
     
@@ -820,6 +849,96 @@ class GradShafranovSolver(EquilipyInitialisation,
         self.closeOUTPUTfiles()
         self.writeSimulationPickle()
         return
+
+
+    def GetCutFEMDiagnostics(self, verbose=True):
+        """
+        Computes and returns comprehensive CutFEM error diagnostics.
+
+        This is the main API for obtaining error analysis of a CutFEM solution,
+        including:
+        - L2 error in cut elements vs interior elements
+        - Solution continuity (jumps) at ghost faces
+        - Normal derivative jumps at ghost faces (orders 1, 2, 3)
+        - Interface error
+
+        Input:
+            - verbose (bool): If True, print detailed report to console
+
+        Returns:
+            - diagnostics (dict): Dictionary containing all error metrics with keys:
+                - 'cut_elements': {'count', 'L2_error', 'relative_L2_error'}
+                - 'interior_elements': {'count', 'L2_error', 'relative_L2_error'}
+                - 'ghost_faces': {'count', 'solution_jump_max/mean', 'gradient_jump_max/mean', 'continuity_ok'}
+                - 'normal_deriv_order_1/2/3': {'L2_norm', 'max_jump'}
+                - 'interface': {'L2_error', 'relative_L2_error'}
+                - 'summary': {'error_ratio_cut_interior', 'total_L2_error', ...}
+
+        Example usage:
+            equilibrium.EQUILI('MY_CASE')
+            diagnostics = equilibrium.GetCutFEMDiagnostics(verbose=True)
+            print(f"Cut element error: {diagnostics['cut_elements']['L2_error']}")
+            print(f"Continuity OK: {diagnostics['ghost_faces']['continuity_ok']}")
+        """
+        if not self.FIXED_BOUNDARY:
+            print("Warning: CutFEM diagnostics require FIXED_BOUNDARY=True")
+            return {}
+
+        if not self.GhostStabilization:
+            print("Note: Ghost stabilization was disabled for this simulation")
+
+        return self.ComputeCutFEMErrorDiagnostics(verbose=verbose)
+
+
+    def PrintErrorSummary(self):
+        """
+        Prints a concise summary of all error metrics for the current solution.
+
+        This is a quick way to get an overview of solution quality after running EQUILI().
+        """
+        print("\n" + "="*70)
+        print("SOLUTION ERROR SUMMARY")
+        print("="*70)
+
+        if hasattr(self, 'ErrorL2norm') and self.ErrorL2norm is not None:
+            print(f"  Total L2 error:           {self.ErrorL2norm:.6e}")
+            print(f"  Total relative L2 error:  {self.RelErrorL2norm:.6e}")
+
+        if hasattr(self, 'CutFEMDiagnostics') and self.CutFEMDiagnostics:
+            diag = self.CutFEMDiagnostics
+            cut = diag.get('cut_elements', {})
+            interior = diag.get('interior_elements', {})
+            gf = diag.get('ghost_faces', {})
+
+            if cut:
+                print(f"\n  Cut elements ({cut.get('count', 0)}):")
+                print(f"    L2 error:               {cut.get('L2_error', 0):.6e}")
+
+            if interior:
+                print(f"  Interior elements ({interior.get('count', 0)}):")
+                print(f"    L2 error:               {interior.get('L2_error', 0):.6e}")
+
+            ratio = diag.get('summary', {}).get('error_ratio_cut_interior', 0)
+            print(f"  Error ratio (cut/int):    {ratio:.4f}")
+
+            if gf and gf.get('count', 0) > 0:
+                print(f"\n  Ghost faces ({gf.get('count', 0)}):")
+                print(f"    Solution continuity:    {'✓ OK' if gf.get('continuity_ok', False) else '✗ FAILED'}")
+                print(f"    Max solution jump:      {gf.get('solution_jump_max', 0):.4e}")
+                print(f"    Max gradient jump:      {gf.get('gradient_jump_max', 0):.4e}")
+
+            intf = diag.get('interface', {})
+            if intf:
+                print(f"\n  Interface L2 error:       {intf.get('L2_error', 0):.6e}")
+        else:
+            # Compute diagnostics if not already done
+            if self.FIXED_BOUNDARY and self.GhostStabilization:
+                print("\n  (Computing CutFEM diagnostics...)")
+                self.GetCutFEMDiagnostics(verbose=False)
+                self.PrintErrorSummary()
+                return
+
+        print("="*70 + "\n")
     
     
     

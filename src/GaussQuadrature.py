@@ -67,6 +67,18 @@ def GaussQuadrature(element,order):
                         zg = np.array([-sq2,-sq1,0,sq1,sq2])
                         zg = np.reshape(zg, (Ng,1))
                         wg = np.array([w2,w1,128/225,w1,w2])
+                    case 6:
+                        # 6-point Gauss-Legendre quadrature on [-1,1]
+                        Ng = 6
+                        x1 = 0.932469514203152
+                        x2 = 0.661209386466265
+                        x3 = 0.238619186083197
+                        w1 = 0.171324492379170
+                        w2 = 0.360761573048139
+                        w3 = 0.467913934572691
+                        zg = np.array([-x1, -x2, -x3, x3, x2, x1])
+                        zg = np.reshape(zg, (Ng,1))
+                        wg = np.array([w1, w2, w3, w3, w2, w1])
                         
             case 1:  # TRIANGLE
                 match order:
@@ -345,7 +357,7 @@ def GaussQuadrature(element,order):
                         zg[6,:] = [-a,a]
                         zg[7,:] = [-a,0]
                         zg[8,:] = [-a,-a]
-                        wg =np.array([w1,w2,w1,w2,w4,w2,w1,w2,w1])
+                        wg =np.array([w1,w2,w1,w2,w3,w2,w1,w2,w1])
                     case 4:
                         Ng = 16
                         a = 0.861136311594053

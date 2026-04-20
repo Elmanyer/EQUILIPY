@@ -293,7 +293,13 @@ class Mesh:
                     nextbounelem = bounnode[0][1]
                 else:
                     nextbounelem = bounnode[0][0]
-                self.BoundaryVertices[iboun+1] = self.Tbound[nextbounelem,np.where(self.Tbound[nextbounelem,:2] != self.BoundaryVertices[iboun])[0]]
+                # Find the other vertex on this boundary edge (not the current one)
+                edge_verts = self.Tbound[nextbounelem, :2]
+                current_vertex = self.BoundaryVertices[iboun]
+                if edge_verts[0] == current_vertex:
+                    self.BoundaryVertices[iboun+1] = edge_verts[1]
+                else:
+                    self.BoundaryVertices[iboun+1] = edge_verts[0]
                 
         ### COMPUTATIONAL DOMAIN'S BOUNDARY PATH 
         # TAKE BOUNDARY VERTICES
@@ -636,6 +642,38 @@ class Mesh:
     ################################# PLASMA BOUNDARY GHOST FACES ####################################
     ##################################################################################################
     
+    def ValidateEdgeNodeOrdering(self):
+        """
+        Validates that edge node indices are computed consistently for all elements.
+        
+        For triangular elements, all edges should be enumerated counter-clockwise:
+        - Edge 0: vertices [0, 1]
+        - Edge 1: vertices [1, 2]
+        - Edge 2: vertices [2, 0]
+        
+        Issues detected here may cause incorrect normal vector computation and assembly.
+        """
+        degenerate_edges = []
+        
+        for elem in self.Elements:
+            for iedge in range(elem.numedges):
+                # Get edge vertices
+                v0_local = iedge
+                v1_local = (iedge + 1) % elem.numedges
+                
+                # Check for degenerate edges (zero length)
+                edge_vector = elem.Xe[v1_local,:] - elem.Xe[v0_local,:]
+                edge_length = np.linalg.norm(edge_vector)
+                
+                if edge_length < 1e-14:
+                    degenerate_edges.append((elem.index, iedge, edge_length))
+        
+        if degenerate_edges:
+            raise ValueError(f"Found {len(degenerate_edges)} degenerate edges in mesh. "
+                           f"This indicates severely distorted elements or connectivity issues. "
+                           f"First problem: Element {degenerate_edges[0][0]}, Edge {degenerate_edges[0][1]}")
+    
+    
     def IdentifyPlasmaBoundaryGhostFaces(self):
         """
         Identifies the elemental ghost faces on which the ghost penalty term needs to be integrated, for elements containing the plasma
@@ -645,6 +683,9 @@ class Mesh:
         # RESET ELEMENTAL GHOST FACES
         for ielem in np.concatenate((self.PlasmaBoundElems,self.PlasmaElems),axis=0):
             self.Elements[ielem].GhostFaces = None
+        
+        # VALIDATE EDGE NODE ORDERING before proceeding
+        self.ValidateEdgeNodeOrdering()
             
         GhostFaces_dict = dict()    # [(CUT_EDGE_NODAL_GLOBAL_INDEXES): {(ELEMENT_INDEX_1, EDGE_INDEX_1), (ELEMENT_INDEX_2, EDGE_INDEX_2)}]
         
@@ -730,14 +771,17 @@ class Mesh:
             - Identifies ghost faces on plasma boundary elements.
             - Computes normal vectors for the ghost faces of each ghost element.
             - Validates the computed ghost face normal vectors.
+            - CRITICAL: Verifies that normals on adjacent ghost faces are opposite (n1 = -n2).
         """
         # COMPUTE PLASMA BOUNDARY GHOST FACES
         self.IdentifyPlasmaBoundaryGhostFaces()
         # COMPUTE ELEMENTAL GHOST FACES NORMAL VECTORS
         for ielem in self.GhostElems:
             self.Elements[ielem].GhostFacesNormals()
-        # CHECK NORMAL VECTORS
+        # CHECK NORMAL VECTORS (unitary and orthogonal)
         self.CheckGhostFacesNormalVectors()
+        # CRITICAL: Check that adjacent normals are opposite
+        self.ValidateAdjacentGhostFaceNormals()
         return
     
     
@@ -759,6 +803,49 @@ class Mesh:
                 if scalarprod > 1e-10: 
                     raise Exception('Dot product equals',scalarprod, 'for mesh element', ielem, ": Normal vector not perpendicular")
         return
+    
+    
+    def ValidateAdjacentGhostFaceNormals(self):
+        """
+        CRITICAL VALIDATION: Verify that normal vectors on shared ghost faces point in opposite directions (n1 = -n2).
+        
+        This is required by CutFEM theory for proper ghost penalty stabilization.
+        If this check fails, the stabilization will be inconsistent and may cause instability.
+        
+        Raises:
+            - ValueError: If any pair of adjacent ghost faces have inconsistent normals
+        """
+        if self.GhostFaces is None or len(self.GhostFaces) == 0:
+            return
+        
+        tolerance = 1e-10
+        failures = []
+        
+        for ghost_face_tuple in self.GhostFaces:
+            # Extract element and face information
+            elem1_idx, edge1_idx, face1_list_idx = ghost_face_tuple[1]
+            elem2_idx, edge2_idx, face2_list_idx = ghost_face_tuple[2]
+            
+            # Get the actual face objects
+            face1 = self.Elements[elem1_idx].GhostFaces[face1_list_idx]
+            face2 = self.Elements[elem2_idx].GhostFaces[face2_list_idx]
+            
+            # Check opposition: n1 + n2 should be close to zero
+            normal_sum = face1.NormalVec + face2.NormalVec
+            normal_sum_norm = np.linalg.norm(normal_sum)
+            
+            if normal_sum_norm > tolerance:
+                failures.append((elem1_idx, elem2_idx, normal_sum_norm, 
+                               face1.NormalVec, face2.NormalVec))
+        
+        if failures:
+            error_msg = f"CRITICAL: {len(failures)} ghost face pairs have inconsistent normals:\n"
+            for elem1, elem2, norm_sum, n1, n2 in failures[:3]:  # Show first 3 failures
+                error_msg += f"  Elements {elem1} & {elem2}: ||n1 + n2|| = {norm_sum:.2e}\n"
+                error_msg += f"    n1 = {n1}, n2 = {n2}\n"
+            if len(failures) > 3:
+                error_msg += f"  ... and {len(failures)-3} more\n"
+            raise ValueError(error_msg)
 
     
     

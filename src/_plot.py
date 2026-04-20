@@ -135,8 +135,8 @@ class EquilipyPlotting:
         ax.set_ylabel('Z (in m)')
         ax.set_title('PSI')
         
-        contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI[:,0], levels = Npsilevels, cmap = plasmacmap)
-        contour1 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI[:,0], levels=[self.PSI_X], colors = 'black')
+        contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI, levels = Npsilevels, cmap = plasmacmap)
+        contour1 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI, levels=[self.PSI_X], colors = 'black')
         contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], 
                                  colors = plasmabouncolor,
                                  linewidths = plasmabounlinewidth)
@@ -159,24 +159,71 @@ class EquilipyPlotting:
 
     
 
-    def PlotError(self,RelativeError = False):
+    def PlotError(self, RelativeError=False, ShowDiagnostics=True):
+        """
+        Plots the error between analytical and numerical PSI solutions.
+
+        Input:
+            - RelativeError (bool): If True, plot relative error instead of absolute error
+            - ShowDiagnostics (bool): If True, compute and display CutFEM error diagnostics
+        """
         if self.FIXED_BOUNDARY:
             AnaliticalNorm = np.zeros([self.MESH.Nn])
             for inode in range(self.MESH.Nn):
                 AnaliticalNorm[inode] = self.PlasmaCurrent.PSIanalytical(self.MESH.X[inode,:])
-                
-            print('||PSIerror||_L2 = ', self.ErrorL2norm)
-            print('relative ||PSIerror||_L2 = ', self.RelErrorL2norm)
-            print('||PSIerror|| = ',np.linalg.norm(self.PSIerror))
-            print('||PSIerror||/node = ',np.linalg.norm(self.PSIerror)/self.MESH.Nn)
-            print('relative ||PSIerror|| = ',np.linalg.norm(self.PSIrelerror))
-                
+
+            # Print standard error metrics
+            print("\n" + "="*70)
+            print("ERROR ANALYSIS REPORT")
+            print("="*70)
+            print("\n[STANDARD METRICS]")
+            print("-"*50)
+            print(f'  ||PSIerror||_L2        = {self.ErrorL2norm:.6e}')
+            print(f'  Relative ||PSIerror||_L2 = {self.RelErrorL2norm:.6e}')
+            print(f'  ||PSIerror||_Euclidean   = {np.linalg.norm(self.PSIerror):.6e}')
+            print(f'  ||PSIerror||/node        = {np.linalg.norm(self.PSIerror)/self.MESH.Nn:.6e}')
+            print(f'  Relative ||PSIerror||    = {np.linalg.norm(self.PSIrelerror):.6e}')
+
+            # Compute and display CutFEM diagnostics if enabled
+            if ShowDiagnostics and self.GhostStabilization:
+                print("\n[CUTFEM DIAGNOSTICS]")
+                print("-"*50)
+                diagnostics = self.ComputeCutFEMErrorDiagnostics(verbose=False)
+
+                # Element-wise errors
+                cut = diagnostics['cut_elements']
+                interior = diagnostics['interior_elements']
+                print(f"  Cut elements ({cut['count']}):     L2 = {cut['L2_error']:.4e}")
+                print(f"  Interior elements ({interior['count']}):  L2 = {interior['L2_error']:.4e}")
+                print(f"  Error ratio (cut/interior): {diagnostics['summary']['error_ratio_cut_interior']:.4f}")
+
+                # Ghost face quality
+                gf = diagnostics.get('ghost_faces', {})
+                if gf.get('count', 0) > 0:
+                    print(f"\n  Ghost faces: {gf['count']}")
+                    print(f"    Solution jump:  max = {gf['solution_jump_max']:.4e}")
+                    print(f"    Gradient jump:  max = {gf['gradient_jump_max']:.4e}")
+                    print(f"    Continuity:     {'✓ VERIFIED' if gf['continuity_ok'] else '✗ FAILED'}")
+
+                    # Normal derivative jumps
+                    for p in range(1, 4):
+                        key = f'normal_deriv_order_{p}'
+                        if key in diagnostics:
+                            d = diagnostics[key]
+                            print(f"    [[∂^{p}u/∂n^{p}]]:   L2 = {d['L2_norm']:.4e}")
+
+                # Interface error
+                intf = diagnostics['interface']
+                print(f"\n  Interface L2 error: {intf['L2_error']:.4e}")
+
+            print("="*70 + "\n")
+
             # Compute global min and max across both datasets
             vmin = min(AnaliticalNorm)
-            vmax = max(AnaliticalNorm)  
-                
+            vmax = max(AnaliticalNorm)
+
             fig, axs = plt.subplots(1, 4, figsize=(16,5),gridspec_kw={'width_ratios': [1,1,0.25,1]})
-            
+
             # LEFT PLOT: ANALYTICAL SOLUTION
             axs[0].set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
             axs[0].set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
@@ -185,8 +232,8 @@ class EquilipyPlotting:
             axs[0].set_ylabel('Z (in m)')
             axs[0].set_title('PSI exact')
             a1 = axs[0].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], AnaliticalNorm, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
-            axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], 
-                              colors = plasmabouncolor, 
+            axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0],
+                              colors = plasmabouncolor,
                               linewidths=plasmabounlinewidth)
             axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], AnaliticalNorm, levels=[0], colors = 'black')
             self.MESH.PlotBoundary(ax = axs[0])
@@ -198,15 +245,15 @@ class EquilipyPlotting:
             axs[1].set_aspect('equal')
             axs[1].set_title('PSI numeric')
             axs[1].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
-            axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], 
-                              colors = plasmabouncolor, 
+            axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0],
+                              colors = plasmabouncolor,
                               linewidths=plasmabounlinewidth)
             axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=[0], colors = 'black')
             self.MESH.PlotBoundary(ax = axs[1])
             # COLORBAR
             axs[2].axis('off')
             fig.colorbar(a1, ax=axs[2], orientation="vertical", fraction=0.8, pad=-0.7)
-            
+
             # RIGHT PLOT: ERROR
             axs[3].set_aspect('equal')
             axs[3].set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
@@ -218,10 +265,11 @@ class EquilipyPlotting:
             else:
                 errorfield = self.PSIerror
                 axs[3].set_title('PSI error')
-            vmax = max(np.log(errorfield))
-            a = axs[3].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], np.log(errorfield), levels=Npsilevels, vmax=vmax,vmin=-20)
+            vmax = max(np.log10(errorfield))
+            vmin = np.log10(1e-14)
+            a = axs[3].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], np.log10(errorfield), levels=np.linspace(vmin, vmax, 15), vmax=vmax, vmin=vmin)
             self.MESH.PlotBoundary(ax = axs[3])
-            
+
             plt.colorbar(a, ax=axs[3])
             plt.show()
         return
@@ -287,7 +335,7 @@ class EquilipyPlotting:
             axs[0].set_aspect('equal')
             axs[1].set_aspect('equal')
             # LEFT PLOT: PSI at iteration N+1 WITHOUT NORMALISATION (SOLUTION OBTAINED BY SOLVING CUTFEM SYSTEM)
-            subplotfield(self,axs[0],self.PSI[:,0],normalised=False)
+            subplotfield(self,axs[0],self.PSI,normalised=False)
             axs[0].set_title('PSI')
             # RIGHT PLOT: NORMALISED PSI at iteration N+1
             subplotfield(self,axs[1],self.PSI_NORM[:,1])
@@ -306,7 +354,7 @@ class EquilipyPlotting:
         else:  # ITERATION SOLUTION FOR ANALYTICAL PLASMA CURRENT CASES (PLOT PSI)
             fig, axs = plt.subplots(1, 1, figsize=(5,6))
             axs.set_aspect('equal')
-            subplotfield(self,axs,self.PSI[:,0],normalised=False)
+            subplotfield(self,axs,self.PSI,normalised=False)
             axs.set_title('Poloidal magnetic flux PSI')
             axs.set_title("Iteration n = "+str(self.it)+ psi_sol)
             plt.show(block=False)
