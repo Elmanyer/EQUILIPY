@@ -115,6 +115,32 @@ class EquilipyL2error:
         self.RelErrorL2norm = np.sqrt(ErrorL2norm/PSIexactL2norm)
         self.ErrorL2norm = np.sqrt(ErrorL2norm)
         return
+    
+
+    def ComputeL2error(self):
+        """
+        Computes the L2 integral norm error of the PSI field by integrating the squared difference between the analytical solution and the 
+        computed solution over the whole domain.
+        
+        Computes:
+            self.ErrorL2norm        : L2 INTEGRAL NORM ERROR 
+            self.RelErrorL2norm     : L2 INTEGRAL NORM RELATIVE ERROR
+        """
+        ErrorL2norm = 0
+        PSIexactL2norm = 0
+        # INTEGRATE OVER ALL ELEMENTS
+        for ELEMENT in self.MESH.Elements:
+            # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
+            PSIg = ELEMENT.Ng @ ELEMENT.PSIe
+            # LOOP OVER GAUSS NODES
+            for ig in range(ELEMENT.ng):
+                ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:],NORMALISED=True))**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                PSIexactL2norm += self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:],NORMALISED=True)**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
+                    
+        self.RelErrorL2norm = np.sqrt(ErrorL2norm/PSIexactL2norm)
+        self.ErrorL2norm = np.sqrt(ErrorL2norm)
+        return
+    
 
     def _compute_interface_error(self):
         """

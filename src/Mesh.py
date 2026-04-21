@@ -879,7 +879,7 @@ class Mesh:
         # COMPUTE NUMBER OF NODES ON PLASMA BOUNDARY APPROXIMATION
         self.NnPB = self.ComputePlasmaBoundaryNumberNodes()
         return
-    
+
     def ComputeGhostFacesQuadratures(self,QuadOrder1D):
         """
         Computes the ELEMENTAL FACES numerical integration QUADRATURES for GHOST ELEMENTS.
@@ -888,8 +888,320 @@ class Mesh:
         for ielem in self.GhostElems:
             self.Elements[ielem].ComputeGhostFacesQuadratures(QuadOrder1D)
         return
-        
-        
+
+    ##################################################################################################
+    ############################### INTERFACE GEOMETRIC ERROR ANALYSIS ################################
+    ##################################################################################################
+
+    def ComputeInterfaceApproximationError(self, verbose=False):
+        """
+        Computes comprehensive geometric error metrics for interface approximation.
+
+        The plasma interface is approximated by finding zero-crossings of the level-set function
+        on element edges. This function estimates the geometric errors introduced by this discretization.
+
+        Errors measured:
+        - Point-to-interface distance: deviation of approximation nodes from exact PHI=0 contour
+        - Arc-length error: difference between piecewise-linear approximation and exact arc length
+        - Normal vector error: angular difference between exact and approximated normal vectors
+
+        Returns:
+            Dictionary with structure:
+            {
+                'summary': {
+                    'total_elements': int,
+                    'point_distance_max': float,
+                    'point_distance_mean': float,
+                    'point_distance_std': float,
+                    'arc_length_error_max': float,
+                    'arc_length_error_mean': float,
+                    'arc_length_error_relative_mean': float,
+                    'normal_angle_error_max': float,  # degrees
+                    'normal_angle_error_mean': float,
+                },
+                'per_element': {
+                    elem_idx: {
+                        'point_distances': np.ndarray,
+                        'arc_length_error': float,
+                        'arc_length_exact': float,
+                        'arc_length_approx': float,
+                        'normal_errors': List[float],  # degrees
+                        'h': float
+                    }
+                }
+            }
+        """
+        if len(self.PlasmaBoundElems) == 0:
+            if verbose:
+                EqPrint("Warning: No plasma boundary elements - skipping interface error computation")
+            return None
+
+        errors_data = {
+            'summary': {},
+            'per_element': {}
+        }
+
+        all_point_distances = []
+        all_arc_length_errors = []
+        all_arc_length_relative_errors = []
+        all_normal_errors = []
+
+        # Iterate over all cut elements
+        for elem_idx in self.PlasmaBoundElems:
+            elem = self.Elements[elem_idx]
+
+            # Skip if element has no interface approximation
+            if not hasattr(elem, 'InterfApprox') or elem.InterfApprox is None:
+                continue
+
+            # Compute point-to-interface distance errors
+            point_dists = self._compute_element_interface_point_errors(elem_idx)
+
+            # Compute arc-length errors
+            arc_length_error, arc_length_exact, arc_length_approx = \
+                self._compute_element_interface_arc_length_error(elem_idx)
+
+            # Compute normal vector errors
+            normal_errors = self._compute_element_interface_normal_error(elem_idx)
+
+            # Store element-specific results
+            h = elem.length if hasattr(elem, 'length') else 0.1
+            errors_data['per_element'][elem_idx] = {
+                'point_distances': point_dists,
+                'arc_length_error': arc_length_error,
+                'arc_length_exact': arc_length_exact,
+                'arc_length_approx': arc_length_approx,
+                'normal_errors': normal_errors,
+                'h': h
+            }
+
+            # Accumulate for summary statistics
+            if len(point_dists) > 0:
+                all_point_distances.extend(point_dists)
+
+            if arc_length_error is not None:
+                all_arc_length_errors.append(arc_length_error)
+                if arc_length_exact > 1e-14:
+                    all_arc_length_relative_errors.append(arc_length_error / arc_length_exact)
+
+            if normal_errors is not None:
+                all_normal_errors.extend(normal_errors)
+
+        # Compute summary statistics
+        errors_data['summary']['total_elements'] = len(self.PlasmaBoundElems)
+
+        if len(all_point_distances) > 0:
+            all_point_distances = np.array(all_point_distances)
+            errors_data['summary']['point_distance_max'] = float(np.max(all_point_distances))
+            errors_data['summary']['point_distance_mean'] = float(np.mean(all_point_distances))
+            errors_data['summary']['point_distance_std'] = float(np.std(all_point_distances))
+        else:
+            errors_data['summary']['point_distance_max'] = 0.0
+            errors_data['summary']['point_distance_mean'] = 0.0
+            errors_data['summary']['point_distance_std'] = 0.0
+
+        if len(all_arc_length_errors) > 0:
+            all_arc_length_errors = np.array(all_arc_length_errors)
+            errors_data['summary']['arc_length_error_max'] = float(np.max(np.abs(all_arc_length_errors)))
+            errors_data['summary']['arc_length_error_mean'] = float(np.mean(np.abs(all_arc_length_errors)))
+        else:
+            errors_data['summary']['arc_length_error_max'] = 0.0
+            errors_data['summary']['arc_length_error_mean'] = 0.0
+
+        if len(all_arc_length_relative_errors) > 0:
+            errors_data['summary']['arc_length_error_relative_mean'] = \
+                float(np.mean(np.abs(all_arc_length_relative_errors)))
+        else:
+            errors_data['summary']['arc_length_error_relative_mean'] = 0.0
+
+        if len(all_normal_errors) > 0:
+            all_normal_errors = np.array(all_normal_errors)
+            errors_data['summary']['normal_angle_error_max'] = float(np.max(all_normal_errors))
+            errors_data['summary']['normal_angle_error_mean'] = float(np.mean(all_normal_errors))
+        else:
+            errors_data['summary']['normal_angle_error_max'] = 0.0
+            errors_data['summary']['normal_angle_error_mean'] = 0.0
+
+        # Store as mesh attribute for repeated access
+        self.InterfaceGeometricError = errors_data
+
+        if verbose:
+            self._print_interface_error_report(errors_data)
+
+        return errors_data
+
+    def _compute_element_interface_point_errors(self, elem_idx):
+        """
+        Compute point-to-interface distance for each interface approximation node.
+
+        The interface is defined by PHI(X) = 0. For exact interface nodes, PHI should be ~0.
+        Deviations indicate approximation error.
+
+        Returns:
+            np.ndarray of absolute distances (should be close to 0 for good approximations)
+        """
+        elem = self.Elements[elem_idx]
+
+        if not hasattr(elem, 'InterfApprox') or elem.InterfApprox is None:
+            return np.array([])
+
+        interface_approx = elem.InterfApprox
+        distances = []
+
+        # Evaluate level-set at each interface approximation node
+        if hasattr(interface_approx, 'Xint') and interface_approx.Xint is not None:
+            for X_int in interface_approx.Xint:
+                # Evaluate level-set at this point (should be ~0)
+                phi_value = elem.PHI(X_int.reshape((1,2)))
+
+                # For elements with smooth level-set, |PHI| approximates distance to interface
+                # Distance is proportional to |PHI(X)| / ||grad PHI||, but ||grad PHI|| ~ O(1)
+                distances.append(abs(phi_value))
+
+        return np.array(distances)
+
+    def _compute_element_interface_arc_length_error(self, elem_idx):
+        """
+        Compute arc-length approximation error on interface.
+
+        Compares:
+        - Exact arc length: integral of ||grad PHI|| / ||grad PHI|| along contour (= contour length)
+        - Approximated arc length: sum of distances between consecutive interface nodes
+
+        Returns:
+            (arc_length_error, arc_length_exact, arc_length_approx)
+        """
+        elem = self.Elements[elem_idx]
+
+        if not hasattr(elem, 'InterfApprox') or elem.InterfApprox is None:
+            return None, None, None
+
+        interface_approx = elem.InterfApprox
+
+        if not hasattr(interface_approx, 'Xint') or interface_approx.Xint is None:
+            return None, None, None
+
+        Xint = interface_approx.Xint
+
+        if len(Xint) < 2:
+            return None, None, None
+
+        # Compute arc length of piecewise-linear approximation
+        arc_length_approx = 0.0
+        for i in range(len(Xint) - 1):
+            arc_length_approx += np.linalg.norm(Xint[i+1] - Xint[i])
+
+        # Estimate exact arc length using adapted quadrature
+        # The interface is parametrized, and we have quadrature points on it
+        if hasattr(interface_approx, 'detJg1D') and interface_approx.detJg1D is not None and \
+           hasattr(interface_approx, 'Wg') and interface_approx.Wg is not None:
+            arc_length_exact = 0.0
+            for ig in range(len(interface_approx.detJg1D)):
+                arc_length_exact += interface_approx.detJg1D[ig] * interface_approx.Wg[ig]
+        else:
+            # Fallback: assume quadrature weight already includes Jacobian
+            arc_length_exact = arc_length_approx
+
+        arc_length_error = arc_length_exact - arc_length_approx
+
+        return arc_length_error, arc_length_exact, arc_length_approx
+
+    def _compute_element_interface_normal_error(self, elem_idx):
+        """
+        Compute angular error in normal vector approximation.
+
+        At each interface approximation node, computes:
+        - Exact normal: grad PHI / ||grad PHI|| (computed via finite differences)
+        - Approximated normal: stored in InterfApprox.NormalVec
+
+        Returns angle between them in degrees.
+
+        Returns:
+            List of angles in degrees
+        """
+        elem = self.Elements[elem_idx]
+
+        if not hasattr(elem, 'InterfApprox') or elem.InterfApprox is None:
+            return None
+
+        interface_approx = elem.InterfApprox
+
+        if not hasattr(interface_approx, 'Xint') or interface_approx.Xint is None:
+            return None
+
+        if not hasattr(interface_approx, 'NormalVec') or interface_approx.NormalVec is None:
+            return None
+
+        normal_errors = []
+        h_fd = 1e-8  # Finite difference step for gradient computation
+
+        for i, X_int in enumerate(interface_approx.Xint):
+            # Compute exact gradient of level-set via finite differences
+            grad_phi_exact = np.zeros(2)
+            for j in range(2):
+                X_plus = X_int.copy()
+                X_minus = X_int.copy()
+                X_plus[j] += h_fd
+                X_minus[j] -= h_fd
+
+                phi_plus = elem.PHI(X_plus.reshape((1,2)))
+                phi_minus = elem.PHI(X_minus.reshape((1,2)))
+
+                grad_phi_exact[j] = (phi_plus - phi_minus) / (2 * h_fd)
+
+            # Normalize to get exact normal
+            grad_norm = np.linalg.norm(grad_phi_exact)
+            if grad_norm > 1e-14:
+                n_exact = grad_phi_exact / grad_norm
+
+                # Get approximated normal
+                if i < len(interface_approx.NormalVec):
+                    n_approx = interface_approx.NormalVec[i]
+
+                    # Compute angle between vectors
+                    dot_product = np.dot(n_exact, n_approx)
+                    dot_product = np.clip(dot_product, -1.0, 1.0)  # Ensure valid range for arccos
+                    angle_rad = np.arccos(dot_product)
+                    angle_deg = np.degrees(angle_rad)
+
+                    normal_errors.append(angle_deg)
+
+        return normal_errors
+
+    def _print_interface_error_report(self, errors_data):
+        """
+        Print a structured report of interface geometric errors.
+        """
+        summary = errors_data['summary']
+
+        EqPrint("\n" + "="*70)
+        EqPrint("INTERFACE GEOMETRIC ERROR ANALYSIS")
+        EqPrint("="*70)
+
+        EqPrint(f"\nTotal cut elements analyzed: {summary['total_elements']}")
+
+        EqPrint("\n[1] POINT-TO-INTERFACE DISTANCE ERRORS")
+        EqPrint("-"*70)
+        EqPrint(f"  Maximum distance error:  {summary['point_distance_max']:.6e} m")
+        EqPrint(f"  Mean distance error:     {summary['point_distance_mean']:.6e} m")
+        EqPrint(f"  Std dev distance error:  {summary['point_distance_std']:.6e} m")
+
+        EqPrint("\n[2] ARC-LENGTH APPROXIMATION ERRORS")
+        EqPrint("-"*70)
+        EqPrint(f"  Maximum arc-length error: {summary['arc_length_error_max']:.6e} m")
+        EqPrint(f"  Mean arc-length error:    {summary['arc_length_error_mean']:.6e} m")
+        EqPrint(f"  Relative mean error:      {summary['arc_length_error_relative_mean']:.6e}")
+
+        EqPrint("\n[3] NORMAL VECTOR APPROXIMATION ERRORS")
+        EqPrint("-"*70)
+        EqPrint(f"  Maximum angular error:    {summary['normal_angle_error_max']:.6e}°")
+        EqPrint(f"  Mean angular error:       {summary['normal_angle_error_mean']:.6e}°")
+
+        EqPrint("\n" + "="*70 + "\n")
+        return
+
+
+
     def IntegrationNodesMesh(self):
         if type(self.Xg) == type(None):
             self.Xg = np.zeros([self.Ne*self.nge,self.dim])

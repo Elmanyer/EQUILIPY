@@ -675,9 +675,9 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
     ## NUMBER OF NODAL SHAPE FUNCTIONS
     n, foo = ElementalNumberOfNodes(elemType, elemOrder)
     ## NUMBER OF GAUSS INTEGRATION NODES
+    ng = np.shape(X)[0]
+    N = np.zeros([ng,n])
     if elemType == 0:
-        ng = len(X)
-        N = np.zeros([ng,n])
         match deriv:
             case 0:
                 for i in range(n):
@@ -706,8 +706,6 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
                         N[ig,i], dNdxi[ig,i], dN2dxi2[ig,i], dN3dxi3[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
                 return N, [dNdxi, dN2dxi2, dN3dxi3]
     else:
-        ng = len(X[:,0])
-        N = np.zeros([ng,n])
         match deriv:
             case 0:
                 for i in range(n):

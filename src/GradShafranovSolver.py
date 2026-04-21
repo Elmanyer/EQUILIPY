@@ -845,6 +845,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         if self.FIXED_BOUNDARY and self.PlasmaCurrent.CURRENT_MODEL != self.PlasmaCurrent.JARDIN_CURRENT:
             self.ComputeErrorField()
             self.ComputeL2errorPlasma()
+            #self.ComputeL2error()
             self.writeerror()
         
         self.closeOUTPUTfiles()
