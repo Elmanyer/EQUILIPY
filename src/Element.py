@@ -278,7 +278,7 @@ class Element:
         """
         X = np.zeros([self.dim])
         for i in range(self.n):
-            Nig = ShapeFunctionsReference(Xi, self.ElType, self.ElOrder, i+1, deriv=0)
+            Nig = RefLagrangeBasis(Xi, self.ElType, self.ElOrder, i+1, deriv=0)
             X += Nig*self.Xe[i,:]
         return X
     
@@ -299,7 +299,7 @@ class Element:
         def fun(Xi, X, Xe):
             f = np.array([-X[0],-X[1]])
             for i in range(self.n):
-                Nig = ShapeFunctionsReference(Xi, self.ElType, self.ElOrder, i+1, deriv=0)
+                Nig = RefLagrangeBasis(Xi, self.ElType, self.ElOrder, i+1, deriv=0)
                 f[0] += Nig*Xe[i,0]
                 f[1] += Nig*Xe[i,1]
             return f
@@ -315,7 +315,7 @@ class Element:
         """
         F = 0
         for i in range(self.n):
-            N = ShapeFunctionsReference(XI, self.ElType, self.ElOrder, i+1, deriv=0)
+            N = RefLagrangeBasis(XI, self.ElType, self.ElOrder, i+1, deriv=0)
             F += N*Fe[i]
         return F
     
@@ -325,7 +325,7 @@ class Element:
         """
         dF = np.zeros([self.dim])
         for i in range(self.n):
-            foo, dNg = ShapeFunctionsReference(XI, self.ElType, self.ElOrder, i+1, deriv=1)
+            foo, dNg = RefLagrangeBasis(XI, self.ElType, self.ElOrder, i+1, deriv=1)
             dF += dNg[0]*Fe[i]
         return dF
     
@@ -355,11 +355,11 @@ class Element:
         # MAP PHYSICAL POINT TO REFERENCE ELEMENT
         XI = self.InverseMapping(X)
         # COMPUTE REFERENCE SHAPE FUNCTIONS DERIVATIVES AT MAPPED POINT
-        foo, dN = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
+        foo, dN = EvalRefLagrangeBasis(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
         # EVALUATE JACOBIAN OF TRANSFORMATION AT POINT
-        invJ, foo = Jacobian(self.Xe,dN[0][0])
+        J = Jacobian(self.Xe,dN[0][0])
         # OBTAIN GRADIENT IN PHYSICAL SPACE 
-        gradphysN = invJ@dN[0]
+        gradphysN = np.linalg.inv(J.T)@dN[0]
         # COMPUTE RADIAL MAGNETIC COMPONENT
         Br = - gradphysN[1,:]@self.PSIe/X[0]
         return Br
@@ -385,11 +385,11 @@ class Element:
         # MAP PHYSICAL POINT TO REFERENCE ELEMENT
         XI = self.InverseMapping(X)
         # COMPUTE REFERENCE SHAPE FUNCTIONS DERIVATIVES AT MAPPED POINT
-        foo, dN = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
+        foo, dN = EvalRefLagrangeBasis(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
         # EVALUATE JACOBIAN OF TRANSFORMATION AT POINT
-        invJ, foo = Jacobian(self.Xe,dN[0][0])
+        J = Jacobian(self.Xe,dN[0][0])
         # OBTAIN GRADIENT IN PHYSICAL SPACE 
-        gradphysN = invJ@dN[0]
+        gradphysN = np.linalg.inv(J.T)@dN[0]
         # COMPUTE VERTICAL MAGNETIC COMPONENT
         Bz = gradphysN[0,:]@self.PSIe/X[0]
         return Bz
@@ -414,11 +414,11 @@ class Element:
         # MAP PHYSICAL POINT TO REFERENCE ELEMENT
         XI = self.InverseMapping(X)
         # COMPUTE REFERENCE SHAPE FUNCTIONS DERIVATIVES AT MAPPED POINT
-        foo, dN = EvaluateReferenceShapeFunctions(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
+        foo, dN = EvalRefLagrangeBasis(XI.reshape((1,2)), self.ElType, self.ElOrder, deriv=1)
         # EVALUATE JACOBIAN OF TRANSFORMATION AT POINT
-        invJ, foo = Jacobian(self.Xe,dN[0][0])
+        J = Jacobian(self.Xe,dN[0][0])
         # OBTAIN GRADIENT IN PHYSICAL SPACE  
-        gradphysN = invJ@dN[0]
+        gradphysN = np.linalg.inv(J.T)@dN[0]
         # COMPUTE MAGNETIC VECTOR
         Brz = gradphysN[[1,0],:]@self.PSIe/X[0]
         Brz[0] *= -1
@@ -446,7 +446,7 @@ class Element:
         """ 
         ISOPARAMETRIC INTERPOLATION OF LEVEL-SET FUNCTION PHI EVALUATED AT POINT X
         """
-        N = EvaluateReferenceShapeFunctions(X, self.ElType, self.ElOrder, deriv=0)
+        N = EvalRefLagrangeBasis(X, self.ElType, self.ElOrder, deriv=0)
         return N@self.LSe
     
     
@@ -566,7 +566,7 @@ class Element:
         
         ## MAP BACK TO PHYSICAL SPACE
         # EVALUATE REFERENCE SHAPE FUNCTIONS AT POINTS TO MAP (INTERFACE NODES)
-        Nint = EvaluateReferenceShapeFunctions(XIint, self.ElType, self.ElOrder, deriv=0)
+        Nint = EvalRefLagrangeBasis(XIint, self.ElType, self.ElOrder, deriv=0)
         # COMPUTE SCALAR PRODUCT
         Xint = Nint@self.Xe
         
@@ -900,7 +900,7 @@ class Element:
             - self.Ng : Shape function values at quadrature points.
             - self.dNg : Shape function derivatives w.r.t reference coordinates.
             - self.Xg : Quadrature points mapped to physical space.
-            - self.invJg : Inverse Jacobian matrices at quadrature points.
+            - self.invJg : Inverse Jacobian transposed matrices at quadrature points.
             - self.detJg : Determinants of Jacobian matrices at quadrature points.
         """
         
@@ -910,7 +910,7 @@ class Element:
         
         # EVALUATE THE REFERENCE SHAPE FUNCTIONS ON THE STANDARD REFERENCE QUADRATURE ->> STANDARD FEM APPROACH
         # EVALUATE REFERENCE SHAPE FUNCTIONS 
-        self.Ng, self.dNg = EvaluateReferenceShapeFunctions(self.XIg, self.ElType, self.ElOrder, deriv=1)
+        self.Ng, self.dNg = EvalRefLagrangeBasis(self.XIg, self.ElType, self.ElOrder, deriv=1)
         
         # PRECOMPUTE THE NECESSARY INTEGRATION ENTITIES EVALUATED AT THE STANDARD GAUSS INTEGRATION NODES ->> STANDARD FEM APPROACH
         # WE COMPUTE THUS:
@@ -924,8 +924,9 @@ class Element:
         self.invJg = np.zeros([self.ng,self.dim,self.dim])
         self.detJg = np.zeros([self.ng])
         for ig in range(self.ng):
-            self.invJg[ig,:,:], self.detJg[ig] = Jacobian(self.Xe,self.dNg[0][ig,:,:])
-            self.detJg[ig] = abs(self.detJg[ig])
+            J = Jacobian(self.Xe,self.dNg[0][ig,:,:])
+            self.invJg[ig,:,:] = np.linalg.inv(J.T)
+            self.detJg[ig] = abs(np.linalg.det(J))
         
         # CHECK NUMERICAL QUADRATURE
         self.CheckQuadrature2D()
@@ -949,7 +950,7 @@ class Element:
             - subelem.Ng : Shape function values at quadrature points.
             - subelem.dNg : Shape function derivatives w.r.t reference coordinates.
             - subelem.Xg : Quadrature points mapped to physical space.
-            - subelem.invJg : Inverse Jacobian matrices at quadrature points.
+            - subelem.invJg : Inverse Jacobian transposed matrices at quadrature points.
             - subelem.detJg : Determinants of Jacobian matrices at quadrature points.
 
         Input:
@@ -963,7 +964,7 @@ class Element:
         XeTESSHO = list()
         for isub in range(self.Nesub):
             # EVALUATE ELEMENTAL REFERENCE SHAPE FUNCTIONS AT SUBELEMENTAL NODAL COORDINATES 
-            N2D = EvaluateReferenceShapeFunctions(XIeTESSHO[isub], self.ElType, self.ElOrder, deriv=0)
+            N2D = EvalRefLagrangeBasis(XIeTESSHO[isub], self.ElType, self.ElOrder, deriv=0)
             # MAP SUBELEMENTAL NODAL COORDINATES TO PHYSICAL SPACE
             XeTESSHO.append(N2D @ self.Xe)
         
@@ -992,11 +993,11 @@ class Element:
             # STANDARD REFERENCE ELEMENT QUADRATURE (2D)
             XIg2Dstand, SUBELEM.Wg, SUBELEM.ng = GaussQuadrature(SUBELEM.ElType,NumQuadOrder2D)
             # EVALUATE SUBELEMENTAL REFERENCE SHAPE FUNCTIONS 
-            Nstand2D, dNstand2D = EvaluateReferenceShapeFunctions(XIg2Dstand, SUBELEM.ElType, SUBELEM.ElOrder, deriv=1)
+            Nstand2D, dNstand2D = EvalRefLagrangeBasis(XIg2Dstand, SUBELEM.ElType, SUBELEM.ElOrder, deriv=1)
             # MAP 2D REFERENCE GAUSS INTEGRATION NODES ON THE REFERENCE SUBELEMENTS  ->> ADAPTED 2D QUADRATURE FOR SUBELEMENTS
             SUBELEM.XIg = Nstand2D @ SUBELEM.XIe
             # EVALUATE ELEMENTAL REFERENCE SHAPE FUNCTIONS ON ADAPTED REFERENCE QUADRATURE
-            SUBELEM.Ng, SUBELEM.dNg = EvaluateReferenceShapeFunctions(SUBELEM.XIg, self.ElType, self.ElOrder, deriv=1)
+            SUBELEM.Ng, SUBELEM.dNg = EvalRefLagrangeBasis(SUBELEM.XIg, self.ElType, self.ElOrder, deriv=1)
             # MAPP ADAPTED REFERENCE QUADRATURE ON PHYSICAL ELEMENT
             SUBELEM.Xg = SUBELEM.Ng @ self.Xe
             
@@ -1004,8 +1005,9 @@ class Element:
             SUBELEM.invJg = np.zeros([SUBELEM.ng,SUBELEM.dim,SUBELEM.dim])
             SUBELEM.detJg = np.zeros([SUBELEM.ng])
             for ig in range(SUBELEM.ng):
-                SUBELEM.invJg[ig,:,:], SUBELEM.detJg[ig] = Jacobian(SUBELEM.Xe,dNstand2D[0][ig,:])
-                SUBELEM.detJg[ig] = abs(SUBELEM.detJg[ig])
+                J = Jacobian(SUBELEM.Xe,dNstand2D[0][ig,:])
+                SUBELEM.invJg[ig,:,:] = np.linalg.inv(J.T)
+                SUBELEM.detJg[ig] = abs(np.linalg.det(J))
         
             # CHECK NUMERICAL QUADRATURE
             SUBELEM.CheckQuadrature2D(elemindex = self.index)
@@ -1027,7 +1029,7 @@ class Element:
             - self.InterfApprox.Ng : Shape function values at quadrature points on the interface.
             - self.InterfApprox.dNdxig, self.InterfApprox.dNdetag : Shape function derivatives w.r.t. reference coordinates.
             - self.InterfApprox.Xg : Quadrature points mapped to physical space.
-            - self.InterfApprox.invJg : Inverse Jacobian matrices at quadrature points.
+            - self.InterfApprox.invJg : Inverse Jacobian transposed matrices at quadrature points.
             - self.InterfApprox.detJg : Determinants of Jacobian matrices at quadrature points.
             - self.InterfApprox.detJg1D : 1D Jacobian determinants along the interface.
         """
@@ -1035,12 +1037,12 @@ class Element:
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
         XIg1Dstand, self.InterfApprox.Wg, self.InterfApprox.ng = GaussQuadrature(0,NumQuadOrder1D)
         #### QUADRATURE TO INTEGRATE LINES (1D)
-        N1D, dNdxi1D = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder, deriv=1)
+        N1D, dNdxi1D = EvalRefLagrangeBasis(XIg1Dstand, 0, self.ElOrder, deriv=1)
                 
         # MAP 1D REFERENCE STANDARD GAUSS INTEGRATION NODES ON THE REFERENCE INTERFACE ->> ADAPTED 1D QUADRATURE FOR INTERFACE
         self.InterfApprox.XIg = N1D @ self.InterfApprox.XIint
         # EVALUATE 2D REFERENCE SHAPE FUNCTION ON INTERFACE ADAPTED QUADRATURE
-        self.InterfApprox.Ng, self.InterfApprox.dNg = EvaluateReferenceShapeFunctions(self.InterfApprox.XIg, self.ElType, self.ElOrder, deriv=1)
+        self.InterfApprox.Ng, self.InterfApprox.dNg = EvalRefLagrangeBasis(self.InterfApprox.XIg, self.ElType, self.ElOrder, deriv=1)
         # MAP REFERENCE INTERFACE ADAPTED QUADRATURE ON PHYSICAL ELEMENT 
         self.InterfApprox.Xg = N1D @ self.InterfApprox.Xint
         # EVALUATE INTEGRATION ENTITIES (JACOBIAN INVERSE MATRIX AND DETERMINANT) ON ADAPTED QUADRATURES NODES
@@ -1048,9 +1050,13 @@ class Element:
         self.InterfApprox.detJg = np.zeros([self.InterfApprox.ng])
         self.InterfApprox.detJg1D = np.zeros([self.InterfApprox.ng])
         for ig in range(self.InterfApprox.ng):
-            self.InterfApprox.invJg[ig,:,:], self.InterfApprox.detJg[ig] = Jacobian(self.Xe,self.InterfApprox.dNg[0][ig,:,:])
-            self.InterfApprox.detJg1D[ig] = Jacobian1D(self.InterfApprox.Xint,dNdxi1D[0][ig,:])
-            self.InterfApprox.detJg[ig] = abs(self.InterfApprox.detJg[ig])
+            # Map 2D ref -> 2D physical
+            J = Jacobian(self.Xe,self.InterfApprox.dNg[0][ig,:,:])
+            self.InterfApprox.invJg[ig,:,:] = np.linalg.inv(J.T)
+            self.InterfApprox.detJg[ig] = np.linalg.det(J)
+            # Map 1D ref -> 2D physical
+            J1D = Jacobian(self.InterfApprox.Xint,dNdxi1D[0][ig,:])
+            self.InterfApprox.detJg1D[ig] = np.linalg.norm(J1D)
             
         # CHECK NUMERICAL QUADRATURE
         self.CheckQuadrature1D()
@@ -1145,7 +1151,7 @@ class Element:
             - XIg : Quadrature points in reference space.
             - Ng, dNdxig, dNdetag: Shape functions and derivatives at quadrature points.
             - Xg : Quadrature points mapped to physical space.
-            - invJg : Inverse Jacobian matrices at quadrature points.
+            - invJg : Inverse Jacobian transposed matrices at quadrature points.
             - detJg : Determinants of Jacobian matrices at quadrature points.
             - detJg1D : 1D Jacobian determinants at quadrature points.
         """
@@ -1153,7 +1159,7 @@ class Element:
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
         XIg1Dstand, Wg1D, Ng1D = GaussQuadrature(0,NumQuadOrder1D)
         #### QUADRATURE TO INTEGRATE LINES (1D)
-        N1D, dNdxi1D = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder, deriv=1)
+        N1D, dNdxi1D = EvalRefLagrangeBasis(XIg1Dstand, 0, self.ElOrder, deriv=1)
                     
         ######### ADAPTED QUADRATURE TO INTERGRATE OVER ELEMENTAL GHOST FACES (1D)
         for FACE in self.GhostFaces:
@@ -1163,7 +1169,7 @@ class Element:
             # MAP 1D REFERENCE STANDARD GAUSS INTEGRATION NODES ON ELEMENTAL CUT EDGE ->> ADAPTED 1D QUADRATURE FOR CUT EDGE
             FACE.XIg = N1D @ FACE.XIseg
             # EVALUATE 2D REFERENCE SHAPE FUNCTION ON ELEMENTAL CUT EDGE 
-            FACE.Ng, FACE.dNg = EvaluateReferenceShapeFunctions(FACE.XIg, self.ElType, self.ElOrder, deriv=self.ElOrder)
+            FACE.Ng, FACE.dNg = EvalRefLagrangeBasis(FACE.XIg, self.ElType, self.ElOrder, deriv=self.ElOrder)
             # MAPP REFERENCE INTERFACE ADAPTED QUADRATURE ON PHYSICAL ELEMENT 
             FACE.Xg = N1D @ FACE.Xseg
             # EVALUATE INTEGRATION ENTITIES (JACOBIAN INVERSE MATRIX AND DETERMINANT) ON ADAPTED QUADRATURES NODES
@@ -1171,9 +1177,13 @@ class Element:
             FACE.detJg = np.zeros([FACE.ng])
             FACE.detJg1D = np.zeros([FACE.ng])
             for ig in range(FACE.ng):
-                FACE.invJg[ig,:,:], FACE.detJg[ig] = Jacobian(self.Xe,FACE.dNg[0][ig,:,:])
-                FACE.detJg[ig] = abs(FACE.detJg[ig])
-                FACE.detJg1D[ig] = Jacobian1D(FACE.Xseg,dNdxi1D[0][ig,:]) 
+                # Map 2D ref -> 2D physical
+                J = Jacobian(self.Xe,FACE.dNg[0][ig,:,:])
+                FACE.invJg[ig,:,:] = np.linalg.inv(J.T)
+                FACE.detJg[ig] = abs(np.linalg.det(J))
+                # Map 1D ref -> 2D physical
+                J1D = Jacobian(FACE.Xseg,dNdxi1D[0][ig,:])
+                FACE.detJg1D[ig] = np.linalg.norm(J1D)
         return
     
     
@@ -1526,7 +1536,9 @@ class Element:
             invJg = np.zeros([SUBELEM.ng,2,2])
             detJg = np.zeros([SUBELEM.ng])
             for ig in range(SUBELEM.ng):
-                invJg[ig,:,:], detJg[ig] = Jacobian(SUBELEM.XIe,SUBELEM.dNdxig[ig,:],SUBELEM.dNdetag[ig,:])
+                J = Jacobian(SUBELEM.XIe,SUBELEM.dNg[0][ig,:,:])
+                invJg[ig,:,:] = np.linalg.inv(J.T)
+                detJg[ig] = abs(np.linalg.det(J))
         
             integral = 0
             for ig in range(SUBELEM.ng):
@@ -1555,11 +1567,12 @@ class Element:
         # OBTAIN 1D STANDARD GAUSS QUADRATURE
         XIg1Dstand, foo, foo = GaussQuadrature(0,self.InterfApprox.ng)
         # EVALUATE SUBELEMENTAL REFERENCE SHAPE FUNCTIONS 
-        foo, dNdxi1D = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder, deriv=1)
+        foo, dNdxi1D = EvalRefLagrangeBasis(XIg1Dstand, 0, self.ElOrder, deriv=1)
         # COMPUTE 1D MAPPING DETERMINANT 
         detJg1D = np.zeros([self.InterfApprox.ng])
         for ig in range(self.InterfApprox.ng):
-            detJg1D[ig] = Jacobian1D(self.InterfApprox.XIint,dNdxi1D[0,ig,:])
+            J1D = Jacobian(self.InterfApprox.XIint,dNdxi1D[0,ig,:])
+            detJg1D[ig] = np.linalg.norm(J1D)
         
         integral = 0
         for ig in range(self.InterfApprox.ng):

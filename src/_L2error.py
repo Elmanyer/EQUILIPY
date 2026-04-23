@@ -211,8 +211,8 @@ class EquilipyL2error:
                 XIgplus = INTAPPROX.XIg[ig, :] + dn * INTAPPROX.NormalVecREF[ig]
                 XIgminus = INTAPPROX.XIg[ig, :] - dn * INTAPPROX.NormalVecREF[ig]
 
-                Ngplus, dNgplus = EvaluateReferenceShapeFunctions(XIgplus.reshape((1, 2)), ELEMENT.ElType, ELEMENT.ElOrder)
-                Ngminus, dNgminus = EvaluateReferenceShapeFunctions(XIgminus.reshape((1, 2)), ELEMENT.ElType, ELEMENT.ElOrder)
+                Ngplus, dNgplus = EvalRefLagrangeBasis(XIgplus.reshape((1, 2)), ELEMENT.ElType, ELEMENT.ElOrder)
+                Ngminus, dNgminus = EvalRefLagrangeBasis(XIgminus.reshape((1, 2)), ELEMENT.ElType, ELEMENT.ElOrder)
 
                 invJgplus, _ = Jacobian(ELEMENT.Xe, dNgplus[0][0, :, :])
                 invJgminus, _ = Jacobian(ELEMENT.Xe, dNgminus[0][0, :, :])
@@ -378,7 +378,7 @@ class EquilipyL2error:
         Returns:
             - diagnostics (dict): Dictionary containing all error metrics
         """
-        from ShapeFunctions import ShapeFunctionsReference
+        from ShapeFunctions import RefLagrangeBasis
         from Element import ElementalNumberOfNodes
 
         diagnostics = {
@@ -448,10 +448,10 @@ class EquilipyL2error:
                     u1 = 0.0
                     u2 = 0.0
                     for i in range(n1):
-                        N_i = ShapeFunctionsReference(FACE1.XIg[ig, :], ELEM1.ElType, ELEM1.ElOrder, i+1, deriv=0)
+                        N_i = RefLagrangeBasis(FACE1.XIg[ig, :], ELEM1.ElType, ELEM1.ElOrder, i+1, deriv=0)
                         u1 += N_i * PSI1[i]
                     for i in range(n2):
-                        N_i = ShapeFunctionsReference(FACE2.XIg[ig, :], ELEM2.ElType, ELEM2.ElOrder, i+1, deriv=0)
+                        N_i = RefLagrangeBasis(FACE2.XIg[ig, :], ELEM2.ElType, ELEM2.ElOrder, i+1, deriv=0)
                         u2 += N_i * PSI2[i]
 
                     solution_jumps.append(abs(u1 - u2))

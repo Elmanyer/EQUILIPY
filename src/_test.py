@@ -241,7 +241,7 @@ def test_shape_functions_partition_of_unity(elemType, elemOrder, num_test_points
         - max_error (float): Maximum deviation from unity
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import ShapeFunctionsReference
+    from ShapeFunctions import RefLagrangeBasis
     from Element import ElementalNumberOfNodes
 
     n, _ = ElementalNumberOfNodes(elemType, elemOrder)
@@ -269,7 +269,7 @@ def test_shape_functions_partition_of_unity(elemType, elemOrder, num_test_points
         # Sum shape functions at this point
         N_sum = 0.0
         for i in range(n):
-            N_i = ShapeFunctionsReference(point, elemType, elemOrder, i+1, deriv=0)
+            N_i = RefLagrangeBasis(point, elemType, elemOrder, i+1, deriv=0)
             N_sum += N_i
 
         error = abs(N_sum - 1.0)
@@ -297,7 +297,7 @@ def test_shape_functions_at_nodes(elemType, elemOrder):
         - max_error (float): Maximum deviation from expected values
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import ShapeFunctionsReference
+    from ShapeFunctions import RefLagrangeBasis
     from Element import ElementalNumberOfNodes, ReferenceElementCoordinates
 
     # Get nodal coordinates
@@ -312,7 +312,7 @@ def test_shape_functions_at_nodes(elemType, elemOrder):
         else:
             point = XIe[j, :]
         for i in range(n):  # Loop over shape functions
-            N[j, i] = ShapeFunctionsReference(point, elemType, elemOrder, i+1, deriv=0)
+            N[j, i] = RefLagrangeBasis(point, elemType, elemOrder, i+1, deriv=0)
 
     # Expected: identity matrix
     expected = np.eye(n)
@@ -341,7 +341,7 @@ def test_shape_function_derivatives_consistency(elemType, elemOrder, epsilon=1e-
         - max_error (float): Maximum error between analytical and numerical derivatives
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import ShapeFunctionsReference
+    from ShapeFunctions import RefLagrangeBasis
     from Element import ElementalNumberOfNodes
 
     n, _ = ElementalNumberOfNodes(elemType, elemOrder)
@@ -361,22 +361,22 @@ def test_shape_function_derivatives_consistency(elemType, elemOrder, epsilon=1e-
     for i in range(n):
         # Get analytical derivatives
         if elemType == 0:
-            N, dNdxi = ShapeFunctionsReference(test_point, elemType, elemOrder, i+1, deriv=1)
+            N, dNdxi = RefLagrangeBasis(test_point, elemType, elemOrder, i+1, deriv=1)
             # Finite difference
-            N_plus = ShapeFunctionsReference(test_point + epsilon, elemType, elemOrder, i+1, deriv=0)
-            N_minus = ShapeFunctionsReference(test_point - epsilon, elemType, elemOrder, i+1, deriv=0)
+            N_plus = RefLagrangeBasis(test_point + epsilon, elemType, elemOrder, i+1, deriv=0)
+            N_minus = RefLagrangeBasis(test_point - epsilon, elemType, elemOrder, i+1, deriv=0)
             dN_fd = (N_plus - N_minus) / (2 * epsilon)
             error = abs(dN_fd - dNdxi)
             max_error = max(max_error, error)
         else:
-            N, (dNdxi, dNdeta) = ShapeFunctionsReference(test_point, elemType, elemOrder, i+1, deriv=1)
+            N, (dNdxi, dNdeta) = RefLagrangeBasis(test_point, elemType, elemOrder, i+1, deriv=1)
             for d in range(dim):
                 test_plus = test_point.copy()
                 test_minus = test_point.copy()
                 test_plus[d] += epsilon
                 test_minus[d] -= epsilon
-                N_plus = ShapeFunctionsReference(test_plus, elemType, elemOrder, i+1, deriv=0)
-                N_minus = ShapeFunctionsReference(test_minus, elemType, elemOrder, i+1, deriv=0)
+                N_plus = RefLagrangeBasis(test_plus, elemType, elemOrder, i+1, deriv=0)
+                N_minus = RefLagrangeBasis(test_minus, elemType, elemOrder, i+1, deriv=0)
                 dN_fd = (N_plus - N_minus) / (2 * epsilon)
                 dN_analytical = dNdxi if d == 0 else dNdeta
                 error = abs(dN_fd - dN_analytical)
@@ -406,7 +406,7 @@ def test_polynomial_reproduction(elemType, elemOrder):
         - max_error (float): Maximum interpolation error
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import ShapeFunctionsReference
+    from ShapeFunctions import RefLagrangeBasis
     from Element import ElementalNumberOfNodes, ReferenceElementCoordinates
 
     # Get nodal coordinates
@@ -451,7 +451,7 @@ def test_polynomial_reproduction(elemType, elemOrder):
         # Interpolate
         interpolated = 0.0
         for i in range(n):
-            N_i = ShapeFunctionsReference(point, elemType, elemOrder, i+1, deriv=0)
+            N_i = RefLagrangeBasis(point, elemType, elemOrder, i+1, deriv=0)
             interpolated += N_i * nodal_values[i]
 
         # Exact value
@@ -488,7 +488,7 @@ def test_jacobian_computation(elemType, elemOrder):
         - max_error (float): Maximum error in Jacobian
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import ShapeFunctionsReference, Jacobian
+    from ShapeFunctions import RefLagrangeBasis, Jacobian
     from Element import ElementalNumberOfNodes, ReferenceElementCoordinates
 
     if elemType == 0:
@@ -518,11 +518,12 @@ def test_jacobian_computation(elemType, elemOrder):
         # Build gradient matrix
         gradN = np.zeros((n, 2))
         for i in range(n):
-            _, (dNdxi, dNdeta) = ShapeFunctionsReference(point, elemType, elemOrder, i+1, deriv=1)
+            _, (dNdxi, dNdeta) = RefLagrangeBasis(point, elemType, elemOrder, i+1, deriv=1)
             gradN[i, 0] = dNdxi
             gradN[i, 1] = dNdeta
 
-        invJ, detJ = Jacobian(Xe, gradN)
+        J = Jacobian(Xe, gradN)
+        invJ, detJ = np.linalg.inv(J), abs(np.linalg.det(J))
         error = abs(detJ - expected_det)
         max_error = max(max_error, error)
 
@@ -549,7 +550,7 @@ def test_jacobian_1d_arc_length():
         - error (float): Error in arc length computation
         - passed (bool): Whether test passed
     """
-    from ShapeFunctions import Jacobian1D, ShapeFunctionsReference
+    from ShapeFunctions import Jacobian1D, RefLagrangeBasis
     from GaussQuadrature import GaussQuadrature
 
     # Create a simple segment
@@ -565,8 +566,8 @@ def test_jacobian_1d_arc_length():
     for ig in range(Ng):
         xi = XIg[ig, 0] if XIg.ndim > 1 else XIg[ig]
         # Get derivatives manually for linear 1D element
-        _, dN1dxi = ShapeFunctionsReference(xi, 0, 1, 1, deriv=1)
-        _, dN2dxi = ShapeFunctionsReference(xi, 0, 1, 2, deriv=1)
+        _, dN1dxi = RefLagrangeBasis(xi, 0, 1, 1, deriv=1)
+        _, dN2dxi = RefLagrangeBasis(xi, 0, 1, 2, deriv=1)
         dNdxi = np.array([dN1dxi, dN2dxi])
 
         detJ1D = Jacobian1D(Xseg, dNdxi)
@@ -938,7 +939,7 @@ def test_ghost_face_reference_physical_consistency(mesh):
         - max_error (float): Maximum mapping error
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import ShapeFunctionsReference
+    from ShapeFunctions import RefLagrangeBasis
     from Element import ElementalNumberOfNodes
 
     if mesh.GhostFaces is None or len(mesh.GhostFaces) == 0:
@@ -959,7 +960,7 @@ def test_ghost_face_reference_physical_consistency(mesh):
             # Map reference point to physical using element shape functions
             X_mapped = np.zeros(2)
             for i in range(n):
-                N_i = ShapeFunctionsReference(XI_point, ELEM.ElType, ELEM.ElOrder, i+1, deriv=0)
+                N_i = RefLagrangeBasis(XI_point, ELEM.ElType, ELEM.ElOrder, i+1, deriv=0)
                 X_mapped += N_i * ELEM.Xe[i, :]
 
             # Compare with stored physical coordinates
@@ -1315,7 +1316,7 @@ def compute_solution_jump_across_ghost_face(mesh, PSI, ghost_face_tuple):
         - jumps: Array of solution jumps at quadrature points
         - max_jump: Maximum absolute jump
     """
-    from ShapeFunctions import ShapeFunctionsReference
+    from ShapeFunctions import RefLagrangeBasis
     from Element import ElementalNumberOfNodes
 
     elem1_idx, edge1_idx, face1_list_idx = ghost_face_tuple[1]
@@ -1339,13 +1340,13 @@ def compute_solution_jump_across_ghost_face(mesh, PSI, ghost_face_tuple):
         # Evaluate solution on element 1 at quadrature point
         u1 = 0.0
         for i in range(n1):
-            N_i = ShapeFunctionsReference(FACE1.XIg[ig, :], ELEM1.ElType, ELEM1.ElOrder, i+1, deriv=0)
+            N_i = RefLagrangeBasis(FACE1.XIg[ig, :], ELEM1.ElType, ELEM1.ElOrder, i+1, deriv=0)
             u1 += N_i * PSI1[i]
 
         # Evaluate solution on element 2 at quadrature point
         u2 = 0.0
         for i in range(n2):
-            N_i = ShapeFunctionsReference(FACE2.XIg[ig, :], ELEM2.ElType, ELEM2.ElOrder, i+1, deriv=0)
+            N_i = RefLagrangeBasis(FACE2.XIg[ig, :], ELEM2.ElType, ELEM2.ElOrder, i+1, deriv=0)
             u2 += N_i * PSI2[i]
 
         jumps[ig] = u1 - u2

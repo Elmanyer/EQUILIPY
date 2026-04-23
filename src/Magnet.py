@@ -331,7 +331,7 @@ class QuadrilateralCoil:
         #### REFERENCE ELEMENT QUADRATURE TO INTEGRATE SURFACES
         self.XIg, self.Wg, self.ng = GaussQuadrature(self.ElType,QuadOrder)
         # EVALUATE REFERENCE SHAPE FUNCTIONS 
-        self.Ng, self.dNg = EvaluateReferenceShapeFunctions(self.XIg, self.ElType, self.ElOrder, deriv=1)
+        self.Ng, self.dNg = EvalRefLagrangeBasis(self.XIg, self.ElType, self.ElOrder, deriv=1)
         
         # COMPUTE MAPPED GAUSS NODES
         self.Xg = self.Ng @ self.Xe       
@@ -339,8 +339,9 @@ class QuadrilateralCoil:
         self.invJg = np.zeros([self.ng,self.dim,self.dim])
         self.detJg = np.zeros([self.ng])
         for ig in range(self.ng):
-            self.invJg[ig,:,:], self.detJg[ig] = Jacobian(self.Xe,self.dNg[0][ig,:,:])
-            self.detJg[ig] = abs(self.detJg[ig])
+            J = Jacobian(self.Xe,self.dNg[0][ig,:,:])
+            self.invJg[ig,:,:] = np.linalg.inv(J)
+            self.detJg[ig] = abs(np.linalg.det(J))
         return
     
     def CheckQuadrature(self):
@@ -386,7 +387,7 @@ class QuadrilateralCoil:
         Bz_coil = 0.0
         # INTEGRATE ALONG COIL CROSS-SECTION AREA 
         for ig in range(self.ng):
-            Br_coil += GreensBz(self.Xg[ig,:],X) * self.detJg[ig] * self.Wg[ig] * self.I/self.area
+            Bz_coil += GreensBz(self.Xg[ig,:],X) * self.detJg[ig] * self.Wg[ig] * self.I/self.area
         return Bz_coil
     
     def Plot(self,ax):
