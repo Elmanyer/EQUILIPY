@@ -667,8 +667,7 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
 
     Output: 
         - N: shape functions evaluated at points with coordinates X
-        - dNdxi: shape functions derivatives respect to xi evaluated at points with coordinates X
-        - dNdeta: shape functions derivatives respect to eta evaluated at points with coordinates X
+        - dN: shape functions derivatives up to order deriv evaluated at points with coordinates X
     """
     
     from Element import ElementalNumberOfNodes
@@ -734,43 +733,13 @@ def EvaluateReferenceShapeFunctions(X, elemType, elemOrder, deriv=1):
                         N[ig,i], gradN[ig,i,:], HessN[ig,i,:,:], J3N[ig,i,:,:,:]  = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1, deriv)
                 return N, [gradN, HessN, J3N]
 
+def Jacobian(X, gradN):
+    J = np.zeros([])
 
-def EvaluateReferenceShapeFunctions_old(X, elemType, elemOrder, deriv=1):
-    """ 
-    Evaluates nodal shape functions in the reference space for the selected element type and order at points defined by coordinates X
-    
-    Input: 
-        - X: coordinates of points on which to evaluate shape functions
-        - elemType: 0=line, 1=tri, 2=quad
-        - elemOrder: order of element
-
-    Output: 
-        - N: shape functions evaluated at points with coordinates X
-        - dNdxi: shape functions derivatives respect to xi evaluated at points with coordinates X
-        - dNdeta: shape functions derivatives respect to eta evaluated at points with coordinates X
-    """
-    
-    from Element import ElementalNumberOfNodes
-    ## NUMBER OF NODAL SHAPE FUNCTIONS
-    n, foo = ElementalNumberOfNodes(elemType, elemOrder)
-    ## NUMBER OF GAUSS INTEGRATION NODES
-    if elemType == 0:
-        ng = len(X)
-    else: 
-        ng = len(X[:,0])
-        
-    N = np.zeros([ng,n])
-    dNdxi = np.zeros([ng,n])
-    dNdeta = np.zeros([ng,n])
-    
-    for i in range(n):
-        for ig in range(ng):
-            N[ig,i], dNdxi[ig,i], dNdeta[ig,i] = ShapeFunctionsReference(X[ig,:],elemType, elemOrder, i+1)
-            
-    return N, dNdxi, dNdeta
+    return
     
 
-def Jacobian(X,gradN):
+def Jacobian_old(X,gradN):
     """ 
     Function that computes the Jacobian of the mapping between physical and natural coordinates 
         
