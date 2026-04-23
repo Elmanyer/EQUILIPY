@@ -67,12 +67,17 @@ class Mesh:
         
         self.GhostFaces = None              # LIST OF PLASMA BOUNDARY GHOST FACES
         self.GhostElems = None              # LIST OF ELEMENTS CONTAINING PLASMA BOUNDARY FACES
-        
+        self.ghost_penalty_layers = None    # NUMBER OF NEIGHBOR LAYERS FOR GHOST PENALTY STABILIZATION
+
         # READ MESH FILES
         if readfiles:
             EqPrint("READ MESH FILES...", end="")
             self.ReadMeshFile()
             self.ReadFixFile()
+            # Set intelligent default for ghost penalty layers based on element order
+            # p=1,2: single layer (standard CutFEM stabilization)
+            # p>=3: two layers (improved stabilization for higher-order elements)
+            self.ghost_penalty_layers = 2 if self.ElOrder >= 3 else 1
             print('Done!')
         return
     
@@ -678,17 +683,20 @@ class Mesh:
         """
         Identifies the elemental ghost faces on which the ghost penalty term needs to be integrated, for elements containing the plasma
         boundary.
+
+        Note: This method implements single-layer ghost face identification (current behavior).
+              For multi-layer support, use IdentifyMultiLayerGhostFaces() instead.
         """
-        
+
         # RESET ELEMENTAL GHOST FACES
         for ielem in np.concatenate((self.PlasmaBoundElems,self.PlasmaElems),axis=0):
             self.Elements[ielem].GhostFaces = None
-        
+
         # VALIDATE EDGE NODE ORDERING before proceeding
         self.ValidateEdgeNodeOrdering()
-            
+
         GhostFaces_dict = dict()    # [(CUT_EDGE_NODAL_GLOBAL_INDEXES): {(ELEMENT_INDEX_1, EDGE_INDEX_1), (ELEMENT_INDEX_2, EDGE_INDEX_2)}]
-        
+
         for ielem in self.PlasmaBoundElems:
             ELEMENT = self.Elements[ielem]
             for iedge, neighbour in enumerate(ELEMENT.neighbours):
@@ -706,61 +714,162 @@ class Mesh:
                         GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))] = set()
                     GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))].add((ELEMENT.index,iedge))
                     GhostFaces_dict[tuple(sorted(ELEMENT.Te[nodes]))].add((neighbour,neighbour_edge))
-                    
-        XIe = ReferenceElementCoordinates(self.ElType,self.ElOrder)
+
+        self._AssembleGhostFacesFromDict(GhostFaces_dict)
+        return
+
+    def IdentifyMultiLayerGhostFaces(self):
+        """
+        Identifies ghost faces on multiple neighbor layers for extended stabilization patch.
+
+        The standard ghost penalty uses only single-layer ghost faces (between boundary elements
+        and immediate neighbors). For higher-order elements (p≥2) or near degenerate cuts,
+        an extended ghost face patch improves stabilization.
+
+        Layers:
+        - Layer 1: Current cut elements ↔ neighbors (Dom < 1, i.e., plasma/interface)
+        - Layer 2+: Interior elements ↔ neighbors (may include vacuum elements, Dom=1)
+
+        The number of layers is controlled by self.ghost_penalty_layers (default 1).
+        """
+
+        # RESET ELEMENTAL GHOST FACES
+        for ielem in np.concatenate((self.PlasmaBoundElems, self.PlasmaElems), axis=0):
+            self.Elements[ielem].GhostFaces = None
+
+        # VALIDATE EDGE NODE ORDERING
+        self.ValidateEdgeNodeOrdering()
+
+        GhostFaces_dict = dict()
+
+        # Layer 0: Start with plasma boundary elements
+        current_layer = set(self.PlasmaBoundElems)
+        processed = set()
+
+        for layer in range(self.ghost_penalty_layers):
+            EqPrint(f"  Identifying ghost faces: layer {layer + 1}/{self.ghost_penalty_layers}") if layer > 0 else None
+
+            next_layer = set()
+
+            for ielem in current_layer:
+                if ielem in processed:
+                    continue
+
+                ELEMENT = self.Elements[ielem]
+
+                for iedge, neighbour in enumerate(ELEMENT.neighbours):
+                    if neighbour < 0:
+                        continue  # Boundary edge
+
+                    NEIGHBOUR = self.Elements[neighbour]
+
+                    # Layer 1: Only plasma/interface elements
+                    # Layer 2+: Include vacuum elements (Dom=1) as well
+                    allow_vacuum = (layer > 0)
+                    is_valid_neighbor = (NEIGHBOUR.Dom < 1 or
+                                         (allow_vacuum and NEIGHBOUR.Dom == 1))
+
+                    if is_valid_neighbor and neighbour not in processed:
+                        # IDENTIFY CORRESPONDING FACE IN NEIGHBOUR
+                        neighbour_edge = list(NEIGHBOUR.neighbours).index(ELEMENT.index)
+
+                        # OBTAIN GLOBAL INDICES OF GHOST FACE NODES
+                        nodes = np.zeros([ELEMENT.nedge], dtype=int)
+                        nodes[0] = iedge
+                        nodes[1] = (iedge + 1) % ELEMENT.numedges
+                        for knode in range(self.ElOrder - 1):
+                            nodes[2 + knode] = self.numedges + iedge * (self.ElOrder - 1) + knode
+
+                        # Add to dictionary (deduplicates shared edges)
+                        node_key = tuple(sorted(ELEMENT.Te[nodes]))
+                        if node_key not in GhostFaces_dict:
+                            GhostFaces_dict[node_key] = set()
+
+                        GhostFaces_dict[node_key].add((ELEMENT.index, iedge))
+                        GhostFaces_dict[node_key].add((neighbour, neighbour_edge))
+
+                        # Track neighbors for next layer
+                        if layer < self.ghost_penalty_layers - 1:
+                            next_layer.add(neighbour)
+
+                processed.add(ielem)
+
+            current_layer = next_layer
+            if len(current_layer) == 0:
+                break
+
+        self._AssembleGhostFacesFromDict(GhostFaces_dict)
+        return
+
+    def _AssembleGhostFacesFromDict(self, GhostFaces_dict):
+        """
+        Helper method: Assembles ghost face segments and mesh-level structures from dictionary.
+
+        Takes a dictionary of ghost face node sets and creates:
+        - Element.GhostFaces: List of Segment objects on each element edge
+        - Mesh.GhostFaces: List of tuples describing face pairs
+        - Mesh.GhostElems: List of elements containing ghost faces
+        """
+
+        XIe = ReferenceElementCoordinates(self.ElType, self.ElOrder)
         self.GhostFaces = list()
         self.GhostElems = set()
 
         for elems in GhostFaces_dict.values():
-            # ISOLATE ADJACENT ELEMENTS
-            (ielem1, iedge1), (ielem2,iedge2) = elems
+            # ISOLATE ADJACENT ELEMENTS (at most 2)
+            if len(elems) != 2:
+                continue
+
+            (ielem1, iedge1), (ielem2, iedge2) = list(elems)
             ELEM1 = self.Elements[ielem1]
             ELEM2 = self.Elements[ielem2]
+
             # DECLARE NEW GHOST FACES ELEMENTAL ATTRIBUTE
-            if type(ELEM1.GhostFaces) == type(None):  
+            if type(ELEM1.GhostFaces) == type(None):
                 ELEM1.GhostFaces = list()
-            if type(ELEM2.GhostFaces) == type(None):  
+            if type(ELEM2.GhostFaces) == type(None):
                 ELEM2.GhostFaces = list()
-                
+
             # ADD GHOST FACE TO ELEMENT 1
-            # Find local connectivities of ghost face nodes in element 1
-            nodes1 = np.zeros([ELEM1.nedge],dtype=int)
+            nodes1 = np.zeros([ELEM1.nedge], dtype=int)
             nodes1[0] = iedge1
-            nodes1[1] = (iedge1+1)%ELEM1.numedges
-            for knode in range(ELEM1.ElOrder-1):
-                nodes1[2+knode] = ELEM1.numedges + iedge1*(ELEM1.ElOrder-1)+knode
-            # Add ghost face to element 1
-            ELEM1.GhostFaces.append(Segment(index = iedge1,
-                                            ElOrder = ELEM1.ElOrder,
-                                            Tseg = nodes1,
-                                            Xseg = ELEM1.Xe[nodes1,:],
-                                            XIseg = XIe[nodes1,:]))
-            
+            nodes1[1] = (iedge1 + 1) % ELEM1.numedges
+            for knode in range(ELEM1.ElOrder - 1):
+                nodes1[2 + knode] = ELEM1.numedges + iedge1 * (ELEM1.ElOrder - 1) + knode
+
+            ELEM1.GhostFaces.append(Segment(index=iedge1,
+                                            ElOrder=ELEM1.ElOrder,
+                                            Tseg=nodes1,
+                                            Xseg=ELEM1.Xe[nodes1, :],
+                                            XIseg=XIe[nodes1, :]))
+
             # ADD GHOST FACE TO ELEMENT 2
-            # Find local connectivities of ghost face nodes in element 2
-            nodes2 = np.zeros([ELEM2.nedge],dtype=int)
+            nodes2 = np.zeros([ELEM2.nedge], dtype=int)
             nodes2[0] = iedge2
-            nodes2[1] = (iedge2+1)%ELEM2.numedges
-            for knode in range(ELEM2.ElOrder-1):
-                nodes2[2+knode] = ELEM2.numedges + iedge2*(ELEM2.ElOrder-1)+knode
-            # Add ghost face to element 2
-            ELEM2.GhostFaces.append(Segment(index = iedge2,
-                                            ElOrder = ELEM2.ElOrder,
-                                            Tseg = nodes2,
-                                            Xseg = ELEM2.Xe[nodes2,:],
-                                            XIseg = XIe[nodes2,:]))
-            
+            nodes2[1] = (iedge2 + 1) % ELEM2.numedges
+            for knode in range(ELEM2.ElOrder - 1):
+                nodes2[2 + knode] = ELEM2.numedges + iedge2 * (ELEM2.ElOrder - 1) + knode
+
+            ELEM2.GhostFaces.append(Segment(index=iedge2,
+                                            ElOrder=ELEM2.ElOrder,
+                                            Tseg=nodes2,
+                                            Xseg=ELEM2.Xe[nodes2, :],
+                                            XIseg=XIe[nodes2, :]))
+
             # CORRECT SECOND ADJACENT ELEMENT GHOST FACE TO MATCH NODES -> PERMUTATION
             permutation = [list(ELEM2.Te[nodes2]).index(x) for x in ELEM1.Te[nodes1]]
-            ELEM2.GhostFaces[-1].Xseg = ELEM2.GhostFaces[-1].Xseg[permutation,:]
-            ELEM2.GhostFaces[-1].XIseg = ELEM2.GhostFaces[-1].XIseg[permutation,:]
+            ELEM2.GhostFaces[-1].Xseg = ELEM2.GhostFaces[-1].Xseg[permutation, :]
+            ELEM2.GhostFaces[-1].XIseg = ELEM2.GhostFaces[-1].XIseg[permutation, :]
 
-            self.GhostFaces.append((list(ELEM1.Te[nodes1]),(ielem1,iedge1,len(ELEM1.GhostFaces)-1),(ielem2,iedge2,len(ELEM2.GhostFaces)-1), permutation))
+            self.GhostFaces.append((list(ELEM1.Te[nodes1]), (ielem1, iedge1, len(ELEM1.GhostFaces) - 1),
+                                    (ielem2, iedge2, len(ELEM2.GhostFaces) - 1), permutation))
             self.GhostElems.add(ielem1)
             self.GhostElems.add(ielem2)
-            
+
         self.GhostElems = list(self.GhostElems)
-        return 
+        return
+
+ 
     
     
     def ComputePlasmaBoundaryGhostFaces(self):
@@ -768,13 +877,13 @@ class Mesh:
         Computes ghost faces associated with the plasma boundary for stabilization purposes.
 
         Tasks:
-            - Identifies ghost faces on plasma boundary elements.
+            - Identifies ghost faces on plasma boundary elements (single or multi-layer).
             - Computes normal vectors for the ghost faces of each ghost element.
             - Validates the computed ghost face normal vectors.
             - CRITICAL: Verifies that normals on adjacent ghost faces are opposite (n1 = -n2).
         """
-        # COMPUTE PLASMA BOUNDARY GHOST FACES
-        self.IdentifyPlasmaBoundaryGhostFaces()
+        # COMPUTE PLASMA BOUNDARY GHOST FACES (supports single and multi-layer)
+        self.IdentifyMultiLayerGhostFaces()
         # COMPUTE ELEMENTAL GHOST FACES NORMAL VECTORS
         for ielem in self.GhostElems:
             self.Elements[ielem].GhostFacesNormals()

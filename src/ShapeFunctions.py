@@ -799,15 +799,15 @@ def Jacobian1D(X,dNdxi):
     Calculates the Jacobian determinant of the transformation between the 1D reference element and the physical space.
 
     Input:
-        - X (numpy.ndarray): A 2D array of nodal coordinates in physical space, where each row corresponds to a node's 
+        - X (numpy.ndarray): A 2D array of nodal coordinates in physical space, where each row corresponds to a node's
                         physical coordinates.
-                        Shape: (n_nodes, dimension), where `n_nodes` is the number of nodes in the element and 
-                        `dimension` is the spatial dimension.          
+                        Shape: (n_nodes, dimension), where `n_nodes` is the number of nodes in the element and
+                        `dimension` is the spatial dimension.
         - dNdxi (numpy.ndarray): A 1D array of shape function derivatives with respect to the reference coordinate (xi).
                             Length: `n_nodes`, where `n_nodes` is the number of nodes in the element.
 
     Output:
-        detJ (float): The determinant of the Jacobian matrix, which represents the scale factor when mapping from 
+        detJ (float): The determinant of the Jacobian matrix, which represents the scale factor when mapping from
                     the reference space to the physical space.
     """
     J = np.zeros([2])
@@ -815,3 +815,32 @@ def Jacobian1D(X,dNdxi):
         J += dNdxi[i]*X[i,:]
     detJ = np.linalg.norm(J)
     return detJ
+
+
+def JacobianHessian(X, hessianN):
+    """
+    Computes the Hessian of the mapping between reference and physical coordinates.
+
+    For a 2D isoparametric element X(ξ,η) = Σ N_i(ξ,η) * X_i, the Jacobian Hessian is
+    the derivative of the Jacobian matrix with respect to reference coordinates.
+
+    Input:
+        - X (numpy.ndarray): Elemental physical coordinates [n_nodes, 2]
+        - hessianN (numpy.ndarray): Shape function Hessian at a point [n_nodes, 2, 2]
+                                    hessianN[i, j, k] = d²N_i/dξⱼdξₖ
+
+    Output:
+        - H (numpy.ndarray): Jacobian Hessian tensor [2, 2, 2]
+                            H[i, j, k] = ∂²X_i/∂ξⱼ∂ξₖ = Σ_nodes d²N/dξⱼdξₖ * X_node_i
+    """
+    # Initialize Hessian tensor [spatial_dim, ref_dim, ref_dim]
+    H = np.zeros([2, 2, 2])
+
+    # Compute Hessian: H[i,j,k] = Σ_nodes d²N[node]/dξⱼdξₖ * X[node, i]
+    for node in range(len(X)):
+        for j in range(2):  # reference dimension j (ξ or η)
+            for k in range(2):  # reference dimension k (ξ or η)
+                for i in range(2):  # spatial dimension i (x or y)
+                    H[i, j, k] += hessianN[node, j, k] * X[node, i]
+
+    return H

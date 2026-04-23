@@ -62,6 +62,8 @@ class Segment:
         self.detJg1D = None         # MATRIX DETERMINANTS OF JACOBIAN OF TRANSFORMATION FROM 1D REFERENCE ELEMENT TO 2D PHYSICAL 
         
         # NORMAL VECTOR (OUTWARDS RESPECT TO BOUNDARY)
-        self.NormalVec = None       # SEGMENT NORMAL VECTOR POINTING OUTWARDS (RESPECT TO INTERFACE)
+        self.NormalVec = None       # SEGMENT NORMAL VECTOR POINTING OUTWARDS (RESPECT TO INTERFACE) [2,] - backward compatibility
+        self.NormalVec_array = None # QUADRATURE-POINT-DEPENDENT NORMAL VECTORS [ng, 2] - one normal per quadrature point
+        self.is_curved = False      # Flag indicating if segment is curved (ElOrder >= 2 with non-collinear nodes)
         return
     

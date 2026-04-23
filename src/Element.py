@@ -1148,13 +1148,14 @@ class Element:
             - invJg : Inverse Jacobian matrices at quadrature points.
             - detJg : Determinants of Jacobian matrices at quadrature points.
             - detJg1D : 1D Jacobian determinants at quadrature points.
+            - NormalVec_array : Quadrature-point-dependent normal vectors [ng, 2].
         """
         ######### ADAPTED QUADRATURE TO INTEGRATE OVER ELEMENTAL GHOST FACES
         #### STANDARD REFERENCE ELEMENT QUADRATURE TO INTEGRATE LINES (1D)
         XIg1Dstand, Wg1D, Ng1D = GaussQuadrature(0,NumQuadOrder1D)
         #### QUADRATURE TO INTEGRATE LINES (1D)
         N1D, dNdxi1D = EvaluateReferenceShapeFunctions(XIg1Dstand, 0, self.ElOrder, deriv=1)
-                    
+
         ######### ADAPTED QUADRATURE TO INTERGRATE OVER ELEMENTAL GHOST FACES (1D)
         for FACE in self.GhostFaces:
             FACE.ng = Ng1D
@@ -1162,18 +1163,63 @@ class Element:
             FACE.detJg = np.zeros([FACE.ng])
             # MAP 1D REFERENCE STANDARD GAUSS INTEGRATION NODES ON ELEMENTAL CUT EDGE ->> ADAPTED 1D QUADRATURE FOR CUT EDGE
             FACE.XIg = N1D @ FACE.XIseg
-            # EVALUATE 2D REFERENCE SHAPE FUNCTION ON ELEMENTAL CUT EDGE 
+            # EVALUATE 2D REFERENCE SHAPE FUNCTION ON ELEMENTAL CUT EDGE
             FACE.Ng, FACE.dNg = EvaluateReferenceShapeFunctions(FACE.XIg, self.ElType, self.ElOrder, deriv=self.ElOrder)
-            # MAPP REFERENCE INTERFACE ADAPTED QUADRATURE ON PHYSICAL ELEMENT 
+            # MAPP REFERENCE INTERFACE ADAPTED QUADRATURE ON PHYSICAL ELEMENT
             FACE.Xg = N1D @ FACE.Xseg
             # EVALUATE INTEGRATION ENTITIES (JACOBIAN INVERSE MATRIX AND DETERMINANT) ON ADAPTED QUADRATURES NODES
             FACE.invJg = np.zeros([FACE.ng,FACE.dim,FACE.dim])
             FACE.detJg = np.zeros([FACE.ng])
             FACE.detJg1D = np.zeros([FACE.ng])
+
+            # COMPUTE QUADRATURE-POINT-DEPENDENT NORMAL VECTORS
+            FACE.NormalVec_array = np.zeros([FACE.ng, FACE.dim])
+
+            # Store Jacobian Hessian for chain rule corrections (Fix 1)
+            # Shape: [ng, 2, 2, 2] - one Hessian tensor per quadrature point
+            FACE.JacobianHessian = np.zeros([FACE.ng, FACE.dim, FACE.dim, FACE.dim])
+
+            # Detect affinity: check if Jacobian varies across quadrature points
+            FACE.is_affine = True  # Will be updated if variation detected
+
             for ig in range(FACE.ng):
                 FACE.invJg[ig,:,:], FACE.detJg[ig] = Jacobian(self.Xe,FACE.dNg[0][ig,:,:])
                 FACE.detJg[ig] = abs(FACE.detJg[ig])
-                FACE.detJg1D[ig] = Jacobian1D(FACE.Xseg,dNdxi1D[0][ig,:]) 
+                FACE.detJg1D[ig] = Jacobian1D(FACE.Xseg,dNdxi1D[0][ig,:])
+
+                # Compute tangent vector at quadrature point: dX/dξ = dN/dξ @ X_nodes
+                tangent = dNdxi1D[0][ig,:] @ FACE.Xseg  # [2,]
+                # Normal perpendicular to tangent (rotated 90 degrees counterclockwise)
+                normal = np.array([-tangent[1], tangent[0]])
+                # Normalize
+                normal = normal / np.linalg.norm(normal)
+                # Store in array
+                FACE.NormalVec_array[ig,:] = normal
+
+                # Compute Jacobian Hessian for chain rule corrections (if element order >= 2)
+                # This is needed for accurate p>=2 derivatives on curved elements
+                if self.ElOrder >= 2 and len(FACE.dNg) > 1:
+                    # dNg[1] contains second derivatives: [ng, n, 2, 2]
+                    FACE.JacobianHessian[ig,:,:,:] = JacobianHessian(self.Xe, FACE.dNg[1][ig,:,:,:])
+
+            # Set NormalVec to first normal for backward compatibility
+            FACE.NormalVec = FACE.NormalVec_array[0,:].copy()
+
+            # Detect if segment is curved (non-collinear nodes or varying normal direction)
+            # For linear segments (ElOrder=1), all normals should be identical
+            # For curved segments, normals will vary
+            if self.ElOrder > 1:
+                normal_variance = np.var(FACE.NormalVec_array, axis=0)
+                if np.max(normal_variance) > 1e-10:
+                    FACE.is_curved = True
+
+            # Detect if element is affine by checking Jacobian variance
+            # For affine elements, invJg should be constant across quadrature points
+            if FACE.ng > 1:
+                invJ_variance = np.var(FACE.invJg, axis=0)
+                if np.max(invJ_variance) > 1e-12:
+                    FACE.is_affine = False
+
         return
     
     
