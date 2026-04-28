@@ -182,7 +182,7 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = -3+4*(xi+eta)
                                 dNdeta = -3+4*(xi+eta)
                             if deriv >= 2:
-                                Hess = np.array([[-4.0, -4.0], [-4.0, -4.0]])
+                                Hess = np.array([[4.0, 4.0], [4.0, 4.0]])
                         case 4:
                             N = 4*xi*eta
                             if deriv >= 1:
