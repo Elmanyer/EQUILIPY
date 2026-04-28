@@ -493,8 +493,8 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = -3.0*a*t2*t3*t4*(-s1*s3-s1*s4+s3*s4)
                                 dNdeta = -3.0*a *s1*s3*s4*(-t2*t3-t2*t4+t3*t4)
                             if deriv >= 2:
-                                Hess = np.array([[-3.0*a*t2*t3*t4*(-s1 - s3 - s4), -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4)], 
-                                                     [-3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4), -3.0*a*s1*s3*s4*(-t2 - t3 - t4)]])
+                                Hess = np.array([[-6.0*a*t2*t3*t4*(-s1 - s3 - s4), -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4)],
+                                                     [-3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4), -6.0*a*s1*s3*s4*(-t2 - t3 - t4)]])
                             if deriv >= 3:
                                 J3 = np.zeros((2,2,2))
                                 J3[0,0,0] = -3.0*a*t2*t3*t4*(-s1 - s3 - s4)
@@ -506,8 +506,8 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = -3.0*a*t2*t3*t4*(-s1*s2+s1*s4+s2*s4)
                                 dNdeta = -3.0*a *s1*s2*s4*(-t2*t3-t2*t4+t3*t4)
                             if deriv >= 2:
-                                Hess = np.array([[-3.0*a*t2*t3*t4*(-s1 - s2 + s4), -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4)], 
-                                                    [-3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4), -3.0*a*s1*s2*s4*(-t2 - t3 - t4)]])
+                                Hess = np.array([[-6.0*a*t2*t3*t4*(-s1 - s2 + s4), -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4)],
+                                                    [-3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4), -6.0*a*s1*s2*s4*(-t2 - t3 - t4)]])
                             if deriv >= 3:
                                 J3 = np.zeros((2,2,2))
                                 J3[0,0,0] = -3.0*a*t2*t3*t4*(-s1 - s2 + s4)
@@ -520,8 +520,8 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = -3.0*a*t1*t3*t4*(-s1*s2+s1*s3+s2*s3)
                                 dNdeta = -3.0*a*s1*s2*s3*(-t1*t3+t1*t4+t3*t4)
                             if deriv >= 2:
-                                Hess = np.array([[-3.0*a*t1*t3*t4*(-s1 - s2 + s3), -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t3+t1*t4+t3*t4)],
-                                                     [-3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t3+t1*t4+t3*t4), -3.0*a*s1*s2*s3*(-t1 - t3 + t4)]])
+                                Hess = np.array([[-6.0*a*t1*t3*t4*(-s1 - s2 + s3), -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t3+t1*t4+t3*t4)],
+                                                     [-3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t3+t1*t4+t3*t4), -6.0*a*s1*s2*s3*(-t1 - t3 + t4)]])
                             if deriv >= 3:
                                 J3 = np.zeros((2,2,2))
                                 J3[0,0,0] = -3.0*a*t1*t3*t4*(-s1 - s2 + s3)
@@ -533,8 +533,8 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = -3.0*a*t1*t2*t4*(-s1*s2+s1*s3+s2*s3)
                                 dNdeta = -3.0*a *s1*s2*s3*(-t1*t2+t1*t4+t2*t4)
                             if deriv >= 2:
-                                Hess = np.array([[-3.0*a*t1*t2*t4*(-s1 - s2 + s3), -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t2+t1*t4+t2*t4)], 
-                                                     [-3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t2+t1*t4+t2*t4), -3.0*a*s1*s2*s3*(-t1 - t2 + t4)]])
+                                Hess = np.array([[-6.0*a*t1*t2*t4*(-s1 - s2 + s3), -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t2+t1*t4+t2*t4)],
+                                                     [-3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t2+t1*t4+t2*t4), -6.0*a*s1*s2*s3*(-t1 - t2 + t4)]])
                             if deriv >= 3:
                                 J3 = np.zeros((2,2,2))
                                 J3[0,0,0] = -3.0*a*t1*t2*t4*(-s1 - s2 + s3)
@@ -546,8 +546,8 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = -3.0*a*t1*t2*t3*(-s1*s2+s1*s4+s2*s4)
                                 dNdeta = -3.0*a *s1*s2*s4*(-t1*t2+t1*t3+t2*t3)
                             if deriv >= 2:
-                                Hess = np.array([[-3.0*a*t1*t2*t3*(-s1 - s2 + s4), -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t1*t2+t1*t3+t2*t3)], 
-                                                     [-3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t1*t2+t1*t3+t2*t3), -3.0*a*s1*s2*s4*(-t1 - t2 + t3)]])
+                                Hess = np.array([[-6.0*a*t1*t2*t3*(-s1 - s2 + s4), -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t1*t2+t1*t3+t2*t3)],
+                                                     [-3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t1*t2+t1*t3+t2*t3), -6.0*a*s1*s2*s4*(-t1 - t2 + t3)]])
                             if deriv >= 3:
                                 J3 = np.zeros((2,2,2))
                                 J3[0,0,0] = -3.0*a*t1*t2*t3*(-s1 - s2 + s4)
@@ -559,8 +559,8 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = -3.0*a*t1*t2*t3*(-s1*s3-s1*s4+s3*s4)
                                 dNdeta = -3.0*a *s1*s3*s4*(-t1*t2+t1*t3+t2*t3)
                             if deriv >= 2:
-                                Hess = np.array([[-3.0*a*t1*t2*t3*(-s1 - s3 + s4), -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3)], 
-                                                     [-3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3), -3.0*a*s1*s3*s4*(-t1 - t2 + t3)]])
+                                Hess = np.array([[-6.0*a*t1*t2*t3*(-s1 - s3 + s4), -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3)],
+                                                     [-3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3), -6.0*a*s1*s3*s4*(-t1 - t2 + t3)]])
                             if deriv >= 3:
                                 J3 = np.zeros((2,2,2))
                                 J3[0,0,0] = -3.0*a*t1*t2*t3*(-s1 - s3 + s4)
@@ -572,8 +572,8 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = -3.0*a*t1*t2*t4*(-s2*s3-s2*s4+s3*s4)
                                 dNdeta = -3.0*a *s2*s3*s4*(-t1*t2+t1*t4+t2*t4)
                             if deriv >= 2:
-                                Hess = np.array([[-3.0*a*t1*t2*t4*(-s2 - s3 + s4), -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t4+t2*t4)], 
-                                                     [-3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t4+t2*t4), -3.0*a*s2*s3*s4*(-t1 - t2 + t4)]])
+                                Hess = np.array([[-6.0*a*t1*t2*t4*(-s2 - s3 + s4), -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t4+t2*t4)],
+                                                     [-3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t4+t2*t4), -6.0*a*s2*s3*s4*(-t1 - t2 + t4)]])
                             if deriv >= 3:
                                 J3 = np.zeros((2,2,2))
                                 J3[0,0,0] = -3.0*a*t1*t2*t4*(-s2 - s3 + s4)
@@ -585,8 +585,8 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = -3.0*a*t1*t3*t4*(-s2*s3-s2*s4+s3*s4)
                                 dNdeta = -3.0*a *s2*s3*s4*(-t1*t3-t1*t4+t3*t4)
                             if deriv >= 2:
-                                Hess = np.array([[-3.0*a*t1*t3*t4*(-s2 - s3 + s4), -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4)], 
-                                                     [-3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4), -3.0*a*s2*s3*s4*(-t1 - t3 + t4)]])
+                                Hess = np.array([[-6.0*a*t1*t3*t4*(-s2 - s3 + s4), -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4)],
+                                                     [-3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4), -6.0*a*s2*s3*s4*(-t1 - t3 + t4)]])
                             if deriv >= 3:
                                 J3 = np.zeros((2,2,2))
                                 J3[0,0,0] = -3.0*a*t1*t3*t4*(-s2 - s3 + s4)
