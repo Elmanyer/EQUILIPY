@@ -359,7 +359,7 @@ class Element:
         # EVALUATE JACOBIAN OF TRANSFORMATION AT POINT
         J = Jacobian(self.Xe,dN[0][0])
         # OBTAIN GRADIENT IN PHYSICAL SPACE 
-        gradphysN = np.linalg.inv(J.T)@dN[0]
+        gradphysN = np.linalg.inv(J)@dN[0]
         # COMPUTE RADIAL MAGNETIC COMPONENT
         Br = - gradphysN[1,:]@self.PSIe/X[0]
         return Br

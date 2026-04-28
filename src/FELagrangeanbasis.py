@@ -407,7 +407,7 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = (xi-1/2)*(1-eta**2)
                                 dNdeta = xi*(xi-1)*(-eta)
                             if deriv >= 2:
-                                Hess = np.array([[1 - eta**2,    -2*xi*eta - eta], [-2*xi*eta - eta,   -xi**2 - xi]])
+                                Hess = np.array([[1 - eta**2,    -2*xi*eta - eta], [-2*xi*eta - eta,   -xi**2 + xi]])
                         case 9:
                             N = (1-xi**2)*(1-eta**2)
                             if deriv >= 1:

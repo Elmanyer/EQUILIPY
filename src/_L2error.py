@@ -318,11 +318,11 @@ class EquilipyL2error:
         """
 
         if deriv_order == 1:
-            subscripts = 'ni,ia,a->n'
+            subscripts = 'ni,i->n'
         elif deriv_order == 2:
-            subscripts = 'nij,ia,jb,a,b->n'
+            subscripts = 'nij,i,j->n'
         elif deriv_order == 3:
-            subscripts = 'nijk,ia,jb,kc,a,b,c->n'
+            subscripts = 'nijk,i,j,k->n'
         else:
             return 0.0, 0.0
 

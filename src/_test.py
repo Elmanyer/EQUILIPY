@@ -806,7 +806,7 @@ def test_normal_derivative_jump_symmetry(mesh):
             n_dot_gradN1 = np.einsum('ni,i->n', gradN1, n1)
             n_dot_gradN2 = np.einsum('ni,i->n', gradN2, n2)
 
-            n_dot_gradN = np.concatenate([n_dot_gradN1, n_dot_gradN2])
+            n_dot_gradN = np.concatenate([n_dot_gradN1, -n_dot_gradN2])
 
             # Add contribution (outer product)
             LHSe += np.outer(n_dot_gradN, n_dot_gradN) * FACE1.detJg1D[ig] * FACE1.Wg[ig]
@@ -1271,7 +1271,7 @@ def test_ghost_penalty_matrix_positive_semidefinite(mesh, zeta=1.0):
         n_dot_gradN1 = np.einsum('ni,i->n', gradN1, n1)
         n_dot_gradN2 = np.einsum('ni,i->n', gradN2, n2)
 
-        n_dot_gradN = np.concatenate([n_dot_gradN1, n_dot_gradN2])
+        n_dot_gradN = np.concatenate([n_dot_gradN1, -n_dot_gradN2])
 
         R = FACE1.Xg[ig, 0]
         LHSe += penalty * np.outer(n_dot_gradN, n_dot_gradN) * (1/R) * FACE1.detJg1D[ig] * FACE1.Wg[ig]
@@ -1387,11 +1387,14 @@ def compute_normal_derivative_jump_across_ghost_face(mesh, PSI, ghost_face_tuple
 
     # Build einsum subscript string based on derivative order
     if deriv_order == 1:
-        subscripts = 'ni,ia,a->n'
+        # Physical Gradient: (dN/dx) * n
+        subscripts = 'ni,i->n'
     elif deriv_order == 2:
-        subscripts = 'nij,ia,jb,a,b->n'
+        # Physical Hessian: (d2N/dx2) * n * n
+        subscripts = 'nij,i,j->n'
     elif deriv_order == 3:
-        subscripts = 'nijk,ia,jb,kc,a,b,c->n'
+        # Physical 3rd Order: (d3N/dx3) * n * n * n
+        subscripts = 'nijk,i,j,k->n'
     else:
         raise ValueError(f"Derivative order {deriv_order} not supported (use 1, 2, or 3)")
 

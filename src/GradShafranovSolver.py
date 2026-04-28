@@ -454,15 +454,11 @@ class GradShafranovSolver(EquilipyInitialisation,
                     n_dot_dNg0 = np.einsum(subscripts, *args0, optimize=True)
                     n_dot_dNg1 = np.einsum(subscripts, *args1, optimize=True)  
 
-                    n_dot_dNg = np.concatenate((n_dot_dNg0,n_dot_dNg1), axis=0)
+                    n_dot_dNg = np.concatenate((n_dot_dNg0,-n_dot_dNg1), axis=0)
 
                     # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM
                     # NOTE: The 1/R factor is required for consistency with axisymmetric Grad-Shafranov weak form
-                    R = FACE0.Xg[ig,0]  # R coordinate at Gauss point
-                    for i in range(ELEMENT0.n+ELEMENT1.n):  # ROWS ELEMENTAL MATRIX
-                        for j in range(ELEMENT0.n+ELEMENT1.n):  # COLUMNS ELEMENTAL MATRIX
-                            ### GHOST PENALTY TERM  OVER DERIVATIVES JUMP
-                            LHSe[i,j] += penalty*n_dot_dNg[i]*n_dot_dNg[j] * (1/R) * FACE0.detJg1D[ig] * FACE0.Wg[ig]
+                    LHSe += (penalty * FACE0.detJg1D[ig] * FACE0.Wg[ig] / FACE0.Xg[ig,0]) * np.outer(n_dot_dNg, n_dot_dNg)
 
 
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
