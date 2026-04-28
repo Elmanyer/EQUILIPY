@@ -25,7 +25,7 @@
 import os
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
-from ShapeFunctions import *
+from FELagrangeanbasis import *
 from Element import *
 from Mesh import *
 from Tokamak import *
@@ -185,7 +185,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                     # ISOLATE ELEMENT OBJECT
                     ELEMENT = self.MESH.Elements[ielem]
                     # INTERPOLATE ELEMENTAL PSI ON PHYSICAL GAUSS NODES
-                    PSIg = ELEMENT.Ng @ ELEMENT.PSIe
+                    PSIg = ELEMENT.Nrefg @ ELEMENT.PSIe
                     # LOOP OVER GAUSS NODES
                     for ig in range(ELEMENT.ng):
                         PSI_B[inode] += self.mu0 * GreensFunction(Xbound, ELEMENT.Xg[ig,:])*self.PlasmaCurrent.Jphi(ELEMENT.Xg[ig,:],
@@ -199,7 +199,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                     for SUBELEM in ELEMENT.SubElements:
                         if SUBELEM.Dom < 0:  # IN PLASMA REGION
                             # INTERPOLATE ELEMENTAL PSI ON PHYSICAL GAUSS NODES
-                            PSIg = SUBELEM.Ng @ ELEMENT.PSIe
+                            PSIg = SUBELEM.Nrefg @ ELEMENT.PSIe
                             # LOOP OVER GAUSS NODES
                             for ig in range(SUBELEM.ng):
                                 PSI_B[inode] += self.mu0 * GreensFunction(Xbound, SUBELEM.Xg[ig,:])*self.PlasmaCurrent.Jphi(SUBELEM.Xg[ig,:],
@@ -328,7 +328,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                 # ISOLATE ELEMENT
                 ELEMENT = self.MESH.Elements[ielem]
                 # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-                PSIg = ELEMENT.Ng @ ELEMENT.PSIe
+                PSIg = ELEMENT.Nrefg @ ELEMENT.PSIe
                 # LOOP OVER GAUSS NODES
                 for ig in range(ELEMENT.ng):
                     integral += fun(ELEMENT.Xg[ig,:],PSIg[ig])*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
@@ -342,7 +342,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                     # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
                     if SUBELEM.Dom < 0:
                         # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-                        PSIg = SUBELEM.Ng @ ELEMENT.PSIe
+                        PSIg = SUBELEM.Nrefg @ ELEMENT.PSIe
                         # LOOP OVER GAUSS NODES
                         for ig in range(SUBELEM.ng):
                             integral += fun(SUBELEM.Xg[ig,:],PSIg[ig])*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
@@ -422,35 +422,27 @@ class GradShafranovSolver(EquilipyInitialisation,
                 # We need to contract p indices of the derivative 
                 # with p normal vectors and p inverse Jacobians.
                 if p == 1:
-                    # Physical Gradient: (dN/dxi) * invJ * n
+                    # Physical Gradient: (dN/dxi)  * n
                     # dNg[0] shape: [ng, n, 2]
-                    subscripts = 'ni,ia,a->n' 
+                    subscripts = 'ni,i->n' 
                 elif p == 2:
-                    # Physical Hessian: (d2N/dxi2) * invJ * invJ * n * n
+                    # Physical Hessian: (d2N/dxi2) * n * n
                     # dNg[1] shape: [ng, n, 2, 2]
-                    subscripts = 'nij,ia,jb,a,b->n'
+                    subscripts = 'nij,i,j->n'
                 elif p == 3:
-                    # Physical 3rd Order: (d3N/dxi3) * invJ * invJ * invJ * n * n * n
+                    # Physical 3rd Order: (d3N/dxi3) * n * n * n
                     # dNg[2] shape: [ng, n, 2, 2, 2]
-                    subscripts = 'nijk,ia,jb,kc,a,b,c->n'
+                    subscripts = 'nijk,i,j,k->n'
 
                 # LOOP OVER GAUSS INTEGRATION NODES
                 for ig in range(FACE0.ng):
-                    # Extract local variables for this Gauss point
-                    invJ0 = FACE0.invJg[ig] 
-                    invJ1 = FACE1.invJg[ig]
-                    n0 = FACE0.NormalVec    # Shape (2,)
-                    n1 = FACE1.NormalVec    # Shape (2,)
+                    n0 = FACE0.NormalVec    
+                    n1 = FACE1.NormalVec    
 
                     # 2. Build the list of arguments to pass to einsum
                     # Start with the reference derivative tensor
                     args0 = [FACE0.dNg[p-1][ig]]
                     args1 = [FACE1.dNg[p-1][ig]]
-
-                    # Add p copies of the Inverse Jacobian
-                    for _ in range(p):
-                        args0.append(invJ0)
-                        args1.append(invJ1)
 
                     # Add p copies of the Normal vector
                     for _ in range(p):
@@ -525,7 +517,7 @@ class GradShafranovSolver(EquilipyInitialisation,
             SourceTermg = np.zeros([ELEMENT.ng])
             if ELEMENT.Dom < 0:
                 # MAP PSI VALUES FROM ELEMENT NODES TO GAUSS NODES
-                PSIg = ELEMENT.Ng @ ELEMENT.PSIe
+                PSIg = ELEMENT.Nrefg @ ELEMENT.PSIe
                 for ig in range(ELEMENT.ng):
                     SourceTermg[ig] = self.PlasmaCurrent.SourceTerm(ELEMENT.Xg[ig,:],PSIg[ig])
                     
@@ -573,7 +565,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                 SourceTermg = np.zeros([SUBELEM.ng])
                 if SUBELEM.Dom < 0:
                     # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-                    PSIg = SUBELEM.Ng @ ELEMENT.PSIe
+                    PSIg = SUBELEM.Nrefg @ ELEMENT.PSIe
                     for ig in range(SUBELEM.ng):
                         SourceTermg[ig] = self.PlasmaCurrent.SourceTerm(SUBELEM.Xg[ig,:],PSIg[ig])
                         

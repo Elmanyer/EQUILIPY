@@ -685,20 +685,20 @@ def EvalRefLagrangeBasis(X, elemType, elemOrder, deriv=1):
         case 0:
             for i in range(n):
                 for ig in range(ng):
-                    N[ig,i] = RefLagrangeBasis(X[ig,:],elemType, elemOrder, i+1, deriv)
+                    N[ig,i] = RefLagrangeBasis(X[ig],elemType, elemOrder, i+1, deriv)
             return N
         case 1:
             gradN = np.zeros([ng,n,dim])
             for i in range(n):
                 for ig in range(ng):
-                    N[ig,i], gradN[ig,i,:] = RefLagrangeBasis(X[ig,:],elemType, elemOrder, i+1, deriv)
+                    N[ig,i], gradN[ig,i] = RefLagrangeBasis(X[ig],elemType, elemOrder, i+1, deriv)
             return N, [gradN]
         case 2:
             gradN = np.zeros([ng,n,dim])
             HessN = np.zeros([ng,n,dim,dim])
             for i in range(n):
                 for ig in range(ng):
-                    N[ig,i], gradN[ig,i,:], HessN[ig,i,:,:]  = RefLagrangeBasis(X[ig,:],elemType, elemOrder, i+1, deriv)
+                    N[ig,i], gradN[ig,i], HessN[ig,i]  = RefLagrangeBasis(X[ig],elemType, elemOrder, i+1, deriv)
             return N, [gradN, HessN]
         case 3:
             gradN = np.zeros([ng,n,dim])
@@ -706,15 +706,133 @@ def EvalRefLagrangeBasis(X, elemType, elemOrder, deriv=1):
             J3N = np.zeros([ng,n,dim,dim,dim])
             for i in range(n):
                 for ig in range(ng):
-                    N[ig,i], gradN[ig,i,:], HessN[ig,i,:,:], J3N[ig,i,:,:,:]  = RefLagrangeBasis(X[ig,:],elemType, elemOrder, i+1, deriv)
+                    N[ig,i], gradN[ig,i], HessN[ig,i], J3N[ig,i]  = RefLagrangeBasis(X[ig],elemType, elemOrder, i+1, deriv)
             return N, [gradN, HessN, J3N]
         
 
 def Jacobian(X, dN):
-    """ 
-    Function that computes the Jacobian of the mapping between physical and natural coordinates for
-    the order corresponding to the shape function derivatives provided in dN.
     """
-    J = np.einsum('ij,i...->j...', X, dN)
-    return J
+    Compute the p-th order derivative of the forward coordinate map  x(ξ)
+    at a single Gauss point.
+ 
+    Parameters
+    ----------
+    X  : (n_nodes, 2)      physical coordinates of the element nodes
+    dN : (n_nodes, 2, ...) p-th order reference derivatives of shape functions
+                           at ONE Gauss point.  The ellipsis represents p-1
+                           additional ref-index axes.
+ 
+    Returns
+    -------
+    F  : (2, 2, ...)       p-th order forward map derivative tensor
+                           F[a, i, j, ...] = ∂^p x_a / ∂ξ_i ∂ξ_j ...
+                           (first axis = physical coord, remaining = ref coords)
+    """
+    return np.einsum('na,n...->a...', X, dN)
+
+def PhysicalGradient(dN, invJ, order = 1, maps = None):
+    # ------------------------------------------------------------------ #
+    #  ORDER 1  —  exact for any mapping                                 #
+    #  Single term: contraction of reference gradient with inverse Jacobian #
+    #  dN_phys[n, a] = Σ_i  dN[n,i] · invJ[i,a]                          #
+    # ------------------------------------------------------------------ #
+    dN_phys1 = np.einsum('ni,ia->na', dN[0], invJ)
+    if order == 1:
+        return dN_phys1
+    
+    # ------------------------------------------------------------------ #
+    #  ORDER 2                                                           #
+    #  Term 1: ref Hessian contracted twice with invJ                    #
+    #  Term 2: physical gradient contracted with D                       #
+    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------ #
+    #  Correction tensor D                                               #
+    #  H_fwd[a, i, j]  =  ∂²x_a / ∂ξ_i ∂ξ_j (map Hessian)                #
+    #  D    [k, a, b]  =  ∂²ξ_k / ∂x_a ∂x_b                              #
+    # ------------------------------------------------------------------ #
+    H_fwd = maps[1]
+    D = -np.einsum('kl,lmn,ma,nb->kab', invJ, H_fwd, invJ, invJ)
+
+    term1 = np.einsum('nij,ia,jb->nab', dN[1], invJ, invJ)
+    term2 = np.einsum('ni,iab->nab', dN[0], D)
+    dN_phys2 = term1 + term2
+
+    if order == 2:
+        return dN_phys2 
+
+
+    # ------------------------------------------------------------------ #
+    #  ORDER 3                                                           #
+    #  Term A: ref 3rd-deriv contracted three times with invJ            #
+    #  Term B: ref Hessian × invJ × D  — three (a,b,c) permutations      #
+    #  Term C: physical gradient contracted with E                       #
+    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------ #
+    #  Correction tensor E                                               #
+    #  E[k, a, b, c] = ∂³ξ_k / ∂x_a ∂x_b ∂x_c = E1 + E2                  #
+    #                                                                    #
+    #  Two contributions:                                                #
+    #    E1: from the T_fwd term (map 3rd order derivative)              #
+    #    E2: from differentiating each invJ factor inside D              #
+    #        (i.e. ∂invJ/∂x = −invJt · H_fwd · invJ contracted)          #
+    # ------------------------------------------------------------------ #
+    T_fwd = maps[2]
+ 
+    # E1: T_fwd contracted four times with invJ
+    E1 = -np.einsum('kl,lmno,ma,nb,oc->kabc', invJ, T_fwd, invJ, invJ, invJ)
+
+    # E2: differentiate each of the three invJ factors in D
+    # ∂invJ[i,a]/∂x_c = −Σ_p invJ[i,p] · D[p,a,c]
+
+    # Use the clean closed-form (avoids index bookkeeping errors):
+    #   E = E1  +  three permutations of  (D contracted with D via H_fwd)
+    # The three permutations arise because ∂invJ[i,a]/∂x_c = −Σ_p invJ[i,p]·D[p,a,c]
+    # applied to each of the three invJ slots in D:
+    E2 = (
+        np.einsum('kp,pac,lmn,ma,nb->kabc',   invJ, D, H_fwd, invJ, invJ)  # slot 1 (k,l)
+      + np.einsum('kl,lmn,pa,pmc,nb->kabc',   invJ, H_fwd, D, invJ, invJ)  # slot 2 (m,a)
+      + np.einsum('kl,lmn,ma,pb,pnc->kabc',   invJ, H_fwd, invJ, D, invJ)  # slot 3 (n,b)
+    )
+ 
+    E = E1 + E2   # shape: (2, 2, 2, 2)
+
+    termA = np.einsum('nijk,ia,jb,kc->nabc', dN[2], invJ, invJ, invJ)
+ 
+    # Term B: differentiate each of the two invJ in term1 of order-2 w.r.t. x_c
+    # gives three symmetry-equivalent permutations of free physical indices
+    termB = (
+        np.einsum('nij,ip,pac,jb->nabc', dN[1], invJ, D, invJ)   # perm on a
+        + np.einsum('nij,ia,jp,pbc->nabc', dN[1], invJ, invJ, D)   # perm on b  
+        + np.einsum('nij,ip,pbc,ja->nabc', dN[1], invJ, D, invJ)   # perm on c
+        )
+ 
+    termC = np.einsum('ni,iabc->nabc', dN[0], E)
+
+    dN_phys = termA + termB + termC
+
+    return dN_phys
+ 
+ 
+def _apply_normal(dN_phys, n):
+    """
+    If a direction vector n is given, contract every physical index with n,
+    returning the directional (normal) derivative of each order as a scalar
+    per shape function per Gauss point.
+ 
+    For order p the physical tensor has shape (ng, n_nodes, 2, ..., 2) with
+    p trailing physical axes.  Contracting with n p times gives (ng, n_nodes).
+    """
+    if n is None:
+        return dN_phys
+ 
+    n = np.asarray(n, dtype=float)
+    result = []
+    for p, T in enumerate(dN_phys):
+        # T shape: (ng, n_nodes, 2, 2, ...) with p+1 trailing physical axes (order = p+1)
+        out = T
+        for _ in range(p + 1):
+            # contract the last axis with n
+            out = np.einsum('...a,a->...', out, n)
+        result.append(out)   # shape: (ng, n_nodes)
+    return result
     

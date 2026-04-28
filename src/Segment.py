@@ -55,9 +55,9 @@ class Segment:
         self.Wg = None              # GAUSS INTEGRATION WEIGHTS 
         self.XIg = None             # GAUSS INTEGRATION NODAL COORDINATES (REFERENCE SPACE)
         self.Xg = None              # GAUSS INTEGRATION NODAL COORDINATES (PHYSICAL SPACE)
-        self.Ng = None              # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES 
-        self.dNg = None             # LIST OF REFERENCE SHAPE FUNCTIONS DERIVATES (GRADIENT, HESSIAN, J3) EVALUATED AT GAUSS INTEGRATION NODES -> [ng x n x (dim X dim xdim)]
-        self.invJg = None
+        self.Nrefg = None           # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES 
+        self.dNrefg = None          # LIST OF REFERENCE SHAPE FUNCTIONS DERIVATES (GRADIENT, HESSIAN, J3) EVALUATED AT GAUSS INTEGRATION NODES -> [ng x n x (dim X dim xdim)]
+        self.dNg = None             # LIST OF SHAPE FUNCTIONS DERIVATES IN PHYSICAL SPACE (GRADIENT, HESSIAN, J3) EVALUATED AT GAUSS INTEGRATION NODES -> [ng x n x (dim X dim xdim)]
         self.detJg = None
         self.detJg1D = None         # MATRIX DETERMINANTS OF JACOBIAN OF TRANSFORMATION FROM 1D REFERENCE ELEMENT TO 2D PHYSICAL 
         

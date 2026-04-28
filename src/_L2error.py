@@ -91,7 +91,7 @@ class EquilipyL2error:
             # ISOLATE ELEMENT
             ELEMENT = self.MESH.Elements[elem]
             # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-            PSIg = ELEMENT.Ng @ ELEMENT.PSIe
+            PSIg = ELEMENT.Nrefg @ ELEMENT.PSIe
             # LOOP OVER GAUSS NODES
             for ig in range(ELEMENT.ng):
                 ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:],NORMALISED=True))**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
@@ -106,7 +106,7 @@ class EquilipyL2error:
                 # INTEGRATE IN SUBDOMAIN INSIDE PLASMA REGION
                 if SUBELEM.Dom < 0:
                     # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-                    PSIg = SUBELEM.Ng @ ELEMENT.PSIe
+                    PSIg = SUBELEM.Nrefg @ ELEMENT.PSIe
                     # LOOP OVER GAUSS NODES
                     for ig in range(SUBELEM.ng):
                         ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(SUBELEM.Xg[ig,:],NORMALISED=True))**2*SUBELEM.detJg[ig]*SUBELEM.Wg[ig]
@@ -131,7 +131,7 @@ class EquilipyL2error:
         # INTEGRATE OVER ALL ELEMENTS
         for ELEMENT in self.MESH.Elements:
             # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-            PSIg = ELEMENT.Ng @ ELEMENT.PSIe
+            PSIg = ELEMENT.Nrefg @ ELEMENT.PSIe
             # LOOP OVER GAUSS NODES
             for ig in range(ELEMENT.ng):
                 ErrorL2norm += (PSIg[ig]-self.PlasmaCurrent.PSIanalytical(ELEMENT.Xg[ig,:],NORMALISED=True))**2*ELEMENT.detJg[ig]*ELEMENT.Wg[ig]
@@ -164,7 +164,7 @@ class EquilipyL2error:
         # INTEGRATE OVER CUT ELEMENTS' INTERFACE
         for elem in self.MESH.PlasmaBoundElems:
             INTAPPROX = self.MESH.Elements[elem].InterfApprox
-            PSIg = INTAPPROX.Ng @ self.MESH.Elements[elem].PSIe
+            PSIg = INTAPPROX.Nrefg @ self.MESH.Elements[elem].PSIe
 
             for ig in range(INTAPPROX.ng):
                 psi_exact = self.PlasmaCurrent.PSIanalytical(INTAPPROX.Xg[ig, :])
@@ -203,7 +203,7 @@ class EquilipyL2error:
         for elem in self.MESH.PlasmaBoundElems:
             ELEMENT = self.MESH.Elements[elem]
             INTAPPROX = ELEMENT.InterfApprox
-            PSIg = INTAPPROX.Ng @ ELEMENT.PSIe
+            PSIg = INTAPPROX.Nrefg @ ELEMENT.PSIe
 
             # LOOP OVER GAUSS NODES
             for ig in range(INTAPPROX.ng):
@@ -214,21 +214,28 @@ class EquilipyL2error:
                 Ngplus, dNgplus = EvalRefLagrangeBasis(XIgplus.reshape((1, 2)), ELEMENT.ElType, ELEMENT.ElOrder)
                 Ngminus, dNgminus = EvalRefLagrangeBasis(XIgminus.reshape((1, 2)), ELEMENT.ElType, ELEMENT.ElOrder)
 
-                invJgplus, _ = Jacobian(ELEMENT.Xe, dNgplus[0][0, :, :])
-                invJgminus, _ = Jacobian(ELEMENT.Xe, dNgminus[0][0, :, :])
+                # Compute Jacobians at shifted points and compute their transposes inverse
+                Jgplus = Jacobian(ELEMENT.Xe, dNgplus[0][0, :, :])
+                Jgminus = Jacobian(ELEMENT.Xe, dNgminus[0][0, :, :])
+
+                invJTplus = np.linalg.inv(Jgplus.T)   # (J^T)^{-1}
+                invJTminus = np.linalg.inv(Jgminus.T)  # (J^T)^{-1}
 
                 PSIgplus = Ngplus[0] @ ELEMENT.PSIe
                 PSIgminus = Ngminus[0] @ ELEMENT.PSIe
 
-                Ngradplus = invJgplus @ dNgplus[0][0, :, :].T
-                Ngradminus = invJgminus @ dNgminus[0][0, :, :].T
+                # Physical gradients: ∇_x = (J^T)^{-1} ∇_ξ
+                Ngradplus = invJTplus @ dNgplus[0][0, :, :].T
+                Ngradminus = invJTminus @ dNgminus[0][0, :, :].T
 
                 # Compute gradient difference (jump)
                 diffgrad = 0.0
                 grad = 0.0
                 for inode in range(ELEMENT.n):
                     diffgrad += (Ngradplus[:, inode] * PSIgplus - Ngradminus[:, inode] * PSIgminus) @ INTAPPROX.NormalVec[ig]
-                    grad += INTAPPROX.NormalVec[ig] @ INTAPPROX.dNg[0][ig, inode, :] * PSIg[ig]
+                    # Use physical space derivatives for consistency with physical space normal vector
+                    phys_grad_n = INTAPPROX.NormalVec[ig] @ INTAPPROX.dNg[0][ig, inode, :]
+                    grad += phys_grad_n * PSIg[ig]
 
                 JumpError[knode] = diffgrad
                 JumpRelError[knode] = diffgrad / abs(grad) if abs(grad) > 1e-16 else 0.0
@@ -271,7 +278,7 @@ class EquilipyL2error:
             for ig in range(elem.ng):
                 X_point = elem.Xg[ig, :]
                 R = X_point[0]
-                psi_num = np.dot(elem.Ng[ig, :], PSI_local)
+                psi_num = np.dot(elem.Nrefg[ig, :], PSI_local)
 
                 try:
                     psi_exact = self.PlasmaCurrent.PSIanalytical(X_point)
@@ -336,17 +343,13 @@ class EquilipyL2error:
 
             for ig in range(FACE1.ng):
                 try:
-                    invJ1 = FACE1.invJg[ig]
-                    invJ2 = FACE2.invJg[ig]
                     n1 = FACE1.NormalVec
                     n2 = FACE2.NormalVec
 
+                    # Use physical space derivatives directly (dNg already transformed)
                     # Build einsum arguments for p-th derivative
                     args1 = [FACE1.dNg[deriv_order - 1][ig]]
                     args2 = [FACE2.dNg[deriv_order - 1][ig]]
-                    for _ in range(deriv_order):
-                        args1.append(invJ1)
-                        args2.append(invJ2)
                     for _ in range(deriv_order):
                         args1.append(n1)
                         args2.append(n2)
@@ -378,7 +381,7 @@ class EquilipyL2error:
         Returns:
             - diagnostics (dict): Dictionary containing all error metrics
         """
-        from ShapeFunctions import RefLagrangeBasis
+        from FELagrangeanbasis import RefLagrangeBasis
         from Element import ElementalNumberOfNodes
 
         diagnostics = {
@@ -457,16 +460,15 @@ class EquilipyL2error:
                     solution_jumps.append(abs(u1 - u2))
 
                     # Gradient jump (normal component)
-                    invJ1 = FACE1.invJg[ig]
-                    invJ2 = FACE2.invJg[ig]
                     n1_vec = FACE1.NormalVec
                     n2_vec = FACE2.NormalVec
 
+                    # Use physical space derivatives directly (dNg already transformed)
                     gradN1 = FACE1.dNg[0][ig]
                     gradN2 = FACE2.dNg[0][ig]
 
-                    n_dot_gradN1 = np.einsum('ni,ia,a->n', gradN1, invJ1, n1_vec)
-                    n_dot_gradN2 = np.einsum('ni,ia,a->n', gradN2, invJ2, n2_vec)
+                    n_dot_gradN1 = np.einsum('ni,i->n', gradN1, n1_vec)
+                    n_dot_gradN2 = np.einsum('ni,i->n', gradN2, n2_vec)
 
                     grad_u1 = np.dot(n_dot_gradN1, PSI1)
                     grad_u2 = np.dot(n_dot_gradN2, PSI2)

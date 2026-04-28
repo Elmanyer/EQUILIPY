@@ -241,7 +241,7 @@ def test_shape_functions_partition_of_unity(elemType, elemOrder, num_test_points
         - max_error (float): Maximum deviation from unity
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import RefLagrangeBasis
+    from FELagrangeanbasis import RefLagrangeBasis
     from Element import ElementalNumberOfNodes
 
     n, _ = ElementalNumberOfNodes(elemType, elemOrder)
@@ -297,7 +297,7 @@ def test_shape_functions_at_nodes(elemType, elemOrder):
         - max_error (float): Maximum deviation from expected values
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import RefLagrangeBasis
+    from FELagrangeanbasis import RefLagrangeBasis
     from Element import ElementalNumberOfNodes, ReferenceElementCoordinates
 
     # Get nodal coordinates
@@ -341,7 +341,7 @@ def test_shape_function_derivatives_consistency(elemType, elemOrder, epsilon=1e-
         - max_error (float): Maximum error between analytical and numerical derivatives
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import RefLagrangeBasis
+    from FELagrangeanbasis import RefLagrangeBasis
     from Element import ElementalNumberOfNodes
 
     n, _ = ElementalNumberOfNodes(elemType, elemOrder)
@@ -406,7 +406,7 @@ def test_polynomial_reproduction(elemType, elemOrder):
         - max_error (float): Maximum interpolation error
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import RefLagrangeBasis
+    from FELagrangeanbasis import RefLagrangeBasis
     from Element import ElementalNumberOfNodes, ReferenceElementCoordinates
 
     # Get nodal coordinates
@@ -488,7 +488,7 @@ def test_jacobian_computation(elemType, elemOrder):
         - max_error (float): Maximum error in Jacobian
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import RefLagrangeBasis, Jacobian
+    from FELagrangeanbasis import RefLagrangeBasis, Jacobian
     from Element import ElementalNumberOfNodes, ReferenceElementCoordinates
 
     if elemType == 0:
@@ -550,7 +550,7 @@ def test_jacobian_1d_arc_length():
         - error (float): Error in arc length computation
         - passed (bool): Whether test passed
     """
-    from ShapeFunctions import Jacobian1D, RefLagrangeBasis
+    from FELagrangeanbasis import Jacobian1D, RefLagrangeBasis
     from GaussQuadrature import GaussQuadrature
 
     # Create a simple segment
@@ -796,17 +796,15 @@ def test_normal_derivative_jump_symmetry(mesh):
 
         # Build elemental matrix for p=1 (gradient)
         for ig in range(FACE1.ng):
-            invJ1 = FACE1.invJg[ig]
-            invJ2 = FACE2.invJg[ig]
             n1 = FACE1.NormalVec
             n2 = FACE2.NormalVec
 
-            # Compute normal derivatives
-            gradN1 = FACE1.dNg[0][ig]  # [n, 2]
+            # Compute normal derivatives using physical space derivatives
+            gradN1 = FACE1.dNg[0][ig]  # [n, 2] already in physical space
             gradN2 = FACE2.dNg[0][ig]
 
-            n_dot_gradN1 = np.einsum('ni,ia,a->n', gradN1, invJ1, n1)
-            n_dot_gradN2 = np.einsum('ni,ia,a->n', gradN2, invJ2, n2)
+            n_dot_gradN1 = np.einsum('ni,i->n', gradN1, n1)
+            n_dot_gradN2 = np.einsum('ni,i->n', gradN2, n2)
 
             n_dot_gradN = np.concatenate([n_dot_gradN1, n_dot_gradN2])
 
@@ -939,7 +937,7 @@ def test_ghost_face_reference_physical_consistency(mesh):
         - max_error (float): Maximum mapping error
         - all_passed (bool): Whether test passed
     """
-    from ShapeFunctions import RefLagrangeBasis
+    from FELagrangeanbasis import RefLagrangeBasis
     from Element import ElementalNumberOfNodes
 
     if mesh.GhostFaces is None or len(mesh.GhostFaces) == 0:
@@ -1264,16 +1262,14 @@ def test_ghost_penalty_matrix_positive_semidefinite(mesh, zeta=1.0):
     penalty = zeta * h**4  # p=1: h^(2*1+2) = h^4
 
     for ig in range(FACE1.ng):
-        invJ1 = FACE1.invJg[ig]
-        invJ2 = FACE2.invJg[ig]
         n1 = FACE1.NormalVec
         n2 = FACE2.NormalVec
 
         gradN1 = FACE1.dNg[0][ig]
         gradN2 = FACE2.dNg[0][ig]
 
-        n_dot_gradN1 = np.einsum('ni,ia,a->n', gradN1, invJ1, n1)
-        n_dot_gradN2 = np.einsum('ni,ia,a->n', gradN2, invJ2, n2)
+        n_dot_gradN1 = np.einsum('ni,i->n', gradN1, n1)
+        n_dot_gradN2 = np.einsum('ni,i->n', gradN2, n2)
 
         n_dot_gradN = np.concatenate([n_dot_gradN1, n_dot_gradN2])
 
@@ -1316,7 +1312,7 @@ def compute_solution_jump_across_ghost_face(mesh, PSI, ghost_face_tuple):
         - jumps: Array of solution jumps at quadrature points
         - max_jump: Maximum absolute jump
     """
-    from ShapeFunctions import RefLagrangeBasis
+    from FELagrangeanbasis import RefLagrangeBasis
     from Element import ElementalNumberOfNodes
 
     elem1_idx, edge1_idx, face1_list_idx = ghost_face_tuple[1]
@@ -1400,22 +1396,16 @@ def compute_normal_derivative_jump_across_ghost_face(mesh, PSI, ghost_face_tuple
         raise ValueError(f"Derivative order {deriv_order} not supported (use 1, 2, or 3)")
 
     for ig in range(FACE1.ng):
-        invJ1 = FACE1.invJg[ig]
-        invJ2 = FACE2.invJg[ig]
         n1 = FACE1.NormalVec
         n2 = FACE2.NormalVec
 
-        # Build einsum arguments for element 1
+        # Build einsum arguments for element 1 (using physical space derivatives)
         args1 = [FACE1.dNg[deriv_order-1][ig]]
-        for _ in range(deriv_order):
-            args1.append(invJ1)
         for _ in range(deriv_order):
             args1.append(n1)
 
-        # Build einsum arguments for element 2
+        # Build einsum arguments for element 2 (using physical space derivatives)
         args2 = [FACE2.dNg[deriv_order-1][ig]]
-        for _ in range(deriv_order):
-            args2.append(invJ2)
         for _ in range(deriv_order):
             args2.append(n2)
 

@@ -22,7 +22,7 @@
 from _logging import EqPrint
 from Greens import *
 from GaussQuadrature import *
-from ShapeFunctions import *
+from FELagrangeanbasis import *
 from Element import compute_quadrilateral_area
 import matplotlib.pyplot as plt
 
@@ -260,9 +260,9 @@ class QuadrilateralCoil:
         self.XIg = None             # GAUSS INTEGRATION NODES (REFERENCE SPACE)
         self.Xg = None              # GAUSS INTEGRATION NODES (PHYSICAL SPACE)
         self.Wg = None              # GAUSS INTEGRATION WEIGTHS 
-        self.Ng = None              # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES 
-        self.dNg = None             # LIST OF REFERENCE SHAPE FUNCTIONS DERIVATIVES (GRADIENTS, HESSIANS AND J3) EVALUATED AT GAUSS INTEGRATION NODES [ng x n x (dim x dim x dim)]
-        self.invJg = None           # INVERSE MATRIX OF JACOBIAN OF TRANSFORMATION FROM 2D REFERENCE ELEMENT TO 2D PHYSICAL ELEMENT, EVALUATED AT GAUSS INTEGRATION NODES
+        self.Nrefg = None           # REFERENCE SHAPE FUNCTIONS EVALUATED AT GAUSS INTEGRATION NODES 
+        self.dNrefg = None          # LIST OF REFERENCE SHAPE FUNCTIONS DERIVATIVES (GRADIENTS, HESSIANS AND J3) EVALUATED AT GAUSS INTEGRATION NODES [ng x n x (dim x dim x dim)]
+        self.dNg = None             # LIST OF SHAPE FUNCTIONS DERIVATIVES IN PHYSICAL SPACE (GRADIENTS, HESSIANS AND J3) EVALUATED AT GAUSS INTEGRATION NODES [ng x n x (dim x dim x dim)]
         self.detJg = None           # MATRIX DETERMINANT OF JACOBIAN OF TRANSFORMATION FROM 2D REFERENCE ELEMENT TO 2D PHYSICAL ELEMENT, EVALUATED AT GAUSS INTEGRATION NODES 
         
         # COMPUTE QUADRILATERAL COIL AREA
@@ -325,22 +325,22 @@ class QuadrilateralCoil:
             - dNdxig (np.ndarray): Derivatives of shape functions w.r.t. xi at Gauss nodes.
             - dNdetag (np.ndarray): Derivatives of shape functions w.r.t. eta at Gauss nodes.
             - Xg (np.ndarray): Gauss nodes mapped to physical element coordinates.
-            - invJg (np.ndarray): Inverse Jacobian matrices at each Gauss node.
+            - dNg (np.ndarray): Derivatives of shape functions in physical space at each Gauss node.
             - detJg (np.ndarray): Determinants of Jacobian matrices at each Gauss node (absolute value).
         """
         #### REFERENCE ELEMENT QUADRATURE TO INTEGRATE SURFACES
         self.XIg, self.Wg, self.ng = GaussQuadrature(self.ElType,QuadOrder)
         # EVALUATE REFERENCE SHAPE FUNCTIONS 
-        self.Ng, self.dNg = EvalRefLagrangeBasis(self.XIg, self.ElType, self.ElOrder, deriv=1)
+        self.Nrefg, self.dNrefg = EvalRefLagrangeBasis(self.XIg, self.ElType, self.ElOrder, deriv=1)
         
         # COMPUTE MAPPED GAUSS NODES
-        self.Xg = self.Ng @ self.Xe       
+        self.Xg = self.Nrefg @ self.Xe       
         # COMPUTE JACOBIAN INVERSE AND DETERMINANT
-        self.invJg = np.zeros([self.ng,self.dim,self.dim])
+        self.dNg = [np.zeros([self.ng,self.n,self.dim])]
         self.detJg = np.zeros([self.ng])
         for ig in range(self.ng):
-            J = Jacobian(self.Xe,self.dNg[0][ig,:,:])
-            self.invJg[ig,:,:] = np.linalg.inv(J)
+            J = Jacobian(self.Xe,self.dNrefg[0][ig,:,:])
+            self.dNg[0][ig,:,:] = PhysicalGradient(self.dNrefg[0][ig,:,:], np.linalg.inv(J))
             self.detJg[ig] = abs(np.linalg.det(J))
         return
     
