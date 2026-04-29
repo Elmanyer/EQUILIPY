@@ -989,8 +989,8 @@ class Element:
             SUBELEM.dNg = [np.zeros([SUBELEM.ng,SUBELEM.n,SUBELEM.dim])]
             SUBELEM.detJg = np.zeros([SUBELEM.ng])
             for ig in range(SUBELEM.ng):
-                J = Jacobian(SUBELEM.Xe,dNstand2D[deriv_order-1][ig,:])
-                SUBELEM.dNg[deriv_order-1][ig] = PhysicalGradient([dNstand2D[deriv_order-1][ig]],np.linalg.inv(J))
+                J = Jacobian(SUBELEM.Xe,SUBELEM.dNrefg[deriv_order-1][ig,:])
+                SUBELEM.dNg[deriv_order-1][ig] = PhysicalGradient([SUBELEM.dNrefg[deriv_order-1][ig]],np.linalg.inv(J))
                 SUBELEM.detJg[ig] = abs(np.linalg.det(J))
         
             # CHECK NUMERICAL QUADRATURE
@@ -1295,15 +1295,15 @@ class Element:
                 for j in range(self.n):  # COLUMNS ELEMENTAL MATRIX
                     # COMPUTE LHS MATRIX TERMS
                     ### DIRICHLET BOUNDARY TERM  [ N_i*(n dot nabla(N_j)) ]  
-                    LHSe[i,j] += (1/self.InterfApprox.Xg[ig,0])*self.InterfApprox.Nrefg[ig,i] * n_dot_Ngrad[j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                    LHSe[i,j] -= (1/self.InterfApprox.Xg[ig,0])*self.InterfApprox.Nrefg[ig,i] * n_dot_Ngrad[j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     ### SYMMETRIC NITSCHE'S METHOD TERM   [ N_j*(n dot nabla(N_i)) ]
-                    LHSe[i,j] += (1/self.InterfApprox.Xg[ig,0])*n_dot_Ngrad[i]*self.InterfApprox.Nrefg[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                    LHSe[i,j] -= (1/self.InterfApprox.Xg[ig,0])*n_dot_Ngrad[i]*self.InterfApprox.Nrefg[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     ### PENALTY TERM   [ beta * (N_i*N_j) ]
                     LHSe[i,j] += beta * (1/self.length) * (1/self.InterfApprox.Xg[ig,0]) * self.InterfApprox.Nrefg[ig,i] * self.InterfApprox.Nrefg[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     
                 # COMPUTE RHS VECTOR TERMS 
                 ### SYMMETRIC NITSCHE'S METHOD TERM  [ PSI_D * (n dot nabla(N_i)) ]
-                RHSe[i] +=  (1/self.InterfApprox.Xg[ig,0])*self.InterfApprox.PSIg[ig] * n_dot_Ngrad[i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                RHSe[i] -=  (1/self.InterfApprox.Xg[ig,0])*self.InterfApprox.PSIg[ig] * n_dot_Ngrad[i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                 ### PENALTY TERM   [ beta * N_i * PSI_D ]
                 RHSe[i] +=  beta * (1/self.length) * (1/self.InterfApprox.Xg[ig,0]) * self.InterfApprox.PSIg[ig] * self.InterfApprox.Nrefg[ig,i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
         

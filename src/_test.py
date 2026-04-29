@@ -2203,6 +2203,215 @@ def verify_ghost_penalty_implementation(mesh, solver=None, verbose=True):
     return report
 
 
+# ============================================================================
+#                    QUADRATURE AND GHOST FACE VERIFICATION
+# ============================================================================
+
+def test_quadrature_area_mapping(mesh, tolerance=1e-8, verbose=True):
+    """
+    Verify that quadrature integration correctly maps all cells (cut and non-cut).
+
+    For each element, the quadrature must satisfy:
+        ∫_elem 1 dΩ = Σ_ig detJg[ig] * Wg[ig] ≈ analytical_area
+
+    This checks both the Jacobian mapping (detJg) and the quadrature weights (Wg).
+
+    Args:
+        - mesh (Mesh): Mesh object containing elements
+        - tolerance (float): Maximum relative error allowed (default 1e-8)
+        - verbose (bool): Print detailed results
+
+    Returns:
+        - (errors, all_passed): List of errors and boolean pass/fail
+    """
+    if verbose:
+        print("\n" + "="*70)
+        print("QUADRATURE AREA MAPPING VERIFICATION")
+        print("="*70)
+        print(f"Checking {len(mesh.Elements)} elements for correct quadrature mapping...")
+        print(f"{'Element':<10} {'Type':<12} {'Numerical':<15} {'Analytical':<15} {'Error %':<12} {'Status':<10}")
+        print("-" * 80)
+
+    errors = []
+    all_passed = True
+
+    for elem_idx, elem in enumerate(mesh.Elements):
+        elem_type = type(elem).__name__
+
+        # Different handling for cut vs non-cut elements
+        if hasattr(elem, 'SubElements') and elem.SubElements:
+            # CUT ELEMENT: integrate over subelements
+            area_numerical = 0.0
+            area_analytical = 0.0
+
+            for subelement in elem.SubElements:
+                for ig in range(subelement.ng):
+                    area_numerical += subelement.detJg[ig] * subelement.Wg[ig]
+
+                # Analytical area from subelement geometry
+                if hasattr(subelement, 'ComputeArea'):
+                    area_analytical += subelement.ComputeArea()
+        else:
+            # NON-CUT ELEMENT: integrate normally
+            area_numerical = 0.0
+            area_analytical = elem.ComputeArea() if hasattr(elem, 'ComputeArea') else None
+
+            for ig in range(elem.ng):
+                area_numerical += elem.detJg[ig] * elem.Wg[ig]
+
+        # Check if analytical area is available
+        if area_analytical is None or area_analytical == 0:
+            if verbose:
+                print(f"{elem_idx:<10} {elem_type:<12} {area_numerical:<15.6e} {'N/A':<15} {'N/A':<12} {'SKIP':<10}")
+            continue
+
+        # Compute relative error
+        rel_error = abs(area_numerical - area_analytical) / abs(area_analytical)
+        status = "PASS" if rel_error < tolerance else "FAIL"
+
+        if rel_error >= tolerance:
+            all_passed = False
+            errors.append({
+                'elem_idx': elem_idx,
+                'type': elem_type,
+                'numerical': area_numerical,
+                'analytical': area_analytical,
+                'rel_error': rel_error,
+                'message': f"Element {elem_idx} ({elem_type}): mapping error {rel_error:.2e} exceeds tolerance {tolerance}"
+            })
+
+        if verbose:
+            print(f"{elem_idx:<10} {elem_type:<12} {area_numerical:<15.6e} {area_analytical:<15.6e} {rel_error*100:<12.2e} {status:<10}")
+
+    # Summary
+    n_passed = len(mesh.Elements) - len(errors)
+    n_total = len(mesh.Elements)
+
+    if verbose:
+        print("-" * 80)
+        print(f"Result: {n_passed}/{n_total} elements passed")
+
+        if all_passed:
+            print("✓ All quadrature mappings are CORRECT")
+        else:
+            print(f"✗ {len(errors)} elements FAILED quadrature mapping test")
+            for err in errors:
+                print(f"  - {err['message']}")
+
+        print("="*70 + "\n")
+
+    return errors, all_passed
+
+
+def test_ghost_face_gauss_node_correspondence(mesh, tolerance=1e-10, verbose=True):
+    """
+    Verify that Gauss nodes on ghost faces match correctly between adjacent elements.
+
+    For each ghost face:
+    - Extract Gauss nodes from both adjacent elements
+    - Match them based on physical coordinates
+    - Verify 1-on-1 correspondence within tolerance
+
+    This checks the node permutation and element alignment.
+
+    Args:
+        - mesh (Mesh): Mesh object containing ghost faces
+        - tolerance (float): Maximum coordinate difference allowed (default 1e-10)
+        - verbose (bool): Print detailed results
+
+    Returns:
+        - (mismatches, all_passed): List of mismatches and boolean pass/fail
+    """
+    if verbose:
+        print("\n" + "="*70)
+        print("GHOST FACE GAUSS NODE CORRESPONDENCE VERIFICATION")
+        print("="*70)
+        print(f"Checking {len(mesh.GhostFaces)} ghost faces for correct node matching...")
+
+    mismatches = []
+    all_passed = True
+
+    for face_idx, ghost_face in enumerate(mesh.GhostFaces):
+        # Extract information about adjacent elements
+        elem0_idx, edge0_idx, face0_list_idx = ghost_face[1]
+        elem1_idx, edge1_idx, face1_list_idx = ghost_face[2]
+
+        elem0 = mesh.Elements[elem0_idx]
+        elem1 = mesh.Elements[elem1_idx]
+
+        face0 = elem0.GhostFaces[face0_list_idx]
+        face1 = elem1.GhostFaces[face1_list_idx]
+
+        # Extract Gauss nodes (physical coordinates)
+        nodes0 = face0.Xg  # Shape: [ng, 2] or [ng, 3]
+        nodes1 = face1.Xg
+
+        if len(nodes0) != len(nodes1):
+            all_passed = False
+            mismatches.append({
+                'face_idx': face_idx,
+                'elem0': elem0_idx,
+                'elem1': elem1_idx,
+                'message': f"Ghost face {face_idx}: Different number of Gauss points ({len(nodes0)} vs {len(nodes1)})"
+            })
+            if verbose:
+                print(f"✗ Ghost face {face_idx} (elems {elem0_idx}, {elem1_idx}): Different ng counts")
+            continue
+
+        # Try to match nodes by proximity
+        matched = [False] * len(nodes0)
+
+        for i, node0 in enumerate(nodes0):
+            distances = np.linalg.norm(nodes1 - node0, axis=1)
+            closest_idx = np.argmin(distances)
+            min_distance = distances[closest_idx]
+
+            if min_distance < tolerance:
+                matched[i] = True
+            else:
+                all_passed = False
+                mismatches.append({
+                    'face_idx': face_idx,
+                    'elem0': elem0_idx,
+                    'elem1': elem1_idx,
+                    'node_idx': i,
+                    'node0': node0,
+                    'closest_in_elem1': nodes1[closest_idx],
+                    'distance': min_distance,
+                    'message': f"Ghost face {face_idx}, node {i}: No match within tolerance {tolerance} (closest: {min_distance:.2e})"
+                })
+
+        # Check if all nodes were matched
+        if not all(matched):
+            if verbose:
+                unmatched = [i for i, m in enumerate(matched) if not m]
+                print(f"✗ Ghost face {face_idx} (elems {elem0_idx}, {elem1_idx}): {len(unmatched)} unmatched nodes")
+        else:
+            if verbose:
+                print(f"✓ Ghost face {face_idx} (elems {elem0_idx}, {elem1_idx}): All {len(nodes0)} nodes matched")
+
+    # Summary
+    n_total = len(mesh.GhostFaces)
+    n_passed = n_total - len([m for m in mismatches if 'node_idx' in m])
+
+    if verbose:
+        print("-" * 80)
+        print(f"Result: {n_passed}/{n_total} ghost faces have correct node correspondence")
+
+        if all_passed:
+            print("✓ All ghost face nodes MATCH correctly")
+        else:
+            print(f"✗ {len(mismatches)} issues found in ghost face correspondence")
+            for mismatch in mismatches[:10]:  # Print first 10
+                print(f"  - {mismatch['message']}")
+            if len(mismatches) > 10:
+                print(f"  ... and {len(mismatches) - 10} more issues")
+
+        print("="*70 + "\n")
+
+    return mismatches, all_passed
+
+
 # Main entry point for running tests
 if __name__ == "__main__":
     EqPrint("Running standalone EQUILIPY validation tests...")
