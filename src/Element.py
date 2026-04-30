@@ -989,9 +989,13 @@ class Element:
             SUBELEM.dNg = [np.zeros([SUBELEM.ng,SUBELEM.n,SUBELEM.dim])]
             SUBELEM.detJg = np.zeros([SUBELEM.ng])
             for ig in range(SUBELEM.ng):
-                J = Jacobian(SUBELEM.Xe,SUBELEM.dNrefg[deriv_order-1][ig,:])
-                SUBELEM.dNg[deriv_order-1][ig] = PhysicalGradient([SUBELEM.dNrefg[deriv_order-1][ig]],np.linalg.inv(J))
-                SUBELEM.detJg[ig] = abs(np.linalg.det(J))
+                # Parent map with dN_parent/dξ_parent — map   ξ_parent →[N_parent]→ x_phys   (needed for BOTH gradient and scaling)
+                J_parent = Jacobian(self.Xe, SUBELEM.dNrefg[deriv_order-1][ig])
+                # Intermediary map with dN_sub/dξ_stand —  map  ξ_stand →[N_sub]→ ξ_parent   (needed ONLY for scaling)
+                J_inter = Jacobian(SUBELEM.XIe, dNstand2D[deriv_order-1][ig]) 
+
+                SUBELEM.dNg[deriv_order-1][ig] = PhysicalGradient([SUBELEM.dNrefg[deriv_order-1][ig]],np.linalg.inv(J_parent))
+                SUBELEM.detJg[ig] = abs(np.linalg.det(J_inter)) * abs(np.linalg.det(J_parent))
         
             # CHECK NUMERICAL QUADRATURE
             SUBELEM.CheckQuadrature2D(elemindex = self.index)

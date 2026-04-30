@@ -34,6 +34,7 @@ class EquilipyL2error:
         Constructor to initialize error tracking attributes.
         """
         # INITIATE ERROR ARRAYS
+        # STANDARD METRICS
         self.PSIexact = None                    # ANALYTICAL SOLUTION FIELD
         self.PSIerror = None                    # ABSOLUTE PSI FIELD ERROR 
         self.PSIrelerror = None                 # ABSOLUTE RELATIVE PSI FIELD ERROR 
@@ -41,7 +42,15 @@ class EquilipyL2error:
         self.RelErrorEuclinorm = None           # EUCLIDEAN NORM RELATIVE ERROR
         self.ErrorL2norm = None                 # L2 INTEGRAL NORM ERROR 
         self.RelErrorL2norm = None              # L2 INTEGRAL NORM RELATIVE ERROR
-        
+        # CUTFEM METRICS
+        self.CutElemsErrorL2norm = None         # L2 ERROR IN CUT ELEMENTS
+        self.CutElemsRelErrorL2norm = None      # L2 RELATIVE ERROR IN CUT ELEMENTS
+        self.InterfaceErrorL2norm = None        # L2 ERROR ON THE PLASMA INTERFACE
+        self.MaxSolJumpGF = None                # MAXIMUM SOLUTION JUMP AT GHOST FACES
+        self.MaxGradJumpGF = None               # MAXIMUM GRADIENT JUMP AT GHOST FACES
+        self.dpsidnJumpGF = None                # NORMAL DERIVATIVE JUMP AT GHOST FACES 
+        self.CutFEMDiagnostics = None           # DICTIONARY TO STORE ALL CUTFEM ERROR DIAGNOSTICS (FOR FUTURE ANALYSIS)
+
         super().__init__()
         return
     
@@ -407,22 +416,22 @@ class EquilipyL2error:
         cut_L2_squared, exact_L2_squared_cut = self._compute_element_L2_errors(cut_elements)
         interior_L2_squared, exact_L2_squared_interior = self._compute_element_L2_errors(interior_elements)
 
-        cut_L2 = np.sqrt(cut_L2_squared) if cut_L2_squared > 0 else 0.0
+        self.CutElemsErrorL2norm = np.sqrt(cut_L2_squared) if cut_L2_squared > 0 else 0.0
         interior_L2 = np.sqrt(interior_L2_squared) if interior_L2_squared > 0 else 0.0
-        cut_rel_L2 = cut_L2 / np.sqrt(exact_L2_squared_cut) if exact_L2_squared_cut > 0 else 0.0
+        self.CutElemsRelErrorL2norm = self.CutElemsErrorL2norm / np.sqrt(exact_L2_squared_cut) if exact_L2_squared_cut > 0 else 0.0
         interior_rel_L2 = interior_L2 / np.sqrt(exact_L2_squared_interior) if exact_L2_squared_interior > 0 else 0.0
 
         diagnostics['cut_elements'] = {
             'count': len(cut_elements),
-            'L2_error': cut_L2,
-            'relative_L2_error': cut_rel_L2
+            'L2_error': self.CutElemsErrorL2norm,
+            'relative_L2_error': self.CutElemsRelErrorL2norm
         }
         diagnostics['interior_elements'] = {
             'count': len(interior_elements),
             'L2_error': interior_L2,
             'relative_L2_error': interior_rel_L2
         }
-        diagnostics['summary']['error_ratio_cut_interior'] = cut_L2 / (interior_L2 + 1e-16)
+        diagnostics['summary']['error_ratio_cut_interior'] = self.CutElemsErrorL2norm / (interior_L2 + 1e-16)
 
         # ==========================================================================
         # 2. COMPUTE SOLUTION CONTINUITY AT GHOST FACES
@@ -532,7 +541,7 @@ class EquilipyL2error:
 
             EqPrint("[1] ELEMENT-WISE ERROR DISTRIBUTION")
             EqPrint("-"*50)
-            EqPrint(f"  Cut elements ({len(cut_elements)}):     L2 = {cut_L2:.4e}, Rel = {cut_rel_L2:.4e}")
+            EqPrint(f"  Cut elements ({len(cut_elements)}):     L2 = {self.CutElemsErrorL2norm:.4e}, Rel = {self.CutElemsRelErrorL2norm:.4e}")
             EqPrint(f"  Interior elements ({len(interior_elements)}):  L2 = {interior_L2:.4e}, Rel = {interior_rel_L2:.4e}")
             EqPrint(f"  Error ratio (cut/interior): {diagnostics['summary']['error_ratio_cut_interior']:.4f}")
 
