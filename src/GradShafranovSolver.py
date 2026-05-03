@@ -458,7 +458,7 @@ class GradShafranovSolver(EquilipyInitialisation,
 
                     # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM
                     # NOTE: The 1/R factor is required for consistency with axisymmetric Grad-Shafranov weak form
-                    LHSe += (penalty * FACE0.detJg1D[ig] * FACE0.Wg[ig] / FACE0.Xg[ig,0]) * np.outer(n_dot_dNg, n_dot_dNg)
+                    LHSe -= (penalty * FACE0.detJg1D[ig] * FACE0.Wg[ig] / FACE0.Xg[ig,0]) * np.outer(n_dot_dNg, n_dot_dNg)
 
 
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
