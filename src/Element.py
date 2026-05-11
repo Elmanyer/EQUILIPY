@@ -1301,15 +1301,15 @@ class Element:
                     ### CONSISTENCY TERM  [ N_i*(n dot nabla(N_j)) ]
                     LHSe[i,j] += (1/self.InterfApprox.Xg[ig,0])*self.InterfApprox.Nrefg[ig,i] * n_dot_Ngrad[j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     ### SYMMETRIC NITSCHE'S METHOD TERM   [ N_j*(n dot nabla(N_i)) ]
-                    LHSe[i,j] -= (1/self.InterfApprox.Xg[ig,0])*n_dot_Ngrad[i]*self.InterfApprox.Nrefg[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                    LHSe[i,j] += (1/self.InterfApprox.Xg[ig,0])*n_dot_Ngrad[i]*self.InterfApprox.Nrefg[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     ### PENALTY TERM   [ beta * (N_i*N_j) ]
-                    LHSe[i,j] += beta * (1/self.length) * (1/self.InterfApprox.Xg[ig,0]) * self.InterfApprox.Nrefg[ig,i] * self.InterfApprox.Nrefg[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                    LHSe[i,j] -= beta * (1/self.length) * (1/self.InterfApprox.Xg[ig,0]) * self.InterfApprox.Nrefg[ig,i] * self.InterfApprox.Nrefg[ig,j] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                     
                 # COMPUTE RHS VECTOR TERMS 
                 ### SYMMETRIC NITSCHE'S METHOD TERM  [ PSI_D * (n dot nabla(N_i)) ]
-                RHSe[i] -=  (1/self.InterfApprox.Xg[ig,0])*self.InterfApprox.PSIg[ig] * n_dot_Ngrad[i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                RHSe[i] +=  (1/self.InterfApprox.Xg[ig,0])*self.InterfApprox.PSIg[ig] * n_dot_Ngrad[i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
                 ### PENALTY TERM   [ beta * N_i * PSI_D ]
-                RHSe[i] +=  beta * (1/self.length) * (1/self.InterfApprox.Xg[ig,0]) * self.InterfApprox.PSIg[ig] * self.InterfApprox.Nrefg[ig,i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
+                RHSe[i] -=  beta * (1/self.length) * (1/self.InterfApprox.Xg[ig,0]) * self.InterfApprox.PSIg[ig] * self.InterfApprox.Nrefg[ig,i] * self.InterfApprox.detJg1D[ig] * self.InterfApprox.Wg[ig]
         
         return LHSe, RHSe
     
