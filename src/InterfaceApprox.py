@@ -16,11 +16,13 @@
 # Date: July 2025
 # Institution: Barcelona Supercomputing Center (BSC)
 # Department: Computer Applications in Science and Engineering (CASE)
-# Research Group: Nuclear Fusion  
+# Research Group: Nuclear Fusion
 
 
 # This script contains the definition for class InterfaceApprox, an object representing
 # the elemental approximation of an interface parametrised by a level-set function.
+
+from _header import EQUILIPY_ROOT
 
 class InterfaceApprox:
     """

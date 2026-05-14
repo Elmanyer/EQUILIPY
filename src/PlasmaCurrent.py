@@ -16,10 +16,11 @@
 # Date: July 2025
 # Institution: Barcelona Supercomputing Center (BSC)
 # Department: Computer Applications in Science and Engineering (CASE)
-# Research Group: Nuclear Fusion  
+# Research Group: Nuclear Fusion
 
 
 
+from _header import EQUILIPY_ROOT
 from weakref import proxy
 import numpy as np
 from AnalyticalSolutions import *

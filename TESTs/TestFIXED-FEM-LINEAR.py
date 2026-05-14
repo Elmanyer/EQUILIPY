@@ -1,5 +1,4 @@
-import sys
-sys.path.append('../src/')
+from _header import EQUILIPY_ROOT
 
 from GradShafranovSolver import *
 

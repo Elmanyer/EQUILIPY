@@ -1,0 +1,782 @@
+[
+  {
+    "elem_type": "TRI03",
+    "elem_order": 1,
+    "mesh_level": "COARSE",
+    "mesh_name": "TRI03-COARSE-LINEAR",
+    "beta": 1000.0,
+    "zeta": 0.005,
+    "h": 0.7173373169275705,
+    "L2_error": 0.0025054027859539897,
+    "relL2_error": 0.15595654051509902,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 3,
+        "L2_error": 0.009599222714186487,
+        "relative_L2_error": 0.9211489449177003
+      },
+      "interior_elements": {
+        "count": 9,
+        "L2_error": 0.014279188346613852,
+        "relative_L2_error": 0.8292228022648437
+      },
+      "ghost_faces": {
+        "count": 70,
+        "solution_jump_max": 3.469446951953614e-18,
+        "solution_jump_mean": 7.628136713558728e-20,
+        "solution_jump_std": 3.3439729212800083e-19,
+        "gradient_jump_max": 0.8433655218366755,
+        "gradient_jump_mean": 0.23749132880908297,
+        "gradient_jump_std": 0.1912639507382887,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11947500763224625,
+        "relative_L2_error": 1.0296884834433666
+      },
+      "summary": {
+        "error_ratio_cut_interior": 0.6722526855990919,
+        "total_L2_error": 0.0025054027859539897,
+        "total_relative_L2_error": 0.15595654051509902,
+        "ghost_penalty_enabled": true,
+        "zeta": 0.005
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 0.8511740956444128,
+        "max_jump": 0.8433655218366755
+      }
+    }
+  },
+  {
+    "elem_type": "TRI03",
+    "elem_order": 1,
+    "mesh_level": "MEDIUM",
+    "mesh_name": "TRI03-MEDIUM-LINEAR",
+    "beta": 1000000.0,
+    "zeta": 15.0,
+    "h": 0.5053721433961758,
+    "L2_error": 0.0018039593990131868,
+    "relL2_error": 0.11228609061850933,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 19,
+        "L2_error": 0.013510371772344638,
+        "relative_L2_error": 0.8672693735716552
+      },
+      "interior_elements": {
+        "count": 19,
+        "L2_error": 0.014776486978061358,
+        "relative_L2_error": 0.8168688196023423
+      },
+      "ghost_faces": {
+        "count": 110,
+        "solution_jump_max": 3.469446951953614e-18,
+        "solution_jump_mean": 5.938470990204695e-20,
+        "solution_jump_std": 2.7851249262149325e-19,
+        "gradient_jump_max": 0.7117497999161844,
+        "gradient_jump_mean": 0.21881422568279024,
+        "gradient_jump_std": 0.1624341791296223,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11697921248557529,
+        "relative_L2_error": 1.0062956745128682
+      },
+      "summary": {
+        "error_ratio_cut_interior": 0.9143155468822453,
+        "total_L2_error": 0.0018039593990131868,
+        "total_relative_L2_error": 0.11228609061850933,
+        "ghost_penalty_enabled": true,
+        "zeta": 15.0
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 0.8337970478797545,
+        "max_jump": 0.7117497999161844
+      }
+    }
+  },
+  {
+    "elem_type": "TRI03",
+    "elem_order": 1,
+    "mesh_level": "INTERMEDIATE",
+    "mesh_name": "TRI03-INTERMEDIATE-LINEAR",
+    "beta": 10000.0,
+    "zeta": 13.0,
+    "h": 0.41328309033157057,
+    "L2_error": 0.005339842699790747,
+    "relL2_error": 0.33237395478190473,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 49,
+        "L2_error": 0.022010460365340354,
+        "relative_L2_error": 0.9129480447241458
+      },
+      "interior_elements": {
+        "count": 46,
+        "L2_error": 0.019525901658998996,
+        "relative_L2_error": 0.8474494558127873
+      },
+      "ghost_faces": {
+        "count": 127,
+        "solution_jump_max": 1.734723475976807e-18,
+        "solution_jump_mean": 4.0470834046764524e-20,
+        "solution_jump_std": 1.8190449827151903e-19,
+        "gradient_jump_max": 1.0196867269680374,
+        "gradient_jump_mean": 0.20515625962177245,
+        "gradient_jump_std": 0.19367316842472476,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11688119402344317,
+        "relative_L2_error": 1.0049589808650177
+      },
+      "summary": {
+        "error_ratio_cut_interior": 1.1272442497013282,
+        "total_L2_error": 0.005339842699790747,
+        "total_relative_L2_error": 0.33237395478190473,
+        "ghost_penalty_enabled": true,
+        "zeta": 13.0
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 0.879621506898933,
+        "max_jump": 1.0196867269680374
+      }
+    }
+  },
+  {
+    "elem_type": "TRI03",
+    "elem_order": 1,
+    "mesh_level": "FINE",
+    "mesh_name": "TRI03-FINE-LINEAR",
+    "beta": 1000000.0,
+    "zeta": 20.0,
+    "h": 0.3025247897188234,
+    "L2_error": 0.0026553681624719625,
+    "relL2_error": 0.16528103675755296,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 118,
+        "L2_error": 0.023473426362108626,
+        "relative_L2_error": 0.8891259063167296
+      },
+      "interior_elements": {
+        "count": 67,
+        "L2_error": 0.01644257531567372,
+        "relative_L2_error": 0.8314920989576893
+      },
+      "ghost_faces": {
+        "count": 182,
+        "solution_jump_max": 1.734723475976807e-18,
+        "solution_jump_mean": 3.872771152977354e-20,
+        "solution_jump_std": 1.7245265266846046e-19,
+        "gradient_jump_max": 0.8365729184354185,
+        "gradient_jump_mean": 0.19896150395524825,
+        "gradient_jump_std": 0.18417731897406833,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11669784941726122,
+        "relative_L2_error": 1.0028344221760683
+      },
+      "summary": {
+        "error_ratio_cut_interior": 1.427600355263854,
+        "total_L2_error": 0.0026553681624719625,
+        "total_relative_L2_error": 0.16528103675755296,
+        "ghost_penalty_enabled": true,
+        "zeta": 20.0
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 0.7966012489942643,
+        "max_jump": 0.8365729184354184
+      }
+    }
+  },
+  {
+    "elem_type": "TRI03",
+    "elem_order": 1,
+    "mesh_level": "SUPERFINE",
+    "mesh_name": "TRI03-SUPERFINE-LINEAR",
+    "beta": 1000.0,
+    "zeta": 20.0,
+    "h": 0.20129551492342507,
+    "L2_error": 0.00243123623017023,
+    "relL2_error": 0.15133011541618335,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 401,
+        "L2_error": 0.028510329663110352,
+        "relative_L2_error": 0.8965585508844819
+      },
+      "interior_elements": {
+        "count": 107,
+        "L2_error": 0.013310375028029816,
+        "relative_L2_error": 0.8087592496936239
+      },
+      "ghost_faces": {
+        "count": 261,
+        "solution_jump_max": 4.336808689942018e-19,
+        "solution_jump_mean": 6.352206214913476e-21,
+        "solution_jump_std": 2.774646082907904e-20,
+        "gradient_jump_max": 0.38323232456476714,
+        "gradient_jump_mean": 0.07425839265241714,
+        "gradient_jump_std": 0.0739900743083679,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11655025737821056,
+        "relative_L2_error": 1.001106593724918
+      },
+      "summary": {
+        "error_ratio_cut_interior": 2.141962912620517,
+        "total_L2_error": 0.00243123623017023,
+        "total_relative_L2_error": 0.15133011541618335,
+        "ghost_penalty_enabled": true,
+        "zeta": 20.0
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 0.30802623612853014,
+        "max_jump": 0.38323232456476714
+      }
+    }
+  },
+  {
+    "elem_type": "TRI06",
+    "elem_order": 2,
+    "mesh_level": "COARSE",
+    "mesh_name": "TRI06-COARSE-LINEAR",
+    "beta": 10000.0,
+    "zeta": 0.085,
+    "h": 0.7173373169275705,
+    "L2_error": 0.0034892481775239893,
+    "relL2_error": 0.21718511368076768,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 3,
+        "L2_error": 0.009577762042409663,
+        "relative_L2_error": 0.9190888158261048
+      },
+      "interior_elements": {
+        "count": 9,
+        "L2_error": 0.014603080292828459,
+        "relative_L2_error": 0.8480317832150044
+      },
+      "ghost_faces": {
+        "count": 70,
+        "solution_jump_max": 3.469446951953614e-18,
+        "solution_jump_mean": 8.565519841853487e-20,
+        "solution_jump_std": 3.67773226078434e-19,
+        "gradient_jump_max": 1.274717590576953,
+        "gradient_jump_mean": 0.19498562067561664,
+        "gradient_jump_std": 0.20874327788367678,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11647391014170379,
+        "relative_L2_error": 1.0001228847817287
+      },
+      "summary": {
+        "error_ratio_cut_interior": 0.6558727234495324,
+        "total_L2_error": 0.0034892481775239893,
+        "total_relative_L2_error": 0.21718511368076768,
+        "ghost_penalty_enabled": true,
+        "zeta": 0.085
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 0.7542288933427314,
+        "max_jump": 1.274717590576953
+      },
+      "normal_deriv_order_2": {
+        "L2_norm": 50.47588956436364,
+        "max_jump": 45.138330188954
+      }
+    }
+  },
+  {
+    "elem_type": "TRI06",
+    "elem_order": 2,
+    "mesh_level": "MEDIUM",
+    "mesh_name": "TRI06-MEDIUM-LINEAR",
+    "beta": 10000.0,
+    "zeta": 0.15000000000000002,
+    "h": 0.5053721433961758,
+    "L2_error": 0.0031997945188238764,
+    "relL2_error": 0.19916833383340973,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 19,
+        "L2_error": 0.01388054227363322,
+        "relative_L2_error": 0.891031552394783
+      },
+      "interior_elements": {
+        "count": 19,
+        "L2_error": 0.015250628198903635,
+        "relative_L2_error": 0.8430799303283216
+      },
+      "ghost_faces": {
+        "count": 110,
+        "solution_jump_max": 3.469446951953614e-18,
+        "solution_jump_mean": 7.684642244801969e-20,
+        "solution_jump_std": 3.416246521456591e-19,
+        "gradient_jump_max": 2.282563407047388,
+        "gradient_jump_mean": 0.1921120197127815,
+        "gradient_jump_std": 0.2344567238617032,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11645778138192495,
+        "relative_L2_error": 1.0000056697897903
+      },
+      "summary": {
+        "error_ratio_cut_interior": 0.9101620007122722,
+        "total_L2_error": 0.0031997945188238764,
+        "total_relative_L2_error": 0.19916833383340973,
+        "ghost_penalty_enabled": true,
+        "zeta": 0.15000000000000002
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 0.8596936766080163,
+        "max_jump": 2.282563407047388
+      },
+      "normal_deriv_order_2": {
+        "L2_norm": 80.8173406116948,
+        "max_jump": 179.71014949597202
+      }
+    }
+  },
+  {
+    "elem_type": "TRI06",
+    "elem_order": 2,
+    "mesh_level": "INTERMEDIATE",
+    "mesh_name": "TRI06-INTERMEDIATE-LINEAR",
+    "beta": 10000.0,
+    "zeta": 0.13,
+    "h": 0.41328309033157057,
+    "L2_error": 0.0024642414510867637,
+    "relL2_error": 0.1533844942505797,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 49,
+        "L2_error": 0.021836193795407903,
+        "relative_L2_error": 0.905719711029934
+      },
+      "interior_elements": {
+        "count": 46,
+        "L2_error": 0.019387049682655595,
+        "relative_L2_error": 0.8414232871871301
+      },
+      "ghost_faces": {
+        "count": 127,
+        "solution_jump_max": 6.938893903907228e-18,
+        "solution_jump_mean": 8.036364036049462e-20,
+        "solution_jump_std": 4.19892759970921e-19,
+        "gradient_jump_max": 2.507554701676126,
+        "gradient_jump_mean": 0.18447594677991488,
+        "gradient_jump_std": 0.24737137682930893,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11650124227285044,
+        "relative_L2_error": 1.000372602726577
+      },
+      "summary": {
+        "error_ratio_cut_interior": 1.1263288717387099,
+        "total_L2_error": 0.0024642414510867637,
+        "total_relative_L2_error": 0.1533844942505797,
+        "ghost_penalty_enabled": true,
+        "zeta": 0.13
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 0.8302567283467756,
+        "max_jump": 2.507554701676126
+      },
+      "normal_deriv_order_2": {
+        "L2_norm": 118.27786733425395,
+        "max_jump": 192.7064874275487
+      }
+    }
+  },
+  {
+    "elem_type": "TRI06",
+    "elem_order": 2,
+    "mesh_level": "FINE",
+    "mesh_name": "TRI06-FINE-LINEAR",
+    "beta": 1000.0,
+    "zeta": 0.2,
+    "h": 0.3025247897188234,
+    "L2_error": 0.002034453660421937,
+    "relL2_error": 0.12663273951714962,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 118,
+        "L2_error": 0.023518774364293116,
+        "relative_L2_error": 0.8908436190124653
+      },
+      "interior_elements": {
+        "count": 67,
+        "L2_error": 0.016365270475588948,
+        "relative_L2_error": 0.8275827479593236
+      },
+      "ghost_faces": {
+        "count": 182,
+        "solution_jump_max": 1.734723475976807e-18,
+        "solution_jump_mean": 3.2679027534637063e-20,
+        "solution_jump_std": 1.3133455754089133e-19,
+        "gradient_jump_max": 1.9246861727244342,
+        "gradient_jump_mean": 0.1747679401762504,
+        "gradient_jump_std": 0.2321596569986267,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11647511669212848,
+        "relative_L2_error": 1.0001491004849044
+      },
+      "summary": {
+        "error_ratio_cut_interior": 1.4371149196326733,
+        "total_L2_error": 0.002034453660421937,
+        "total_relative_L2_error": 0.12663273951714962,
+        "ghost_penalty_enabled": true,
+        "zeta": 0.2
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 0.8046796313837294,
+        "max_jump": 1.9246861727244338
+      },
+      "normal_deriv_order_2": {
+        "L2_norm": 120.52509470081661,
+        "max_jump": 269.61772341915764
+      }
+    }
+  },
+  {
+    "elem_type": "TRI06",
+    "elem_order": 2,
+    "mesh_level": "SUPERFINE",
+    "mesh_name": "TRI06-SUPERFINE-LINEAR",
+    "beta": 1000.0,
+    "zeta": 0.5,
+    "h": 0.20129551492342507,
+    "L2_error": 0.0009351465743534155,
+    "relL2_error": 0.058207358006861505,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 401,
+        "L2_error": 0.028343053704238837,
+        "relative_L2_error": 0.8912982451468074
+      },
+      "interior_elements": {
+        "count": 107,
+        "L2_error": 0.013289822762811722,
+        "relative_L2_error": 0.8075106110904879
+      },
+      "ghost_faces": {
+        "count": 261,
+        "solution_jump_max": 1.734723475976807e-18,
+        "solution_jump_mean": 3.4404358030654075e-20,
+        "solution_jump_std": 1.4696162605355482e-19,
+        "gradient_jump_max": 3.429896880007224,
+        "gradient_jump_mean": 0.19780985577542062,
+        "gradient_jump_std": 0.2514316301325434,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11645995481647886,
+        "relative_L2_error": 1.000019196127331
+      },
+      "summary": {
+        "error_ratio_cut_interior": 2.1326886151973103,
+        "total_L2_error": 0.0009351465743534155,
+        "total_relative_L2_error": 0.058207358006861505,
+        "ghost_penalty_enabled": true,
+        "zeta": 0.5
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 0.9388374862580698,
+        "max_jump": 3.429896880007224
+      },
+      "normal_deriv_order_2": {
+        "L2_norm": 268.6247576050338,
+        "max_jump": 589.7308658561334
+      }
+    }
+  },
+  {
+    "elem_type": "TRI10",
+    "elem_order": 3,
+    "mesh_level": "COARSE",
+    "mesh_name": "TRI10-COARSE-LINEAR",
+    "beta": 1000.0,
+    "zeta": 10.0,
+    "h": 0.7173373169275705,
+    "L2_error": 0.01152112381540397,
+    "relL2_error": 0.7171219795884205,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 3,
+        "L2_error": 0.009532639408760884,
+        "relative_L2_error": 0.914759558675907
+      },
+      "interior_elements": {
+        "count": 9,
+        "L2_error": 0.01490254426680995,
+        "relative_L2_error": 0.8654224048197017
+      },
+      "ghost_faces": {
+        "count": 70,
+        "solution_jump_max": 8.326672684688674e-17,
+        "solution_jump_mean": 5.966459745557041e-18,
+        "solution_jump_std": 9.140243233220293e-18,
+        "gradient_jump_max": 17.72704206722802,
+        "gradient_jump_mean": 1.2091405131434299,
+        "gradient_jump_std": 1.9033372213828388,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11802429407867283,
+        "relative_L2_error": 1.013453466085448
+      },
+      "summary": {
+        "error_ratio_cut_interior": 0.6396652301843075,
+        "total_L2_error": 0.01152112381540397,
+        "total_relative_L2_error": 0.7171219795884205,
+        "ghost_penalty_enabled": true,
+        "zeta": 10.0
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 5.599265260615751,
+        "max_jump": 17.727042067228016
+      },
+      "normal_deriv_order_2": {
+        "L2_norm": 36.34332750798265,
+        "max_jump": 87.33440862806553
+      },
+      "normal_deriv_order_3": {
+        "L2_norm": 92.69612329922367,
+        "max_jump": 148.41792030922693
+      }
+    }
+  },
+  {
+    "elem_type": "TRI10",
+    "elem_order": 3,
+    "mesh_level": "MEDIUM",
+    "mesh_name": "TRI10-MEDIUM-LINEAR",
+    "beta": 100.0,
+    "zeta": 0.25,
+    "h": 0.5053721433961758,
+    "L2_error": 0.007359025089733093,
+    "relL2_error": 0.458055902392344,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 19,
+        "L2_error": 0.013604489203803324,
+        "relative_L2_error": 0.8733110404627492
+      },
+      "interior_elements": {
+        "count": 19,
+        "L2_error": 0.015343472990808661,
+        "relative_L2_error": 0.8482127510558441
+      },
+      "ghost_faces": {
+        "count": 110,
+        "solution_jump_max": 6.245004513516506e-17,
+        "solution_jump_mean": 4.433154677119527e-18,
+        "solution_jump_std": 7.504055779700958e-18,
+        "gradient_jump_max": 11.258762590015735,
+        "gradient_jump_mean": 1.1654735744769145,
+        "gradient_jump_std": 1.5317634809825786,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11455079337111565,
+        "relative_L2_error": 0.9836257116331031
+      },
+      "summary": {
+        "error_ratio_cut_interior": 0.8866629616354038,
+        "total_L2_error": 0.007359025089733093,
+        "total_relative_L2_error": 0.458055902392344,
+        "ghost_penalty_enabled": true,
+        "zeta": 0.25
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 5.810135122935095,
+        "max_jump": 11.258762590015738
+      },
+      "normal_deriv_order_2": {
+        "L2_norm": 780.8599930994941,
+        "max_jump": 2737.474747565508
+      },
+      "normal_deriv_order_3": {
+        "L2_norm": 12122.793936254284,
+        "max_jump": 33620.50293103303
+      }
+    }
+  },
+  {
+    "elem_type": "TRI10",
+    "elem_order": 3,
+    "mesh_level": "INTERMEDIATE",
+    "mesh_name": "TRI10-INTERMEDIATE-LINEAR",
+    "beta": 100000.0,
+    "zeta": 1.0,
+    "h": 0.41328309033157057,
+    "L2_error": 0.007296500186781164,
+    "relL2_error": 0.45416409600315705,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 49,
+        "L2_error": 0.022141874526272743,
+        "relative_L2_error": 0.9183988303633789
+      },
+      "interior_elements": {
+        "count": 46,
+        "L2_error": 0.019587018671407216,
+        "relative_L2_error": 0.8501020134160561
+      },
+      "ghost_faces": {
+        "count": 127,
+        "solution_jump_max": 9.107298248878237e-17,
+        "solution_jump_mean": 2.102479170426638e-18,
+        "solution_jump_std": 5.89402850261711e-18,
+        "gradient_jump_max": 14.472108402892793,
+        "gradient_jump_mean": 0.6613724392136179,
+        "gradient_jump_std": 1.4884778003738564,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11645140042520702,
+        "relative_L2_error": 0.9999457534323427
+      },
+      "summary": {
+        "error_ratio_cut_interior": 1.130436178048625,
+        "total_L2_error": 0.007296500186781164,
+        "total_relative_L2_error": 0.45416409600315705,
+        "ghost_penalty_enabled": true,
+        "zeta": 1.0
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 4.03976308827379,
+        "max_jump": 14.472108402892793
+      },
+      "normal_deriv_order_2": {
+        "L2_norm": 426.4997246047178,
+        "max_jump": 1351.1345527697263
+      },
+      "normal_deriv_order_3": {
+        "L2_norm": 2642.4454425486006,
+        "max_jump": 5380.413613069728
+      }
+    }
+  },
+  {
+    "elem_type": "TRI10",
+    "elem_order": 3,
+    "mesh_level": "FINE",
+    "mesh_name": "TRI10-FINE-LINEAR",
+    "beta": 10000.0,
+    "zeta": 0.006999999999999999,
+    "h": 0.3025247897188234,
+    "L2_error": 0.0029876662414346747,
+    "relL2_error": 0.18596459987094835,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 118,
+        "L2_error": 0.023298924989551655,
+        "relative_L2_error": 0.8825161473222489
+      },
+      "interior_elements": {
+        "count": 67,
+        "L2_error": 0.016257303462253805,
+        "relative_L2_error": 0.8221230020053973
+      },
+      "ghost_faces": {
+        "count": 182,
+        "solution_jump_max": 1.3877787807814457e-17,
+        "solution_jump_mean": 6.379640594400375e-19,
+        "solution_jump_std": 1.10284117721127e-18,
+        "gradient_jump_max": 4.328233145392177,
+        "gradient_jump_mean": 0.24761439293945653,
+        "gradient_jump_std": 0.4045223963222139,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11645869320665787,
+        "relative_L2_error": 1.000008200613147
+      },
+      "summary": {
+        "error_ratio_cut_interior": 1.4331358852743898,
+        "total_L2_error": 0.0029876662414346747,
+        "total_relative_L2_error": 0.18596459987094835,
+        "ghost_penalty_enabled": true,
+        "zeta": 0.006999999999999999
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 1.4017254613351908,
+        "max_jump": 4.328233145392178
+      },
+      "normal_deriv_order_2": {
+        "L2_norm": 599.6492424566204,
+        "max_jump": 2705.0517837740367
+      },
+      "normal_deriv_order_3": {
+        "L2_norm": 46855.609869898246,
+        "max_jump": 94264.23970026721
+      }
+    }
+  },
+  {
+    "elem_type": "TRI10",
+    "elem_order": 3,
+    "mesh_level": "SUPERFINE",
+    "mesh_name": "TRI10-SUPERFINE-LINEAR",
+    "beta": 100000.0,
+    "zeta": 0.0085,
+    "h": 0.20129551492342507,
+    "L2_error": 0.0024142294037877658,
+    "relL2_error": 0.15027153931906106,
+    "diagnostics": {
+      "cut_elements": {
+        "count": 401,
+        "L2_error": 0.028396207573213834,
+        "relative_L2_error": 0.8929697766840238
+      },
+      "interior_elements": {
+        "count": 107,
+        "L2_error": 0.013291309073876484,
+        "relative_L2_error": 0.8076007724348474
+      },
+      "ghost_faces": {
+        "count": 261,
+        "solution_jump_max": 1.3877787807814457e-17,
+        "solution_jump_mean": 6.925927700962413e-19,
+        "solution_jump_std": 1.2848133329985464e-18,
+        "gradient_jump_max": 14.866292053466236,
+        "gradient_jump_mean": 0.3973886190291341,
+        "gradient_jump_std": 0.9352039844445804,
+        "continuity_ok": true
+      },
+      "interface": {
+        "L2_error": 0.11645789267917922,
+        "relative_L2_error": 1.0000014015896848
+      },
+      "summary": {
+        "error_ratio_cut_interior": 2.1364492703751194,
+        "total_L2_error": 0.0024142294037877658,
+        "total_relative_L2_error": 0.15027153931906106,
+        "ghost_penalty_enabled": true,
+        "zeta": 0.0085
+      },
+      "normal_deriv_order_1": {
+        "L2_norm": 2.5461990779749377,
+        "max_jump": 14.866292053466236
+      },
+      "normal_deriv_order_2": {
+        "L2_norm": 1365.4566536810557,
+        "max_jump": 4769.071934576109
+      },
+      "normal_deriv_order_3": {
+        "L2_norm": 196750.6576523704,
+        "max_jump": 502362.50065084465
+      }
+    }
+  }
+]

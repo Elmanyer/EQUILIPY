@@ -19,6 +19,8 @@
 # Research Group: Nuclear Fusion
 
 
+from _header import EQUILIPY_ROOT
+
 def EqPrint(*args, **kwargs):
     """
     Print utility function that prepends 'Equilipy --| ' to messages.

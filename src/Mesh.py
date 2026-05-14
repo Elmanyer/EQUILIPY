@@ -1,3 +1,4 @@
+from _header import EQUILIPY_ROOT
 from _logging import EqPrint
 import numpy as np
 from os.path import basename

@@ -22,6 +22,7 @@
 # This script contains the Python object defining a plasma equilibrium problem, 
 # modeled using the Grad-Shafranov PDE for an axisymmetrical system such as a tokamak. 
  
+from _header import EQUILIPY_ROOT
 import os
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve

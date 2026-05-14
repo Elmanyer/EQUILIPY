@@ -119,12 +119,22 @@ Equilibrium.TOKAMAK = Tokamak(WALL_MESH = TOKmesh)
 
 ############### INITIAL PLASMA BOUNDARY ##################
 
-Equilibrium.initialPHI = InitialPlasmaBoundary(EQUILIBRIUM = Equilibrium,   
-                                           GEOMETRY = 'LINEAR', # PREDEFINED MODEL
-                                           R0 = 6.0,            # MEAN RADIUS          
-                                           epsilon = 0.32,      # INVERSE ASPECT RATIO
-                                           kappa = 1.7,         # ELONGATION
-                                           delta = 0.33)        # TRIANGULARITY
+# Equilibrium.initialPHI = InitialPlasmaBoundary(EQUILIBRIUM = Equilibrium,   
+#                                            GEOMETRY = 'LINEAR', # PREDEFINED MODEL
+#                                            R0 = 6.0,            # MEAN RADIUS          
+#                                            epsilon = 0.32,      # INVERSE ASPECT RATIO
+#                                            kappa = 1.7,         # ELONGATION
+#                                            delta = 0.33)        # TRIANGULARITY
+
+def Circle(X):
+    R = 1.9
+    R0 = 6.0
+    Z0 = 0.0
+    return (X[0] - R0)**2 + (X[1] - Z0)**2 - R**2
+
+Equilibrium.initialPHI = InitialPlasmaBoundary(EQUILIBRIUM= Equilibrium,
+                                               GEOMETRY= 'OTHER',
+                                               PHI0 = Circle)
 
 ######### INITIAL GUESS FOR PLASMA MAGNETIC FLUX #########
 

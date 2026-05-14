@@ -16,12 +16,13 @@
 # Date: July 2025
 # Institution: Barcelona Supercomputing Center (BSC)
 # Department: Computer Applications in Science and Engineering (CASE)
-# Research Group: Nuclear Fusion  
+# Research Group: Nuclear Fusion
 
 
-# This script contains the numerical integration Gauss quadratures for 
-# different types of elements and different orders of quadrature. 
+# This script contains the numerical integration Gauss quadratures for
+# different types of elements and different orders of quadrature.
 
+from _header import EQUILIPY_ROOT
 import numpy as np
 
 def GaussQuadrature(element,order):

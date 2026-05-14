@@ -16,10 +16,12 @@
 # Date: July 2025
 # Institution: Barcelona Supercomputing Center (BSC)
 # Department: Computer Applications in Science and Engineering (CASE)
-# Research Group: Nuclear Fusion  
+# Research Group: Nuclear Fusion
 
 
 # This script contains the definition for class SEGMENT
+
+from _header import EQUILIPY_ROOT
 
 class Segment:
     """

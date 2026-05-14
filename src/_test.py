@@ -5,6 +5,7 @@
 # Email: pau.manyer@bsc.es
 # Institution: Barcelona Supercomputing Center (BSC)
 
+from _header import EQUILIPY_ROOT
 from _logging import EqPrint
 import numpy as np
 import warnings
