@@ -340,7 +340,7 @@ def GaussQuadrature(element,order):
                         zg[0,:] = [-a, -a]
                         zg[1,:] = [a, -a]
                         zg[2,:] = [a, a]
-                        zg[2,:] = [-a, a]
+                        zg[3,:] = [-a, a]
                         wg = np.ones(Ng)
                     case 3:  
                         Ng = 9

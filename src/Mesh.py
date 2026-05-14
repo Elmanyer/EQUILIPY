@@ -4,7 +4,6 @@ import numpy as np
 from os.path import basename
 from Element import *
 from matplotlib.path import Path
-import os
 import _plot as eqplot
 
 class Mesh:
@@ -15,8 +14,7 @@ class Mesh:
         Mesh object constructor.
         """
         
-        pwd = os.getcwd()
-        self.pwd = pwd[:-6]   # -6 CORRESPONDS TO 6 CHARACTERS IN '/TESTs'
+        self.pwd = str(EQUILIPY_ROOT)
         path_to_folder = self.pwd + '/MESHES/' + mesh_name
         self.name = mesh_name
         self.directory = path_to_folder

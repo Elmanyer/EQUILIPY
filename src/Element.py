@@ -967,11 +967,16 @@ class Element:
             #### ASSIGN A REGION FLAG TO EACH SUBELEMENT
             # INTERPOLATE VALUE OF LEVEL-SET FUNCTION INSIDE SUBELEMENT
             LSesub = self.ElementalInterpolationREFERENCE(np.mean(SUBELEM.XIe,axis=0),self.LSe)
-            if LSesub < 0: 
+            if LSesub < 0:
                 SUBELEM.Dom = -1
             else:
                 SUBELEM.Dom = 1
-                    
+            # Sub-elements integrate over the PARENT's DOFs: Nrefg/dNg have self.n columns
+            # and Te carries self.n global indices. Override the ElType-derived count.
+            SUBELEM.n = self.n
+            SUBELEM.PSIe = np.zeros([self.n])
+            SUBELEM.PSI_Be = np.zeros([self.n])
+
         # COMPUTE INTEGRATION QUADRATURE FOR EACH SUBELEMENT
         deriv_order = 1
         for SUBELEM in self.SubElements:
@@ -987,7 +992,8 @@ class Element:
             SUBELEM.Xg = SUBELEM.Nrefg @ self.Xe
             
             # COMPUTE PHYSICAL DERIVATIVES AND MAP SCALING
-            SUBELEM.dNg = [np.zeros([SUBELEM.ng,SUBELEM.n,SUBELEM.dim])]
+            n_parent = np.shape(SUBELEM.dNrefg[deriv_order-1])[1]
+            SUBELEM.dNg = [np.zeros([SUBELEM.ng,n_parent,SUBELEM.dim])]
             SUBELEM.detJg = np.zeros([SUBELEM.ng])
             for ig in range(SUBELEM.ng):
                 # Parent map with dN_parent/dξ_parent — map   ξ_parent →[N_parent]→ x_phys   (needed for BOTH gradient and scaling)

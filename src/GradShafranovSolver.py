@@ -23,7 +23,6 @@
 # modeled using the Grad-Shafranov PDE for an axisymmetrical system such as a tokamak. 
  
 from _header import EQUILIPY_ROOT
-import os
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
 from FELagrangeanbasis import *
@@ -123,8 +122,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         
         ###############################
         # WORKING DIRECTORY
-        pwd = os.getcwd()
-        self.pwd = pwd[:-6]    # -6 CORRESPONDS TO 6 CHARACTERS IN '/TESTs'
+        self.pwd = str(EQUILIPY_ROOT)
         EqPrint('Working directory: ' + self.pwd)
         
         # INITIALISE PARALLEL PROCESSING COMMUNICATOR AND ARRAYS
