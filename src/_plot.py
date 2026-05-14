@@ -160,7 +160,7 @@ class EquilipyPlotting:
 
     
 
-    def PlotError(self, RelativeError=False, ShowDiagnostics=True):
+    def PlotError(self, ShowDiagnostics=True):
         """
         Plots the error between analytical and numerical PSI solutions.
 
@@ -183,7 +183,6 @@ class EquilipyPlotting:
             EqPrint(f'  Relative ||PSIerror||_L2 = {self.RelErrorL2norm:.6e}')
             EqPrint(f'  ||PSIerror||_Euclidean   = {np.linalg.norm(self.PSIerror):.6e}')
             EqPrint(f'  ||PSIerror||/node        = {np.linalg.norm(self.PSIerror)/self.MESH.Nn:.6e}')
-            EqPrint(f'  Relative ||PSIerror||    = {np.linalg.norm(self.PSIrelerror):.6e}')
 
             # Compute and display CutFEM diagnostics if enabled
             if ShowDiagnostics and self.GhostStabilization:
@@ -261,15 +260,10 @@ class EquilipyPlotting:
             axs[3].set_xlim(self.MESH.Rmin-padx,self.MESH.Rmax+padx)
             axs[3].set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
             axs[3].set_xlabel('R (in m)')
-            if RelativeError:
-                errorfield = self.PSIrelerror
-                axs[3].set_title('PSI relative error')
-            else:
-                errorfield = self.PSIerror
-                axs[3].set_title('PSI error')
-            vmax = max(np.log10(errorfield))
+            axs[3].set_title('PSI error')
+            vmax = max(np.log10(self.PSIerror))
             vmin = np.log10(1e-14)
-            a = axs[3].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], np.log10(errorfield), levels=np.linspace(vmin, vmax, 15), vmax=vmax, vmin=vmin)
+            a = axs[3].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], np.log10(self.PSIerror), levels=np.linspace(vmin, vmax, 15), vmax=vmax, vmin=vmin)
             self.MESH.PlotBoundary(ax = axs[3])
 
             plt.colorbar(a, ax=axs[3])

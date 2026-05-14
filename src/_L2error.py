@@ -37,9 +37,7 @@ class EquilipyL2error:
         # STANDARD METRICS
         self.PSIexact = None                    # ANALYTICAL SOLUTION FIELD
         self.PSIerror = None                    # ABSOLUTE PSI FIELD ERROR 
-        self.PSIrelerror = None                 # ABSOLUTE RELATIVE PSI FIELD ERROR 
         self.ErrorEuclinorm = None              # EUCLIDEAN NORM ERROR
-        self.RelErrorEuclinorm = None           # EUCLIDEAN NORM RELATIVE ERROR
         self.ErrorL2norm = None                 # L2 INTEGRAL NORM ERROR 
         self.RelErrorL2norm = None              # L2 INTEGRAL NORM RELATIVE ERROR
         # CUTFEM METRICS
@@ -55,32 +53,26 @@ class EquilipyL2error:
         return
     
     
-    def ComputeErrorField(self):
+    def ComputeEuclierrorField(self):
         """
         Computes the error between the numerical and analytical PSI solutions.
 
         Computes:
             self.PSIexact          : Analytical PSI at each node.
             self.PSIerror          : Absolute pointwise error.
-            self.PSIrelerror       : Relative pointwise error.
             self.ErrorEuclinorm    : Euclidean norm of absolute error.
-            self.RelErrorEuclinorm : Euclidean norm of relative error.
         """
         # COMPUTE ERROR FIELDS
         self.PSIexact = np.zeros([self.MESH.Nn])
         self.PSIerror = np.zeros([self.MESH.Nn])
-        self.PSIrelerror = np.zeros([self.MESH.Nn])
         for inode in range(self.MESH.Nn):
             self.PSIexact[inode] = self.PlasmaCurrent.PSIanalytical(self.MESH.X[inode,:])
-            self.PSIerror[inode] = abs(self.PSIexact[inode]-self.PSI_NORM[inode,1])
-            self.PSIrelerror[inode] = self.PSIerror[inode]/abs(self.PSIexact[inode])
+            self.PSIerror[inode] = abs(self.PSI_NORM[inode,1] - self.PSIexact[inode])
             if self.PSIerror[inode] < 1e-16:
                 self.PSIerror[inode] = 1e-16
-                self.PSIrelerror[inode] = 1e-16
     
-        # COMPUTE EUCLIDEAN NORM ERRORS
+        # COMPUTE EUCLIDEAN NORM ERROR
         self.ErrorEuclinorm = np.linalg.norm(self.PSIerror)
-        self.RelErrorEuclinorm = np.linalg.norm(self.PSIrelerror)
         return
     
     

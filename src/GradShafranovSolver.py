@@ -831,7 +831,7 @@ class GradShafranovSolver(EquilipyInitialisation,
             self.PlotSolutionPSI()
         
         if self.FIXED_BOUNDARY and self.PlasmaCurrent.CURRENT_MODEL != self.PlasmaCurrent.JARDIN_CURRENT:
-            self.ComputeErrorField()
+            self.ComputeEuclierrorField()
             self.ComputeL2errorPlasma()
             #self.ComputeL2error()
             self.writeerror()
