@@ -270,6 +270,7 @@ class QuadrilateralCoil:
             self.area = compute_quadrilateral_area(self.Xvertices)
         # COMPUTE QUADRILATERAL HIGH-ORDER NODES
         self.Xe = self.HO_quadrilateral()
+        self.n = np.shape(self.Xe)[0]    # NUMBER OF NODES IN HIGH-ORDER QUADRILATERAL ELEMENT
         # COMPUTE NUMERICAL INTEGRATION QUADRATURE
         self.ComputeQuadrature(QuadOrder)
         self.CheckQuadrature()
@@ -339,8 +340,8 @@ class QuadrilateralCoil:
         self.dNg = [np.zeros([self.ng,self.n,self.dim])]
         self.detJg = np.zeros([self.ng])
         for ig in range(self.ng):
-            J = Jacobian(self.Xe,self.dNrefg[0][ig,:,:])
-            self.dNg[0][ig,:,:] = PhysicalGradient(self.dNrefg[0][ig,:,:], np.linalg.inv(J))
+            J = Jacobian(self.Xe,self.dNrefg[0][ig])
+            self.dNg[0][ig] = PhysicalGradient([self.dNrefg[0][ig]], np.linalg.inv(J))
             self.detJg[ig] = abs(np.linalg.det(J))
         return
     
