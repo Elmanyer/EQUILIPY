@@ -415,8 +415,9 @@ class GradShafranovSolver(EquilipyInitialisation,
                 # (Tested against formulas h^(2p-2), h^(2p-1), h^(2p), h^(2p+1))
                 h = max(ELEMENT0.length,ELEMENT1.length)
                 penalty = self.zeta * h**(2*p - 1)  # (2*p + 2) or (2*p + 1)
+                sign_p = (-1) ** (p + 1)   # +1 for p=1 (odd), -1 for p=2 (even)
 
-                # COMPUTE NORMAL PHYSICAL DERIVATIVE 
+                # COMPUTE NORMAL PHYSICAL DERIVATIVE
                 # Prepare the contraction string for einsum
                 # We need to contract p indices of the derivative 
                 # with p normal vectors and p inverse Jacobians.
@@ -453,7 +454,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                     n_dot_dNg0 = np.einsum(subscripts, *args0, optimize=True)
                     n_dot_dNg1 = np.einsum(subscripts, *args1, optimize=True)  
 
-                    n_dot_dNg = np.concatenate((n_dot_dNg0,-n_dot_dNg1), axis=0)
+                    n_dot_dNg = np.concatenate((sign_p * n_dot_dNg0, n_dot_dNg1), axis=0)
 
                     # COMPUTE ELEMENTAL CONTRIBUTIONS AND ASSEMBLE GLOBAL SYSTEM
                     # NOTE: The 1/R factor is required for consistency with axisymmetric Grad-Shafranov weak form

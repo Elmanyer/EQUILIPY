@@ -402,8 +402,8 @@ class EquilipyL2error:
         # 1. COMPUTE L2 ERROR IN CUT ELEMENTS VS INTERIOR ELEMENTS
         # ==========================================================================
         # Identify element sets
-        cut_elements = [i for i, elem in enumerate(mesh.Elements) if elem.Dom == 1]
-        interior_elements = [i for i, elem in enumerate(mesh.Elements) if elem.Dom == 2]
+        cut_elements = [i for i, elem in enumerate(mesh.Elements) if elem.Dom == 0]
+        interior_elements = [i for i, elem in enumerate(mesh.Elements) if elem.Dom == -1]
 
         # Compute errors using helper function
         cut_L2_squared, exact_L2_squared_cut = self._compute_element_L2_errors(cut_elements)

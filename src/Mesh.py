@@ -458,7 +458,29 @@ class Mesh:
         kplasm = 0
         kvacuu = 0
         kint = 0
-            
+
+        # SNAP NEAR-ZERO LEVEL-SET CORNER VALUES TO AVOID DEGENERATE CUT ELEMENTS
+        # When mesh nodes coincide exactly with interface cardinal points, floating-point
+        # evaluation gives |phi| ~ 1e-16. This creates cut elements with plasma fraction
+        # ~ 1e-16, producing Nitsche penalty entries O(beta/h_eff) ~ O(10^22).
+        for ielem in range(self.Ne):
+            elem = self.Elements[ielem]
+            corners = elem.LSe[:elem.numedges]        # corner nodes only (not high-order midpoints)
+            max_phi = np.max(np.abs(corners))
+            if max_phi > 0:
+                tol = max_phi * 1e-10                 # relative snap tolerance
+                for _ci in range(elem.numedges):
+                    if abs(corners[_ci]) < tol:
+                        other_signs = [corners[j] for j in range(elem.numedges) if j != _ci]
+                        n_vacuum = sum(v > 0 for v in other_signs)
+                        n_plasma = sum(v < 0 for v in other_signs)
+                        if n_vacuum >= n_plasma:
+                            elem.LSe[_ci] = tol       # snap to vacuum side (majority or tie)
+                            PlasmaLS[elem.Te[_ci]] = tol
+                        else:
+                            elem.LSe[_ci] = -tol      # snap to plasma side (strict majority)
+                            PlasmaLS[elem.Te[_ci]] = -tol
+
         for ielem in range(self.Ne):
             regionplasma, DHONplasma = self.Elements[ielem].CheckElementalVerticesLevelSetSigns()
             if regionplasma < 0:   # ALL PLASMA LEVEL-SET NODAL VALUES NEGATIVE -> INSIDE PLASMA DOMAIN 
