@@ -10,6 +10,7 @@ This script performs:
 
 import sys
 import os
+import shutil
 from pathlib import Path
 from datetime import datetime
 import numpy as np
@@ -31,24 +32,41 @@ from PlasmaCurrent import CurrentModel
 # ============================================================================
 
 # Mesh specifications: (element_type, mesh_levels)
+# TRI meshes use the _LINEAR_ naming convention: e.g. TRI03_LINEAR_1.0
+# QUA meshes use the _REC_ naming convention:    e.g. QUA04_REC_1.0
 MESH_SPECS = [
     ('TRI03', ['1.0', '0.5', '0.1', '0.06', '0.02']),
     ('TRI06', ['1.0', '0.5', '0.1', '0.06', '0.02']),
-    ('TRI10', ['1.0', '0.5', '0.1', '0.06']),
+    ('QUA04', ['1.0', '0.5', '0.1', '0.06', '0.02']),
+    ('QUA09', ['1.0', '0.5', '0.1', '0.06', '0.02']),
 ]
 
 # Parameter ranges for optimization (swept for EACH mesh)
-BETA_SWEEP = [1e3, 1e4, 1e5, 1e6, 1e7, 1e8]
-ZETA_SWEEP = [1e2, 1e3, 1e4, 1e5, 1e6]
+# Sensitivity sweep results (LINEAR test case, FIXED_BOUNDARY=True):
+#   TRI03: beta=10-100, zeta=0      → O(h²) rate ✓
+#   TRI06: beta=10-100, zeta=0      → O(h³) rate ✓
+#   QUA04: beta=100, zeta=0-1       → O(h²) rate ✓  (large zeta over-penalizes p=1)
+#   QUA09: beta=100, zeta=100       → O(h³) rate ✓  (structured mesh needs strong ghost)
+BETA_SWEEP_TRI  = [1e1, 5e1, 1e2, 5e2]
+ZETA_SWEEP_TRI  = [0.0, 5e-1, 1e0, 5e0]
+BETA_SWEEP_QUA4 = [1e1, 5e1, 1e2, 5e2]
+ZETA_SWEEP_QUA4 = [0.0, 5e-1, 1e0, 5e0]
+BETA_SWEEP_QUA9 = [1e2, 5e2, 1e3]
+ZETA_SWEEP_QUA9 = [1e1, 5e1, 1e2, 5e2]
+# Default sweeps
+BETA_SWEEP = BETA_SWEEP_TRI
+ZETA_SWEEP = ZETA_SWEEP_TRI
 
 # Standard solver settings (shared across all runs)
+# QuadratureOrder2D: TRI supports up to 8; QUA supports up to 5 only.
+# Override per element family in run_solver().
 SOLVER_CONFIG = {
     'FIXED_BOUNDARY': True,
     'RunTests': False,
     'PARALLEL': False,
-    'QuadratureOrder2D': 8,
+    'QuadratureOrder2D': 8,   # overridden to 5 for QUA elements
     'QuadratureOrder1D': 6,
-    'ext_maxiter': 5,
+    'ext_maxiter': 1,          # 1 outer iteration for FIXED_BOUNDARY (deterministic)
     'ext_tol': 1.0e-3,
     'int_maxiter': 50,
     'int_tol': 1.0e-10,
@@ -72,39 +90,65 @@ PLASMA_INIT = {
 
 
 # ============================================================================
+# Helpers
+# ============================================================================
+
+def _mesh_suffix(elem_type):
+    """Folder naming convention differs between TRI and QUA families."""
+    return '_REC_' if elem_type.startswith('QUA') else '_LINEAR_'
+
+
+def _param_str(val):
+    """Compact label for a parameter value used in case/directory names."""
+    if val == 0:
+        return "0"
+    e = int(np.floor(np.log10(abs(val))))
+    m = int(round(val / 10**e))
+    return f"{m}e{e}"
+
+
+# ============================================================================
 # Core Simulation Function
 # ============================================================================
 
-def run_solver(mesh_name, zeta=1.0, beta=1e4, ghost_enabled=True):
+def run_solver(mesh_name, case_name, zeta=1.0, beta=1e4, ghost_enabled=True):
     """
-    Execute a single EQUILIPY simulation.
+    Execute a single EQUILIPY simulation via the full EQUILI solver loop.
+
+    The solver writes a pickle of the completed simulation to its output
+    directory. The path to that directory is returned in the result dict so
+    the caller can decide whether to keep or discard it.
 
     Args:
-        mesh_name: Full mesh name (e.g., 'TRI03_LINEAR_1.0')
+        mesh_name: Full mesh name (e.g. 'TRI03_LINEAR_1.0', 'QUA04_REC_0.5')
+        case_name: Unique case identifier (used to name the output directory)
         zeta: Ghost penalty parameter
-        beta: Plasma beta constraint
+        beta: Nitsche penalty parameter
         ghost_enabled: Enable ghost stabilization
 
     Returns:
-        dict with results or error info
+        dict with results or error info, including 'outputdir'
     """
     try:
-        mesh_path = BASE_DIR / 'MESHES' / mesh_name
+        mesh_path = EQUILIPY_ROOT / 'MESHES' / mesh_name
         if not mesh_path.exists():
-            return {'success': False, 'error': f'Mesh not found: {mesh_path}'}
+            return {'success': False, 'error': f'Mesh not found: {mesh_path}',
+                    'outputdir': None}
 
         # Initialize solver
         eq = GradShafranovSolver()
 
-        # Configure solver
+        # Configure solver parameters
         for key, val in SOLVER_CONFIG.items():
             setattr(eq, key, val)
+        # QUA elements support GaussQuadrature up to order 5 only (TRI supports up to 8)
+        eq.QuadratureOrder2D = 5 if mesh_name.upper().startswith('QUA') else 8
         eq.GhostStabilization = ghost_enabled
         eq.zeta = zeta
         eq.beta = beta
         eq.dim = 2
 
-        # Disable all output/plotting
+        # Output: disable all file output, enable pickle only
         eq.plotelemsClas = False
         eq.plotPSI = False
         eq.out_proparams = False
@@ -147,17 +191,11 @@ def run_solver(mesh_name, zeta=1.0, beta=1e4, ghost_enabled=True):
             **PLASMA_INIT
         )
 
-        # Run simulation
+        # Prepare domain, then hand control to EQUILI which handles
+        # output initialisation, the full solver loop, and pickle writing.
         eq.DomainDiscretisation(INITIALISATION=True)
         eq.InitialisePSI()
-        eq.InitialisePSI_B()
-        eq.AssembleGlobalSystem()
-        eq.SolveSystem()
-        eq.NormalisePSI()
-        eq.UpdatePSI_NORM()
-        eq.UpdateElementalPSI()
-        eq.ComputeEuclierrorField()
-        eq.ComputeL2errorPlasma()
+        eq.EQUILI(case_name)
 
         return {
             'success': True,
@@ -168,10 +206,13 @@ def run_solver(mesh_name, zeta=1.0, beta=1e4, ghost_enabled=True):
             'n_nodes': eq.MESH.Nn,
             'n_cut_elems': len(eq.MESH.PlasmaBoundElems),
             'n_ghost_faces': len(eq.MESH.GhostFaces) if eq.MESH.GhostFaces else 0,
+            'outputdir': eq.outputdir,
         }
 
     except Exception as e:
-        return {'success': False, 'error': str(e)}
+        import traceback
+        return {'success': False, 'error': str(e), 'traceback': traceback.format_exc(),
+                'outputdir': None}
 
 
 # ============================================================================
@@ -182,6 +223,11 @@ def optimize_on_mesh(mesh_name, beta_values=None, zeta_values=None, verbose=True
     """
     Run parameter optimization (beta, zeta) on a single mesh.
 
+    For each (beta, zeta) pair the solver is run with a unique case name so
+    each run writes its own pickle file.  After the sweep, all output
+    directories except the one belonging to the best run are deleted, leaving
+    only the pickle of the lowest-L2-error configuration.
+
     Args:
         mesh_name: Mesh to optimize on
         beta_values: List of beta values to sweep
@@ -191,8 +237,18 @@ def optimize_on_mesh(mesh_name, beta_values=None, zeta_values=None, verbose=True
     Returns:
         dict with optimal params and sweep results
     """
-    beta_values = beta_values or BETA_SWEEP
-    zeta_values = zeta_values or ZETA_SWEEP
+    mn = mesh_name.upper()
+    if mn.startswith('QUA09'):
+        default_beta = BETA_SWEEP_QUA9
+        default_zeta = ZETA_SWEEP_QUA9
+    elif mn.startswith('QUA'):
+        default_beta = BETA_SWEEP_QUA4
+        default_zeta = ZETA_SWEEP_QUA4
+    else:
+        default_beta = BETA_SWEEP_TRI
+        default_zeta = ZETA_SWEEP_TRI
+    beta_values = beta_values or default_beta
+    zeta_values = zeta_values or default_zeta
 
     if verbose:
         print(f"\n{'='*70}")
@@ -204,11 +260,14 @@ def optimize_on_mesh(mesh_name, beta_values=None, zeta_values=None, verbose=True
     best_result = None
     best_params = None
     best_error = float('inf')
+    best_outputdir = None
     sweep_data = []
 
     for beta in beta_values:
         for zeta in zeta_values:
-            result = run_solver(mesh_name, zeta=zeta, beta=beta, ghost_enabled=True)
+            case_name = f"TS-FIXED-CutFEM-b{_param_str(beta)}-z{_param_str(zeta)}"
+            result = run_solver(mesh_name, case_name,
+                                zeta=zeta, beta=beta, ghost_enabled=True)
 
             if result['success']:
                 error = result['relL2_error']
@@ -218,24 +277,41 @@ def optimize_on_mesh(mesh_name, beta_values=None, zeta_values=None, verbose=True
                     'beta': beta,
                     'zeta': zeta,
                     'relL2_error': error,
+                    'outputdir': result['outputdir'],
                 })
 
                 if error < best_error:
                     best_error = error
                     best_params = {'beta': beta, 'zeta': zeta}
                     best_result = result
+                    best_outputdir = result['outputdir']
                     status = "BEST"
             else:
                 error = np.inf
                 status = "FAIL"
+                sweep_data.append({
+                    'beta': beta,
+                    'zeta': zeta,
+                    'relL2_error': error,
+                    'outputdir': result.get('outputdir'),
+                })
 
             if verbose:
                 print(f"{beta:<12.0e} {zeta:<10.2f} {error:<15.6e} {status:<10}")
+
+    # Keep only the pickle of the best run; delete all other output directories.
+    for entry in sweep_data:
+        od = entry.get('outputdir')
+        if od and od != best_outputdir and os.path.isdir(od):
+            shutil.rmtree(od)
 
     if verbose and best_params:
         print(f"\n{'='*70}")
         print(f"OPTIMAL: beta={best_params['beta']:.2e}, zeta={best_params['zeta']:.4f}")
         print(f"         relL2={best_error:.6e}")
+        if best_outputdir:
+            pickle_name = os.path.basename(best_outputdir) + '.pickle'
+            print(f"         pickle: {best_outputdir}/{pickle_name}")
         print(f"{'='*70}")
 
     return {
@@ -258,18 +334,19 @@ def analyze_all_levels(elem_type, mesh_levels, verbose=True):
     2. Compute convergence metrics
 
     Args:
-        elem_type: Element type (TRI03, TRI06, etc.)
+        elem_type: Element type (TRI03, TRI06, QUA04, QUA09, etc.)
         mesh_levels: List of mesh refinement levels
         verbose: Print progress
 
     Returns:
         list of result dicts, each with optimized params for its mesh level
     """
+    suffix = _mesh_suffix(elem_type)
     results = []
     previous_result = None
 
-    for i, level in enumerate(mesh_levels):
-        mesh_name = f"{elem_type}_LINEAR_{level}"
+    for level in mesh_levels:
+        mesh_name = f"{elem_type}{suffix}{level}"
 
         # Step 1: Optimize parameters on THIS mesh
         opt_result = optimize_on_mesh(mesh_name, verbose=verbose)
@@ -371,7 +448,7 @@ def main():
         print(line)
 
     # Save detailed results
-    summary_file = 'optimization_results.txt'
+    summary_file = str(EQUILIPY_ROOT / 'TESTs' / 'optimization_results.txt')
     with open(summary_file, 'w') as f:
         f.write("="*70 + "\n")
         f.write(f"EQUILIPY Parameter Optimization Results\n")

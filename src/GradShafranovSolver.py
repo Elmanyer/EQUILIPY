@@ -502,13 +502,18 @@ class GradShafranovSolver(EquilipyInitialisation,
         # OPEN ELEMENTAL MATRICES OUTPUT FILE
         if self.out_elemsys:
             self.file_elemsys.write('NON_CUT_ELEMENTS\n')
-        
+
         # INTEGRATE OVER THE SURFACE OF ELEMENTS WHICH ARE NOT CUT BY ANY INTERFACE (STANDARD QUADRATURES)
         EqPrint("     Integrate non-cut elements contributions...", end="")
-        
-        for ielem in self.MESH.NonCutElems: 
-            # ISOLATE ELEMENT 
-            ELEMENT = self.MESH.Elements[ielem]  
+
+        for ielem in self.MESH.NonCutElems:
+            # ISOLATE ELEMENT
+            ELEMENT = self.MESH.Elements[ielem]
+            # INV-6: Only plasma-side elements contribute domain stiffness.
+            # Skip pure vacuum interior elements (Dom>0, no Dirichlet BCs);
+            # their DOFs are conditioned by ghost penalty and the zero-diagonal fix below.
+            if ELEMENT.Dom > 0 and ELEMENT.Teboun is None:
+                continue
             # COMPUTE SOURCE TERM (PLASMA CURRENT)  mu0*R*Jphi  IN PLASMA REGION NODES
             SourceTermg = np.zeros([ELEMENT.ng])
             if ELEMENT.Dom < 0:
@@ -516,14 +521,14 @@ class GradShafranovSolver(EquilipyInitialisation,
                 PSIg = ELEMENT.Nrefg @ ELEMENT.PSIe
                 for ig in range(ELEMENT.ng):
                     SourceTermg[ig] = self.PlasmaCurrent.SourceTerm(ELEMENT.Xg[ig,:],PSIg[ig])
-                    
+
             # COMPUTE ELEMENTAL MATRICES
             LHSe, RHSe = ELEMENT.IntegrateElementalDomainTerms(SourceTermg)
-                
+
             # PRESCRIBE BC:
             if not type(ELEMENT.Teboun) == type(None):
                 LHSe, RHSe = ELEMENT.PrescribeDirichletBC(LHSe,RHSe)
-            
+
             if self.out_elemsys:
                 self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index+1,ELEMENT.Dom))
                 self.file_elemsys.write('elmat\n')
@@ -533,13 +538,13 @@ class GradShafranovSolver(EquilipyInitialisation,
                 self.file_elemsys.write('elrhs\n')
                 values = " ".join("{:.6e}".format(val) for val in RHSe)
                 self.file_elemsys.write("{}\n".format(values))
-            
+
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
             for i in range(ELEMENT.n):   # ROWS ELEMENTAL MATRIX
                 for j in range(ELEMENT.n):   # COLUMNS ELEMENTAL MATRIX
                     self.LHS[ELEMENT.Te[i],ELEMENT.Te[j]] += LHSe[i,j]
                 self.RHS[ELEMENT.Te[i]] += RHSe[i]
-                
+
         print('Done!')
         
         if self.out_elemsys:
@@ -556,14 +561,16 @@ class GradShafranovSolver(EquilipyInitialisation,
             # ON EACH SUBELEMENT THE WEAK FORM IS INTEGRATED USING ADAPTED NUMERICAL INTEGRATION QUADRATURES
             ####### COMPUTE DOMAIN TERMS
             # LOOP OVER SUBELEMENTS 
-            for SUBELEM in ELEMENT.SubElements:  
+            for SUBELEM in ELEMENT.SubElements:
+                # Skip vacuum subelements: their IBP flux ∫_Γ (1/R) N_k (n⁺·∇ψ) dΓ is O(h)
+                # and has no Nitsche cancellation, which would saturate convergence to O(h).
+                if SUBELEM.Dom >= 0:
+                    continue
                 # COMPUTE SOURCE TERM (PLASMA CURRENT)  mu0*R*Jphi  IN PLASMA REGION NODES
+                PSIg = SUBELEM.Nrefg @ ELEMENT.PSIe
                 SourceTermg = np.zeros([SUBELEM.ng])
-                if SUBELEM.Dom < 0:
-                    # MAPP GAUSS NODAL PSI VALUES FROM REFERENCE ELEMENT TO PHYSICAL SUBELEMENT
-                    PSIg = SUBELEM.Nrefg @ ELEMENT.PSIe
-                    for ig in range(SUBELEM.ng):
-                        SourceTermg[ig] = self.PlasmaCurrent.SourceTerm(SUBELEM.Xg[ig,:],PSIg[ig])
+                for ig in range(SUBELEM.ng):
+                    SourceTermg[ig] = self.PlasmaCurrent.SourceTerm(SUBELEM.Xg[ig,:],PSIg[ig])
                         
                 # COMPUTE ELEMENTAL MATRICES
                 LHSe, RHSe = SUBELEM.IntegrateElementalDomainTerms(SourceTermg)
@@ -635,8 +642,16 @@ class GradShafranovSolver(EquilipyInitialisation,
         if self.GhostStabilization:
             EqPrint("     Integrate ghost faces contributions...", end="")
             self.IntegrateGhostStabilizationTerms()
-            print('Done!') 
-            
+            print('Done!')
+
+        # FIX ZERO-DIAGONAL DOFS: vacuum DOFs at cut elements not reached by VacuumElems
+        # stiffness or ghost faces would produce a singular system; set unit diagonal.
+        LHS_csr = self.LHS.tocsr()
+        diag = np.array(LHS_csr.diagonal())
+        for i in range(self.MESH.Nn):
+            if abs(diag[i]) < 1e-30:
+                self.LHS[i, i] = 1.0
+
         # WRITE GLOBAL SYSTEM MATRICES
         if self.out_elemsys:
             self.file_globalsys.write('RHS_VECTOR\n')
