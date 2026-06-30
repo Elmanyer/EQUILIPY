@@ -52,7 +52,7 @@ def run_single(mesh_name, beta, zeta):
         eq.PlasmaCurrent = CurrentModel(EQUILIBRIUM=eq, MODEL='LINEAR', **PLASMA_INIT)
         eq.DomainDiscretisation(INITIALISATION=True)
         eq.InitialisePSI()
-        eq.EQUILI(f'fine_{mesh_name}_b{int(beta)}_z{int(zeta)}')
+        eq.EQUILIPY(f'fine_{mesh_name}_b{int(beta)}_z{int(zeta)}')
         return dict(h=eq.MESH.meanLength, relL2=eq.RelErrorL2norm, L2=eq.ErrorL2norm,
                     Ne=eq.MESH.Ne, Nn=eq.MESH.Nn)
     except Exception as e:

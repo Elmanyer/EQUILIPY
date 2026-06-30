@@ -58,7 +58,7 @@ def build_solver(mesh_name, beta=100.0, zeta=1.0):
 
 def run_and_diagnose(mesh_name, beta=100.0, zeta=1.0):
     eq = build_solver(mesh_name, beta, zeta)
-    eq.EQUILI(f'ptwise_{mesh_name}')
+    eq.EQUILIPY(f'ptwise_{mesh_name}')
 
     # After solve: PSI_NORM[:,1] holds the solution
     R0 = PLASMA_INIT['R0']

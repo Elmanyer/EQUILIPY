@@ -155,7 +155,7 @@ Equilibrium.InitialisePSI()
 
 CASE = "TS-FIXED-LINEAR-CutFEM"
 
-Equilibrium.EQUILI(CASE)
+Equilibrium.EQUILIPY(CASE)
 
 
 # Get full diagnostics

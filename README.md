@@ -218,7 +218,7 @@ For instance, the following example defines the plasma current using the model u
 
 Once all previous steps have been executed, the user may call the solver in order to solve the defined equilibrium problem in the following way:
 
-    $ Equilibrium.EQUILI("TS-CASE")
+    $ Equilibrium.EQUILIPY("TS-CASE")
 
 This command will launch the python plasma equilibrium solver with the defined problem parameters. 
 The user may find the simulation results inside a new folder *RESULTS*, that will be created in the same code directory if needed, inside a new folder with name "TS-CASE" + mesh name. 

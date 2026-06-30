@@ -94,7 +94,7 @@ def run_one(mesh_name):
     eq.InitialisePSI()
 
     case = f"CVG-{mesh_name}"
-    eq.EQUILI(case)
+    eq.EQUILIPY(case)
 
     h   = eq.MESH.meanLength
     L2  = eq.ErrorL2norm

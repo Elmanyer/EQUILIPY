@@ -140,4 +140,4 @@ Equilibrium.InitialisePSI()
 
 CASE = "TS-FIXED-LINEAR-FEM"
 
-Equilibrium.EQUILI(CASE)
+Equilibrium.EQUILIPY(CASE)

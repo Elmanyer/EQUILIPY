@@ -77,7 +77,7 @@ def run(mesh_name, beta, zeta):
 
         eq.DomainDiscretisation(INITIALISATION=True)
         eq.InitialisePSI()
-        eq.EQUILI(f'ghost_test_{mesh_name}_b{int(beta)}_z{int(zeta)}')
+        eq.EQUILIPY(f'ghost_test_{mesh_name}_b{int(beta)}_z{int(zeta)}')
 
         return {
             'h': eq.MESH.meanLength,

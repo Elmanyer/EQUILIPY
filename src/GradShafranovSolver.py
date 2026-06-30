@@ -693,7 +693,7 @@ class GradShafranovSolver(EquilipyInitialisation,
     ######################################## MAIN ALGORITHM ##########################################
     ##################################################################################################
     
-    def EQUILI(self,CASE):
+    def EQUILIPY(self,CASE):
         """
         Runs the main equilibrium solver loop for the Grad-Shafranov problem.
 
@@ -877,7 +877,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                 - 'summary': {'error_ratio_cut_interior', 'total_L2_error', ...}
 
         Example usage:
-            equilibrium.EQUILI('MY_CASE')
+            equilibrium.EQUILIPY('MY_CASE')
             diagnostics = equilibrium.GetDiagnostics(verbose=True)
             EqPrint(f"Cut element error: {diagnostics['cut_elements']['L2_error']}")
             EqPrint(f"Continuity OK: {diagnostics['ghost_faces']['continuity_ok']}")
@@ -896,7 +896,7 @@ class GradShafranovSolver(EquilipyInitialisation,
         """
         Prints a concise summary of all error metrics for the current solution.
 
-        This is a quick way to get an overview of solution quality after running EQUILI().
+        This is a quick way to get an overview of solution quality after running EQUILIPY().
         """
         EqPrint("="*70)
         EqPrint("SOLUTION ERROR SUMMARY")

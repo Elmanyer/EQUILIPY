@@ -113,7 +113,7 @@ def _param_str(val):
 
 def run_solver(mesh_name, case_name, zeta=1.0, beta=1e4, ghost_enabled=True):
     """
-    Execute a single EQUILIPY simulation via the full EQUILI solver loop.
+    Execute a single EQUILIPY simulation via the full EQUILIPY solver loop.
 
     The solver writes a pickle of the completed simulation to its output
     directory. The path to that directory is returned in the result dict so
@@ -191,11 +191,11 @@ def run_solver(mesh_name, case_name, zeta=1.0, beta=1e4, ghost_enabled=True):
             **PLASMA_INIT
         )
 
-        # Prepare domain, then hand control to EQUILI which handles
+        # Prepare domain, then hand control to EQUILIPY which handles
         # output initialisation, the full solver loop, and pickle writing.
         eq.DomainDiscretisation(INITIALISATION=True)
         eq.InitialisePSI()
-        eq.EQUILI(case_name)
+        eq.EQUILIPY(case_name)
 
         return {
             'success': True,
