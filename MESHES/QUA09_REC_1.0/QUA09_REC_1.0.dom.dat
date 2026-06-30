@@ -1,10 +1,10 @@
 $------------------------------------------------------------
 DIMENSIONS
-  NODAL_POINTS=          209
-  ELEMENTS=               45
+  NODAL_POINTS=          273
+  ELEMENTS=               60
   SPACE_DIMENSIONS=        2
   TYPES_OF_ELEMENTS=      14
-  BOUNDARIES=             28
+  BOUNDARIES=             32
 END_DIMENSIONS
 $------------------------------------------------------------
 STRATEGY
