@@ -136,12 +136,16 @@ mismatch into the plasma solution, saturating convergence at O(h) regardless of 
 - With vacuum stiffness assembled: TRI03 rates ≈ 0.93, 0.35, 0.87 (O(h), not O(h²))
 - After INV-6 fix: TRI03 rates ≈ 3.08, 1.99, 2.00 — achieving optimal O(h²)
 
-**Correct implementation in `src/GradShafranovSolver.py`:**
+**Location:** `src/GradShafranovSolver.py` — `AssembleGlobalSystem`, NonCutElems loop (Phase 1)
+and PlasmaBoundElems loop (Phase 2). The source code carries no fix-number tag; this section is
+the canonical reference.
+
+**Correct implementation (NonCutElems loop, Phase 1):**
 
 ```python
 for ielem in self.MESH.NonCutElems:
     ELEMENT = self.MESH.Elements[ielem]
-    # INV-6: Skip pure vacuum interior elements (Dom>0, no Dirichlet BCs).
+    # Skip pure vacuum interior elements (Dom>0, no Dirichlet BCs).
     # Their DOFs are conditioned by ghost penalty and the zero-diagonal fix.
     if ELEMENT.Dom > 0 and ELEMENT.Teboun is None:
         continue
@@ -156,13 +160,17 @@ for ielem in self.MESH.NonCutElems:
     # ... assemble into global system ...
 ```
 
-For the cut element loop (`PlasmaBoundElems`), additionally skip vacuum sub-elements:
+For the cut element loop (`PlasmaBoundElems`, Phase 2), additionally skip vacuum sub-elements:
 ```python
 for SUBELEM in ELEMENT.SubElements:
     if SUBELEM.Dom >= 0:   # skip vacuum sub-elements (Dom=0 is interface, Dom>0 is vacuum)
         continue
     # ... integrate plasma sub-element ...
 ```
+
+**Free-boundary exception:** this invariant holds for the FIXED_BOUNDARY problem only. In the
+free-boundary problem the full computational domain must be assembled (`Δ*ψ=0` in vacuum) so the
+level-set can evolve, so both guards above are conditioned on `self.FIXED_BOUNDARY` in the source.
 
 **Ghost penalty involves exterior DOFs — this is fine:** Ghost faces can connect a cut element
 to an adjacent exterior element. The ghost penalty assembly uses both elements' DOFs. The
@@ -286,7 +294,7 @@ i.e. `RHS = −(f,v)`. The source term must use `-=`.
 (plus sign — CORRECT). With LHS=−K, the system is `(−K)ψ = RHS`. GS IBP gives `K·ψ = −(f,v)`,
 so `(−K)ψ = (f,v)`, i.e. `RHS = +(f,v)`. The source term correctly uses `+=`.
 
-**The current GS solver code at `src/Element.py` line 1238 uses `+=` — this is CORRECT.**
+**The current GS solver code in `src/Element.py` — `IntegrateElementalDomainTerms` uses `+=` — this is CORRECT.**
 Do NOT change it to `-=`. The Poisson solver fix (BUG-4 = `+=`→`-=`) does NOT apply to the GS solver.
 
 ### Symptom (Poisson only)
@@ -503,7 +511,7 @@ N1D, dNdxi1D = EvalRefLagrangeBasis(XIg1Dstand, 0, order_1D, deriv=deriv_order)
 | BUG-8: `beta` too large for p=1 | p=1 rate ~0.5 | test scripts | `beta=100–1000` for all GS families | **FIXED** (use 100) |
 | BUG-9: `zeta` too large | Rate degradation | test scripts | `zeta=0` for TRI, `zeta=100` for QUA09 | **FIXED** |
 | BUG-10: Straight-line 1D Nitsche | TRI06 errors ~10⁴ too large | `Element.py` | All XIint nodes + order-ElOrder basis | **FIXED** |
-| INV-6: Vacuum stiffness assembled | O(h) saturation for all elements | `GradShafranovSolver.py` | Skip `Dom>0 and Teboun is None` + zero-diagonal sweep | **FIXED** (critical fix) |
+| INV-6: Vacuum stiffness assembled | O(h) saturation for all elements | `GradShafranovSolver.py` → `AssembleGlobalSystem` | Skip `Dom>0 and Teboun is None` (guarded by `FIXED_BOUNDARY`) + zero-diagonal sweep | **FIXED** (critical fix) |
 
 ---
 
@@ -603,4 +611,5 @@ Run with validated parameters (beta=100, zeta=0 for TRI, zeta=100 for QUA09):
 
 ---
 
-*End of FIX_SOLVER.md — Last updated: 2026-05-18*
+*End of FIX_SOLVER.md — Last updated: 2026-06-30. Fix/bug numeration (INV-*, BUG-*) lives only
+in this document; solver source files carry plain explanatory comments without fix-number tags.*

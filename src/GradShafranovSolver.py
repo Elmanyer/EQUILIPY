@@ -13,7 +13,7 @@
 
 # Author: Pau Manyer Fuertes
 # Email: pau.manyer@bsc.es
-# Date: July 2025
+# Date: June 2026
 # Institution: Barcelona Supercomputing Center (BSC)
 # Department: Computer Applications in Science and Engineering (CASE)
 # Research Group: Nuclear Fusion 
@@ -43,7 +43,6 @@ from InitialPlasmaBoundary import *
 from InitialPSIGuess import *
 from PlasmaCurrent import *
 from _test import *
-#from mpi4py import MPI
 
 class GradShafranovSolver(EquilipyInitialisation,
                           EquilipyCritical,
@@ -372,19 +371,21 @@ class GradShafranovSolver(EquilipyInitialisation,
     def IntegrateGhostStabilizationTerms(self):
         """
         Integrates ghost stabilization terms across internal ghost faces between elements to
-        stabilize the numerical solution in high-order finite element methods (e.g., CutFEM).
+        stabilize the numerical solution in high-order finite element methods.
 
         Process:
             - Iterates over all ghost faces defined in the mesh (`self.MESH.GhostFaces`).
             - For each ghost face, retrieves adjacent elements and the associated face information.
-            - Constructs the local stabilization matrix (`LHSe`) and RHS vector (`RHSe`) across both elements.
-            - Computes ghost penalty contributions using gradient jumps across shared faces.
-            - Applies Dirichlet boundary conditions if any boundary nodes are present.
-            - Assembles the local contributions into the global system matrices `self.LHS` and `self.RHS`.
+            - Constructs the local stabilization matrix (`LHSe`) across both elements.
+            - Computes ghost penalty contributions from the jump of the normal derivatives
+              (all orders p = 1 ... ElOrder) across the shared face.
+            - Assembles the local contributions into the global stiffness matrix `self.LHS`.
 
         Stabilization:
-            - Uses gradient jump terms weighted by a user-defined penalty parameter `zeta`.
-            - Alternative option (commented) allows stabilization based on solution jumps.
+            - Penalises the jump of each normal derivative order p, weighted by the
+              user-defined penalty parameter `zeta` and the scaling h^(2p-1).
+            - Purely a LHS contribution (consistent: the jump vanishes at the exact solution),
+              so no RHS term is assembled.
         """
         # Validate penalty parameter value
         if self.RunTests:
@@ -409,29 +410,24 @@ class GradShafranovSolver(EquilipyInitialisation,
             
             # LOOP OVER ELEMENT ORDER -> PENALISE ALL DERIVATIVES JUMP
             for p in range(1,self.MESH.ElOrder+1):
-                # COMPUTE ADEQUATE GHOST PENALTY TERM
-                # Ghost penalty scaling: h^(2p+2) provides the best stabilization
-                # for the axisymmetric Grad-Shafranov problem without over-penalization
-                # (Tested against formulas h^(2p-2), h^(2p-1), h^(2p), h^(2p+1))
+                # COMPUTE GHOST PENALTY TERM
+                # h^(2p-1) is the standard ghost penalty weight for penalising the jump
+                # of the p-th normal derivative across the face.
                 h = max(ELEMENT0.length,ELEMENT1.length)
-                penalty = self.zeta * h**(2*p - 1)  # (2*p + 2) or (2*p + 1)
+                penalty = self.zeta * h**(2*p - 1)
                 sign_p = (-1) ** (p + 1)   # +1 for p=1 (odd), -1 for p=2 (even)
 
                 # COMPUTE NORMAL PHYSICAL DERIVATIVE
-                # Prepare the contraction string for einsum
-                # We need to contract p indices of the derivative 
-                # with p normal vectors and p inverse Jacobians.
+                # Build the einsum string contracting the p free indices of the p-th
+                # physical derivative tensor (dNg) with p copies of the normal vector.
                 if p == 1:
-                    # Physical Gradient: (dN/dxi)  * n
-                    # dNg[0] shape: [ng, n, 2]
-                    subscripts = 'ni,i->n' 
+                    # Physical gradient (∂N/∂x)·n ;  dNg[0] shape: [ng, n, 2]
+                    subscripts = 'ni,i->n'
                 elif p == 2:
-                    # Physical Hessian: (d2N/dxi2) * n * n
-                    # dNg[1] shape: [ng, n, 2, 2]
+                    # Physical Hessian (∂²N/∂x²):n n ;  dNg[1] shape: [ng, n, 2, 2]
                     subscripts = 'nij,i,j->n'
                 elif p == 3:
-                    # Physical 3rd Order: (d3N/dxi3) * n * n * n
-                    # dNg[2] shape: [ng, n, 2, 2, 2]
+                    # Physical 3rd derivative (∂³N/∂x³):n n n ;  dNg[2] shape: [ng, n, 2, 2, 2]
                     subscripts = 'nijk,i,j,k->n'
 
                 # LOOP OVER GAUSS INTEGRATION NODES
@@ -439,16 +435,15 @@ class GradShafranovSolver(EquilipyInitialisation,
                     n0 = FACE0.NormalVec    
                     n1 = FACE1.NormalVec    
 
-                    # 2. Build the list of arguments to pass to einsum
-                    # Start with the reference derivative tensor
+                    # Build the einsum argument list: physical derivative tensor first,
+                    # then p copies of the normal vector.
                     args0 = [FACE0.dNg[p-1][ig]]
                     args1 = [FACE1.dNg[p-1][ig]]
 
-                    # Add p copies of the Normal vector
                     for _ in range(p):
                         args0.append(n0)
                         args1.append(n1)
-                    
+
                     # Perform the multi-linear contraction
                     # Results in a vector of length n representing the p-th NORMAL PHYSICAL derivative for each basis function.
                     n_dot_dNg0 = np.einsum(subscripts, *args0, optimize=True)
@@ -509,10 +504,10 @@ class GradShafranovSolver(EquilipyInitialisation,
         for ielem in self.MESH.NonCutElems:
             # ISOLATE ELEMENT
             ELEMENT = self.MESH.Elements[ielem]
-            # INV-6: Only plasma-side elements contribute domain stiffness.
-            # Skip pure vacuum interior elements (Dom>0, no Dirichlet BCs);
-            # their DOFs are conditioned by ghost penalty and the zero-diagonal fix below.
-            if ELEMENT.Dom > 0 and ELEMENT.Teboun is None:
+            # FIXED_BOUNDARY: only plasma-side elements contribute domain stiffness.
+            # FREE_BOUNDARY: vacuum elements are included so Δ*ψ=0 is solved on the full
+            # domain and the level-set can evolve. Source term stays zero for Dom>0.
+            if self.FIXED_BOUNDARY and ELEMENT.Dom > 0 and ELEMENT.Teboun is None:
                 continue
             # COMPUTE SOURCE TERM (PLASMA CURRENT)  mu0*R*Jphi  IN PLASMA REGION NODES
             SourceTermg = np.zeros([ELEMENT.ng])
@@ -562,15 +557,17 @@ class GradShafranovSolver(EquilipyInitialisation,
             ####### COMPUTE DOMAIN TERMS
             # LOOP OVER SUBELEMENTS 
             for SUBELEM in ELEMENT.SubElements:
-                # Skip vacuum subelements: their IBP flux ∫_Γ (1/R) N_k (n⁺·∇ψ) dΓ is O(h)
-                # and has no Nitsche cancellation, which would saturate convergence to O(h).
-                if SUBELEM.Dom >= 0:
+                # FIXED_BOUNDARY: skip vacuum sub-elements (their one-sided IBP flux has no
+                # Nitsche cancellation and saturates convergence to O(h)).
+                # FREE_BOUNDARY: include vacuum sub-elements (Δ*ψ=0 in vacuum); source is zero.
+                if self.FIXED_BOUNDARY and SUBELEM.Dom >= 0:
                     continue
                 # COMPUTE SOURCE TERM (PLASMA CURRENT)  mu0*R*Jphi  IN PLASMA REGION NODES
-                PSIg = SUBELEM.Nrefg @ ELEMENT.PSIe
                 SourceTermg = np.zeros([SUBELEM.ng])
-                for ig in range(SUBELEM.ng):
-                    SourceTermg[ig] = self.PlasmaCurrent.SourceTerm(SUBELEM.Xg[ig,:],PSIg[ig])
+                if SUBELEM.Dom < 0:
+                    PSIg = SUBELEM.Nrefg @ ELEMENT.PSIe
+                    for ig in range(SUBELEM.ng):
+                        SourceTermg[ig] = self.PlasmaCurrent.SourceTerm(SUBELEM.Xg[ig,:],PSIg[ig])
                         
                 # COMPUTE ELEMENTAL MATRICES
                 LHSe, RHSe = SUBELEM.IntegrateElementalDomainTerms(SourceTermg)

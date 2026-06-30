@@ -13,7 +13,7 @@
 
 # Author: Pau Manyer Fuertes
 # Email: pau.manyer@bsc.es
-# Date: July 2025
+# Date: June 2026
 # Institution: Barcelona Supercomputing Center (BSC)
 # Department: Computer Applications in Science and Engineering (CASE)
 # Research Group: Nuclear Fusion
@@ -251,8 +251,7 @@ class Element:
                     else:   # all vertices values with negative sign -> INTERIOR REGION ELEMENT 
                         region = -1
                         
-                    # CHECK LEVEL-SET SIGN ON ELEMENTAL 'HIGH ORDER' NODES
-                    #for i in range(self.numedges,self.n-self.numedges):  # LOOP OVER NODES WHICH ARE NOT ON VERTICES
+                    # CHECK LEVEL-SET SIGN ON ELEMENTAL 'HIGH ORDER' NODES (NON-VERTEX NODES)
                     for i in range(self.numedges,self.n):
                         if np.sign(self.LSe[i]) != np.sign(self.LSe[0]):
                             DiffHighOrderNodes.append(i)
@@ -778,12 +777,11 @@ class Element:
         """
         # FIRST WE NEED TO DETERMINE WHICH IS THE VERTEX COMMON TO BOTH EDGES INTERSECTING WITH THE INTERFACE
         # AND ORGANISE THE NODAL MATRIX ACCORDINGLY SO THAT
-        #       - THE FIRST ROW CORRESPONDS TO THE VERTEX COORDINATES WHICH IS SHARED BY BOTH EDGES INTERSECTING THE INTERFACE 
+        #       - THE FIRST ROW CORRESPONDS TO THE VERTEX COORDINATES WHICH IS SHARED BY BOTH EDGES INTERSECTING THE INTERFACE
         #       - THE SECOND ROW CORRESPONDS TO THE VERTEX COORDINATES WHICH DEFINES THE EDGE ON WHICH THE FIRST INTERSECTION POINT IS LOCATED
         #       - THE THIRD ROW CORRESPONDS TO THE VERTEX COORDINATES WHICH DEFINES THE EDGE ON WHICH THE SECOND INTERSECTION POINT IS LOCATED
-        # HOWEVER, WHEN LOOKING FOR THE APPROXIMATION OF THE PHYSICAL INTERFACE THIS PROCESS IS ALREADY DONE, THEREFORE WE CAN SKIP IT. 
-        # IF INPUT Xemod IS PROVIDED, THE TESSELLATION IS DONE ACCORDINGLY TO ADAPTED NODAL MATRIX Xemod WHICH IS ASSUMED TO HAS THE PREVIOUSLY DESCRIBED STRUCTURE.
-        # IF NOT, THE COMMON NODE IS DETERMINED (THIS IS THE CASE FOR INSTANCE WHEN THE REFERENCE ELEMENT IS TESSELLATED).
+        # THIS ROUTINE TESSELLATES THE REFERENCE ELEMENT, SO THE COMMON NODE IS DETERMINED HERE DIRECTLY FROM THE
+        # INTERSECTED EDGE NODES (edgenodes) RETURNED BY THE INTERFACE APPROXIMATION.
 
         XIeLIN = ReferenceElementCoordinates(self.ElType,1)
         edgenodes = self.InterfApprox.ElIntNodes[:,:2]

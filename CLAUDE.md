@@ -22,12 +22,24 @@ stabilization conditions near-degenerate DOFs.
 
 ## GS equation and sign conventions
 
-The GS PDE on the plasma domain Ω⁻:
+Two formulations are supported, selected by `FIXED_BOUNDARY`:
+
+**FIXED_BOUNDARY = True** — solve only on plasma domain Ω⁻:
 ```
 Δ*ψ = f(ψ)    on Ω⁻
 ψ = ψ_D        on Γ (plasma boundary, Nitsche)
 ψ = 0          on ∂Ω_comp (outer wall, strong Dirichlet)
 ```
+
+**FIXED_BOUNDARY = False** — solve on full computational domain Ω = Ω⁻ ∪ Γ ∪ Ω⁺:
+```
+Δ*ψ = f(ψ)    on Ω⁻  (plasma)
+Δ*ψ = 0       on Ω⁺  (vacuum)
+ψ = ψ_B        on ∂Ω_comp (outer wall, from Biot-Savart)
+```
+The plasma boundary Γ is an evolving interior interface tracked by the level-set; Nitsche enforces
+weak continuity across it. The level-set is updated each inner iteration until convergence.
+
 where `Δ* = R ∂/∂R (1/R ∂/∂R) + ∂²/∂Z²` and `f = μ₀·R·j_φ`.
 
 **IBP of GS operator:** `∇·((1/R)∇ψ) = (1/R)Δ*ψ`, so:
@@ -63,18 +75,30 @@ sign fix to the GS solver. See `FIX_SOLVER.md` BUG-4 for the full explanation.
 
 ## Assembly workflow (`AssembleGlobalSystem`)
 
-The assembly consists of four phases executed in order:
+The assembly consists of five phases. Phases 1 and 2 are sensitive to `FIXED_BOUNDARY`;
+the remaining phases are identical in both modes.
+
+### `FIXED_BOUNDARY` switch summary
+
+| Phase | FIXED_BOUNDARY = True | FIXED_BOUNDARY = False |
+|-------|----------------------|------------------------|
+| 1 – NonCutElems | Skip `Dom>0, Teboun=None` (INV-6) | Assemble all elements |
+| 2 – PlasmaBoundElems sub-elems | Plasma sub-elems only (`Dom<0`) | Both plasma and vacuum sub-elems |
+| 3 – Nitsche interface | Enforce ψ=ψ_D (known exact) | Enforce ψ=ψ_D (previous iterate) |
+| 4 – Ghost penalty | Unchanged | Unchanged |
+| 5 – Zero-diagonal sweep | Patches unreachable vacuum DOFs | No-op (all DOFs assembled) |
 
 ### Phase 1 — Non-cut elements (`self.MESH.NonCutElems`)
 
-Iterates over all non-cut elements. Applies the INV-6 guard to skip pure vacuum interior:
+Iterates over all non-cut elements. The guard is active only in FIXED_BOUNDARY mode (INV-6):
 
 ```python
 for ielem in self.MESH.NonCutElems:
     ELEMENT = self.MESH.Elements[ielem]
-    # INV-6: Skip pure vacuum interior elements (Dom>0, no Dirichlet BCs).
-    # Their DOFs are conditioned by ghost penalty + zero-diagonal sweep.
-    if ELEMENT.Dom > 0 and ELEMENT.Teboun is None:
+    # FIXED_BOUNDARY (INV-6): skip pure vacuum interior; their DOFs are
+    # conditioned by ghost penalty + zero-diagonal sweep.
+    # FREE_BOUNDARY: include vacuum elements so Δ*ψ=0 is solved on Ω⁺.
+    if self.FIXED_BOUNDARY and ELEMENT.Dom > 0 and ELEMENT.Teboun is None:
         continue
     # Source term: only for plasma interior (Dom < 0)
     SourceTermg = np.zeros([ELEMENT.ng])
@@ -88,34 +112,42 @@ for ielem in self.MESH.NonCutElems:
     # assemble into self.LHS, self.RHS ...
 ```
 
-Elements that pass the guard:
-- `Dom < 0` (plasma interior): assembled with full source term
-- `Dom = +2` OR `Teboun is not None` (outer boundary Dirichlet): assembled with zero source + Dirichlet BC
+Elements always assembled (both modes):
+- `Dom < 0` (plasma interior): full source term
+- `Dom = +2` or `Teboun is not None` (outer boundary): zero source + Dirichlet BC
 
-Elements that are SKIPPED (INV-6 fix):
+Elements skipped only in FIXED_BOUNDARY mode (INV-6):
 - `Dom > 0 and Teboun is None` (pure vacuum interior)
 
-### Phase 2 — Cut element plasma sub-elements (`self.MESH.PlasmaBoundElems`)
+### Phase 2 — Cut element sub-elements (`self.MESH.PlasmaBoundElems`)
 
-Each cut element is tessellated into plasma and vacuum sub-elements. Only plasma sub-elements
-(Dom < 0) contribute domain stiffness; vacuum sub-elements are skipped:
+Each cut element is tessellated into plasma and vacuum sub-elements. In FIXED_BOUNDARY mode,
+only plasma sub-elements (Dom < 0) contribute; in FREE_BOUNDARY mode, both sides are assembled
+(vacuum sub-elements use zero source term, representing `Δ*ψ = 0`):
 
 ```python
 for ielem in self.MESH.PlasmaBoundElems:
     ELEMENT = self.MESH.Elements[ielem]
     for SUBELEM in ELEMENT.SubElements:
-        if SUBELEM.Dom >= 0:   # skip vacuum sub-elements
+        # FIXED_BOUNDARY: skip vacuum sub-elements (one-sided IBP flux is O(h),
+        # no Nitsche cancellation → saturates convergence).
+        # FREE_BOUNDARY: include vacuum sub-elements; source term stays zero.
+        if self.FIXED_BOUNDARY and SUBELEM.Dom >= 0:
             continue
-        PSIg = SUBELEM.Nrefg @ ELEMENT.PSIe
-        SourceTermg = [self.PlasmaCurrent.SourceTerm(SUBELEM.Xg[ig,:], PSIg[ig])
-                       for ig in range(SUBELEM.ng)]
+        SourceTermg = np.zeros([SUBELEM.ng])
+        if SUBELEM.Dom < 0:   # source only in plasma
+            PSIg = SUBELEM.Nrefg @ ELEMENT.PSIe
+            for ig in range(SUBELEM.ng):
+                SourceTermg[ig] = self.PlasmaCurrent.SourceTerm(SUBELEM.Xg[ig,:], PSIg[ig])
         LHSe, RHSe = SUBELEM.IntegrateElementalDomainTerms(SourceTermg)
         # assemble using ELEMENT.Te (parent node indices) ...
 ```
 
-Why vacuum sub-elements are skipped: their IBP boundary flux `∫_∂K⁺ (1/R) N_k (n⁺·∇ψ) dΓ`
-is O(h) and has no Nitsche cancellation term (one-sided Nitsche uses only the plasma side n⁻).
-Including it saturates convergence to O(h) — the same root cause as the INV-6 violation.
+Why vacuum sub-elements are skipped in FIXED_BOUNDARY mode: their IBP boundary flux
+`∫_∂K⁺ (1/R) N_k (n⁺·∇ψ) dΓ` is O(h) and has no Nitsche cancellation term (one-sided
+Nitsche uses only the plasma side n⁻). Including it saturates convergence to O(h).
+In FREE_BOUNDARY mode this is acceptable — full-domain accuracy is needed for level-set
+evolution, not optimal convergence to a fixed exact solution.
 
 ### Phase 3 — Nitsche interface terms (`self.MESH.PlasmaBoundActiveElems`)
 
@@ -160,7 +192,7 @@ for i in range(self.MESH.Nn):
 
 ## All bug fixes applied to the GS solver
 
-### INV-6: Vacuum elements assembled into domain stiffness [CRITICAL FIX]
+### INV-6: Vacuum elements assembled into domain stiffness [FIXED — FIXED_BOUNDARY only]
 
 **Root cause:** The original assembly iterated over `self.MESH.NonCutElems` without filtering,
 assembling domain stiffness `∫_K (1/R) ∇N_i·∇N_j` for vacuum elements (Dom=+1). Since the GS
@@ -169,9 +201,12 @@ differs from ψ_exact in the vacuum. Cut element boundary nodes (shared between 
 adjacent vacuum elements) propagated this O(h) mismatch into the plasma solution through Nitsche
 coupling, saturating convergence at O(h) for ALL element families regardless of polynomial order.
 
-**Fix:** Added guard `if ELEMENT.Dom > 0 and ELEMENT.Teboun is None: continue` at the top of
-the NonCutElems loop (`src/GradShafranovSolver.py`, Phase 1). Similarly, vacuum sub-elements
-in the PlasmaBoundElems loop are skipped with `if SUBELEM.Dom >= 0: continue` (Phase 2).
+**Fix:** Guards conditioned on `self.FIXED_BOUNDARY`:
+- Phase 1: `if self.FIXED_BOUNDARY and ELEMENT.Dom > 0 and ELEMENT.Teboun is None: continue`
+- Phase 2: `if self.FIXED_BOUNDARY and SUBELEM.Dom >= 0: continue`
+
+In FREE_BOUNDARY mode both guards are inactive — the full domain is assembled so the
+level-set can evolve (vacuum contribution `Δ*ψ=0` is physically correct in Ω⁺).
 
 **Impact:** TRI03 rates went from {0.93, 0.35, 0.87} → {3.08, 1.99, 2.00} (O(h) → O(h²)).
 
@@ -354,4 +389,4 @@ needed by the solver. Do not use absolute paths in test scripts.
 
 ---
 
-*Last updated: 2026-05-18 — All fixes validated, optimal convergence confirmed for all 4 element families.*
+*Last updated: 2026-06-30 — Added FIXED_BOUNDARY domain-integration switch: free-boundary mode now assembles the full computational domain (Δ*ψ=0 in vacuum) so the plasma level-set can evolve. Optimal convergence confirmed for all 4 element families in fixed-boundary mode.*
