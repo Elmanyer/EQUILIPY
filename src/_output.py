@@ -574,6 +574,8 @@ class EquilipyOutput:
             self.file_quadratures.write("NON_CUT_ELEMENTS\n")
             for ielem in self.MESH.NonCutElems:
                 ELEM = self.MESH.Elements[ielem]
+                if ELEM.Xg is None:   # vacuum element skipped in fixed boundary: no quadrature stored
+                    continue
                 self.file_quadratures.write("elem {:d}\n".format(ELEM.index+1))
                 self.file_quadratures.write("Xg\n")
                 for igaus in range(ELEM.ng):

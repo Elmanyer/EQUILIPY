@@ -526,7 +526,9 @@ class EquilipyPlotting:
         if QUADRATURE:
             if ELEMENT.Dom == -1 or ELEMENT.Dom == 1 or ELEMENT.Dom == 2:
                 # PLOT STANDARD QUADRATURE INTEGRATION POINTS
-                axs[1].scatter(ELEMENT.Xg[:,0],ELEMENT.Xg[:,1],marker='x',c='black')
+                # (vacuum elements skipped in fixed boundary have no stored quadrature)
+                if ELEMENT.Xg is not None:
+                    axs[1].scatter(ELEMENT.Xg[:,0],ELEMENT.Xg[:,1],marker='x',c='black')
             else:
                 if TESSELLATION:
                     for isub, SUBELEM in enumerate(ELEMENT.SubElements):
@@ -740,7 +742,9 @@ class EquilipyPlotting:
             for i in range(self.MESH.n):
                 plt.plot([ELEMENT.Xe[i,0], ELEMENT.Xe[(i+1)%ELEMENT.n,0]], [ELEMENT.Xe[i,1], ELEMENT.Xe[(i+1)%ELEMENT.n,1]], color='gray', linewidth=1)
             # PLOT QUADRATURE INTEGRATION POINTS
-            plt.scatter(ELEMENT.Xg[:,0],ELEMENT.Xg[:,1],marker='x',c='gray')
+            # (vacuum elements skipped in fixed boundary have no stored quadrature)
+            if ELEMENT.Xg is not None:
+                plt.scatter(ELEMENT.Xg[:,0],ELEMENT.Xg[:,1],marker='x',c='gray')
         # PLOT EXTERIOR ELEMENTS IF EXISTING
         for elem in self.ExteriorElems:
             ELEMENT = self.MESH.Elements[elem]

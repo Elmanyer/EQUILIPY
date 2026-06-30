@@ -254,24 +254,25 @@ class GradShafranovSolver(EquilipyInitialisation,
             self.MESH.IdentifyBoundaries()
             self.MESH.IdentifyNearestNeighbors()
             print('Done!')
-            
-            # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR ALL ELEMENTS 
-            EqPrint('     -> COMPUTE STANDARD NUMERICAL INTEGRATION QUADRATURES...', end="")
-            self.MESH.ComputeStandardQuadratures(self.QuadratureOrder2D)
-            print('Done!')
-                
-            # DEFINE STANDARD SURFACE QUADRATURE NUMBER OF INTEGRATION NODES
-            self.nge = self.MESH.Elements[0].ng
-            
+
             EqPrint('Done!')
             
         #####################################################################
         ################# RUN-TIME DOMAIN DISCRETISATION ####################
         
-        # CLASSIFY ELEMENTS   
+        # CLASSIFY ELEMENTS (also sets MESH.ActiveElements: the elements needing a standard
+        # quadrature -> PlasmaElems for FIXED_BOUNDARY, every element for FREE_BOUNDARY).
         EqPrint("     -> CLASSIFY ELEMENTS...", end="")
-        self.PlasmaLS = self.MESH.ClassifyElements(self.PlasmaLS)
+        self.PlasmaLS = self.MESH.ClassifyElements(self.PlasmaLS, self.FIXED_BOUNDARY)
         print('Done!')
+
+        # COMPUTE STANDARD 2D QUADRATURE ENTITIES (ONCE, AT INITIALISATION) FOR THE ACTIVE ELEMENTS.
+        # Done after classification so MESH.ActiveElements is known.
+        if INITIALISATION:
+            EqPrint('     -> COMPUTE STANDARD NUMERICAL INTEGRATION QUADRATURES...', end="")
+            self.MESH.ComputeStandardQuadratures(self.QuadratureOrder2D)
+            self.nge = self.MESH.nge
+            print('Done!')
 
         # COMPUTE PLASMA BOUNDARY APPROXIMATION
         EqPrint("     -> APPROXIMATE PLASMA BOUNDARY INTERFACE...", end="")
@@ -498,17 +499,21 @@ class GradShafranovSolver(EquilipyInitialisation,
         if self.out_elemsys:
             self.file_elemsys.write('NON_CUT_ELEMENTS\n')
 
-        # INTEGRATE OVER THE SURFACE OF ELEMENTS WHICH ARE NOT CUT BY ANY INTERFACE (STANDARD QUADRATURES)
+        # INTEGRATE OVER THE SURFACE OF ACTIVE NON-CUT ELEMENTS (STANDARD QUADRATURES)
         EqPrint("     Integrate non-cut elements contributions...", end="")
 
-        for ielem in self.MESH.NonCutElems:
+        # Non-cut elements assembled with their standard quadrature (cut elements are handled in
+        # Phase 2 via adapted quadratures, so they are excluded here):
+        #   FIXED_BOUNDARY: plasma-interior elements only. Vacuum and computational-boundary
+        #     (Dirichlet) elements are irrelevant — the boundary condition is imposed weakly on
+        #     the fixed plasma boundary via Nitsche — so they are neither quadratured nor assembled.
+        #   FREE_BOUNDARY: all non-cut elements (plasma, vacuum, boundary); Δ*ψ=0 in the vacuum.
+        # (This is a subset of MESH.ActiveElements, which additionally covers every element in the
+        #  free-boundary case so a later plasma promotion always finds its standard quadrature.)
+        AssembledNonCutElems = self.MESH.PlasmaElems if self.FIXED_BOUNDARY else self.MESH.NonCutElems
+        for ielem in AssembledNonCutElems:
             # ISOLATE ELEMENT
             ELEMENT = self.MESH.Elements[ielem]
-            # FIXED_BOUNDARY: only plasma-side elements contribute domain stiffness.
-            # FREE_BOUNDARY: vacuum elements are included so Δ*ψ=0 is solved on the full
-            # domain and the level-set can evolve. Source term stays zero for Dom>0.
-            if self.FIXED_BOUNDARY and ELEMENT.Dom > 0 and ELEMENT.Teboun is None:
-                continue
             # COMPUTE SOURCE TERM (PLASMA CURRENT)  mu0*R*Jphi  IN PLASMA REGION NODES
             SourceTermg = np.zeros([ELEMENT.ng])
             if ELEMENT.Dom < 0:

@@ -79,6 +79,7 @@ class Mesh:
         self.PlasmaBoundActiveElems = None  # LIST OF CUT ELEMENT'S INDEXES, CONTAINING INTERFACE BETWEEN PLASMA AND VACUUM, ON WHICH BC ARE APPLIED
         self.BoundaryElems = None           # LIST OF CUT (OR NOT) ELEMENT'S INDEXES AT THE COMPUTATIONAL DOMAIN'S BOUNDARY
         self.NonCutElems = None             # LIST OF ALL NON CUT ELEMENTS
+        self.ActiveElements = None          # LIST OF ELEMENTS ASSEMBLED WITH STANDARD QUADRATURE (PHASE 1): PlasmaElems (FIXED) / NonCutElems (FREE)
         self.DirichletElems = None          # LIST OF ALL ELEMENTS POSSESSING A BOUNDARY NODE (NODE ON WHICH APPLY DIRICHLET BC)
         self.Elements = None                # ARRAY CONTAINING ALL ELEMENTS IN MESH (PYTHON OBJECTS)
         
@@ -455,7 +456,7 @@ class Mesh:
         return
     
     
-    def ClassifyElements(self,PlasmaLS):
+    def ClassifyElements(self,PlasmaLS,FIXED_BOUNDARY):
         """ 
         Function that separates the elements inside vacuum vessel domain into 3 groups: 
                 - PlasmaElems: elements inside the plasma region 
@@ -542,11 +543,23 @@ class Mesh:
         self.VacuumElems = self.VacuumElems[:kvacuu]
         self.PlasmaBoundElems = self.PlasmaBoundElems[:kint]
         
-        # GATHER NON-CUT ELEMENTS  
+        # GATHER NON-CUT ELEMENTS
         self.NonCutElems = np.concatenate((self.PlasmaElems, self.VacuumElems, self.BoundaryElems), axis=0)
-        
+
         if len(self.NonCutElems) + len(self.PlasmaBoundElems) != self.Ne:
             raise ValueError("Non-cut elements + Cut elements =/= Total number of elements  --> Wrong mesh classification!!")
+
+        # DEFINE ACTIVE ELEMENTS: the elements for which a STANDARD quadrature must be computed.
+        # FIXED_BOUNDARY: the plasma region is fixed and the PDE is solved only inside it, so only
+        #   plasma-interior elements need a standard quadrature (cut elements use adapted ones;
+        #   vacuum and computational-boundary elements are not assembled).
+        # FREE_BOUNDARY: the plasma region evolves, so any element may later become a plasma element
+        #   and need its standard quadrature; since quadratures are computed once at initialisation,
+        #   they must be computed for every element.
+        if FIXED_BOUNDARY:
+            self.ActiveElements = self.PlasmaElems
+        else:
+            self.ActiveElements = np.arange(self.Ne)
         
         # CLASSIFY NODES ACCORDING TO NEW ELEMENT CLASSIFICATION
         #self.ClassifyNodes()
@@ -897,14 +910,24 @@ class Mesh:
     
     def ComputeStandardQuadratures(self,QuadOrder2D):
         """
-        Computes the STANDARD FEM numerical integration QUADRATURES for ALL MESH ELEMENTS.
+        Computes the STANDARD FEM numerical integration QUADRATURES for the active mesh elements.
+
+        Iterates self.ActiveElements (set by ClassifyElements): PlasmaElems for the FIXED_BOUNDARY
+        problem (only plasma-interior elements need a standard quadrature — cut elements use adapted
+        ones, vacuum and computational-boundary elements are not assembled) or every element for the
+        FREE_BOUNDARY problem (the evolving plasma may promote any element to plasma later).
+        Requires the elements to be classified beforehand (Dom flags + ActiveElements set by
+        ClassifyElements).
         """
-        # COMPUTE STANDARD 2D QUADRATURE ENTITIES FOR NON-CUT ELEMENTS 
-        for ELEMENT in self.Elements:
+        # COMPUTE STANDARD 2D QUADRATURE ENTITIES.
+        # nge (nodes per standard quadrature) is taken from the first active element; it is
+        # mesh-uniform, so sourcing it from any active element is equivalent and robust.
+        self.nge = None
+        for ielem in self.ActiveElements:
+            ELEMENT = self.Elements[ielem]
             ELEMENT.ComputeStandardQuadrature2D(QuadOrder2D)
-            
-        # DEFINE STANDARD SURFACE QUADRATURE NUMBER OF INTEGRATION NODES
-        self.nge = self.Elements[0].ng
+            if self.nge is None:
+                self.nge = ELEMENT.ng
         return
     
     def ComputeAdaptedQuadratures(self,QuadOrder2D,QuadOrder1D):
@@ -1245,7 +1268,14 @@ class Mesh:
 
 
     def IntegrationNodesMesh(self):
+        # Assembles a contiguous (Ne x nge) table of physical Gauss nodes, assuming every
+        # element carries a standard quadrature. In the FIXED_BOUNDARY problem vacuum elements
+        # are skipped (ELEMENT.Xg is None), so this gather is not available there.
         if type(self.Xg) == type(None):
+            if any(ELEMENT.Xg is None for ELEMENT in self.Elements):
+                raise RuntimeError("IntegrationNodesMesh requires standard quadratures on every "
+                                   "element, but some are missing (vacuum elements are skipped in "
+                                   "the FIXED_BOUNDARY problem).")
             self.Xg = np.zeros([self.Ne*self.nge,self.dim])
             for ielem, ELEMENT in enumerate(self.Elements):
                 self.Xg[ielem*self.nge:(ielem+1)*self.nge,:] = ELEMENT.Xg

@@ -79,7 +79,11 @@ class Element:
         self.neighbours = None                                          # GLOBAL INDEXES OF NEAREST NEIGHBOURS ELEMENTS CORRESPONDING TO EACH ELEMENTAL FACE (LOCAL INDEX ORDERING FOR FACES)
         self.Teboun = None
         
-        # INTEGRATION QUADRATURES ENTITIES
+        # INTEGRATION QUADRATURES ENTITIES (STANDARD 2D QUADRATURE OF THE FULL ELEMENT)
+        # In the FIXED_BOUNDARY problem only the active plasma-interior elements (MESH.ActiveElements)
+        # receive a standard quadrature; these attributes stay None for cut elements (which integrate
+        # via their sub-elements' adapted quadratures) and for vacuum / computational-boundary
+        # elements (which are not assembled). See Mesh.ComputeStandardQuadratures.
         self.ng = None              # NUMBER OF GAUSS INTEGRATION NODES IN STANDARD 2D GAUSS QUADRATURE
         self.XIg = None             # GAUSS INTEGRATION NODES 
         self.Wg = None              # GAUSS INTEGRATION WEIGTHS
