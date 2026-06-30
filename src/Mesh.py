@@ -624,12 +624,13 @@ class Mesh:
 
         The resulting `PlasmaBoundElemPath` is stored as a list of element indices representing a connected boundary path.
         """
-        self.PlasmaBoundElemPath = list()
+        self.PlasmaBoundElemPath = np.zeros([len(self.PlasmaBoundElems)], dtype=int)
         
         if self.PlasmaBoundElems.size != 0:
             # INTIALISE PATH LIST
-            self.PlasmaBoundElemPath.append(self.PlasmaBoundElems[0])
+            self.PlasmaBoundElemPath[0] = self.PlasmaBoundElems[0]
             # CONSTRUCT PATH
+            ipos = 1
             for ielem in range(len(self.PlasmaBoundElems)-1):
                 # LOOK AT ELEMENT NEIGHBOURS
                 for ineigh in self.Elements[self.PlasmaBoundElemPath[ielem]].neighbours:
@@ -638,15 +639,19 @@ class Mesh:
                     else:
                         # IF NEIGHBOUR ELEMENT IS PLASMA BOUNDARY ELEMENT
                         if self.Elements[ineigh].Dom == 0:
-                            # IF FIRST ITERATION 
+                            # IF FIRST ITERATION TAKE THE FIRST NEIGHBOR WHICH IS A PLASMA BOUNDARY ELEMENT
                             if ielem == 0:
-                                self.PlasmaBoundElemPath.append(self.Elements[ineigh].index)
+                                self.PlasmaBoundElemPath[ipos] = self.Elements[ineigh].index
+                                ipos += 1
                                 break
                             else:
                                 # CHECK THAT IS NOT THE PREVIOUS ADJACENT ELEMENT
-                                if ineigh != self.PlasmaBoundElemPath[ielem-1]:
-                                    self.PlasmaBoundElemPath.append(self.Elements[ineigh].index)
+                                if ineigh != self.PlasmaBoundElemPath[ipos-1]:
+                                    self.PlasmaBoundElemPath[ipos] = self.Elements[ineigh].index
+                                    ipos += 1
                                     break
+        # TURN IT INTO A LIST
+        self.PlasmaBoundElemPath = list(self.PlasmaBoundElemPath)
         return
     
     
