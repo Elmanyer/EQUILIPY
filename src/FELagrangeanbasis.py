@@ -23,6 +23,40 @@
 
 from _header import EQUILIPY_ROOT
 import numpy as np
+from itertools import combinations
+
+
+def _Lagrange1Dderivatives(x, positions, i, deriv):
+    """
+    Value and derivatives (up to order 'deriv', max 3) of the 1D Lagrange basis
+    function associated with node i (0-based) at coordinate x, given the 1D node
+    'positions'. Returns a list [L, L', L'', L'''] truncated to deriv+1 entries.
+
+    Each Lagrange function is L_i(x) = prod_{j!=i} (x - x_j)/(x_i - x_j). Every
+    numerator factor (x - x_j) is linear (slope 1), so the d-th derivative equals
+    d! times the sum, over all size-d subsets of factors to differentiate, of the
+    product of the remaining factors. This closed form is exact and avoids the
+    sign/typo errors of hand-expanded per-node expressions.
+    """
+    others = [p for j, p in enumerate(positions) if j != i]
+    denom = 1.0
+    for p in others:
+        denom *= (positions[i] - p)
+    g = [x - p for p in others]          # linear numerator factors (each slope 1)
+    k = len(g)
+    factorial = [1, 1, 2, 6]
+    out = []
+    for d in range(min(deriv, 3) + 1):
+        total = 0.0
+        for drop in combinations(range(k), d):   # factors that get differentiated
+            prod = 1.0
+            for m in range(k):
+                if m not in drop:
+                    prod *= g[m]
+            total += prod
+        out.append(factorial[d] * total / denom)
+    return out
+
 
 def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
     """ 
@@ -270,28 +304,28 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 dNdxi = 3*(9/2)*((1/3-eta)*eta)
                                 dNdeta = -3*(9/2)*(-(1/3-eta)*eta-(1-xi-eta)*eta+(1-xi-eta)*(1/3-eta))
                             if deriv >= 2:
-                                Hess = np.array([[0, -27*eta + 4.5], [-27*eta + 4.5, 54*eta - 27*(1-xi-eta) - 9]])
+                                Hess = np.array([[0, -27*eta + 4.5], [-27*eta + 4.5, -81*eta - 27*xi + 36]])
                             if deriv >= 3:
                                     J3 = np.zeros((2,2,2))
-                                    J3[1,1,1], J3[1,1,0], J3[1,0,1], J3[0,1,1] = 81, -27, -27, -27
+                                    J3[1,1,1], J3[1,1,0], J3[1,0,1], J3[0,1,1] = -81, -27, -27, -27
                         case 7: 
                             N = 3*(9/2)*(1-xi-eta)*(2/3-xi-eta)*eta
                             if deriv >= 1:
                                 dNdxi = 3*(9/2)*(-(1-xi-eta)*eta-(2/3-xi-eta)*eta)
                                 dNdeta = 3*(9/2)*(-(1-xi-eta)*eta-(2/3-xi-eta)*eta+(1-xi-eta)*(2/3-xi-eta))
                             if deriv >= 2:
-                                Hess = np.array([[27*eta, 27*(1-xi-eta) + 27*eta - 4.5], [27*(1-xi-eta) + 27*eta - 4.5, 54*eta - 54*(1-xi-eta) + 9]])
+                                Hess = np.array([[27*eta, 27*xi + 54*eta - 22.5], [27*xi + 54*eta - 22.5, 54*xi + 81*eta - 45]])
                             if deriv >= 3:
-                                J3 = np.array([[ [0, -27], [-27, 54] ], [ [-27, 54], [54, -81] ]])
+                                J3 = np.array([[ [0, 27], [27, 54] ], [ [27, 54], [54, 81] ]])
                         case 8: 
                             N = 3*(9/2)*(1-xi-eta)*(2/3-xi-eta)*xi 
                             if deriv >= 1:
                                 dNdxi = 3*(9/2)*((1-xi-eta)*(2/3-xi-eta)-(1-xi-eta)*xi-(2/3-xi-eta)*xi)
                                 dNdeta = 3*(9/2)*(-(1-xi-eta)*xi-(2/3-xi-eta)*xi)
                             if deriv >= 2:
-                                Hess = np.array([[54*xi - 54*(1-xi-eta) + 9, 27*xi + 27*(1-xi-eta) - 4.5], [27*xi + 27*(1-xi-eta) - 4.5, 27*xi]])
+                                Hess = np.array([[81*xi + 54*eta - 45, 54*xi + 27*eta - 22.5], [54*xi + 27*eta - 22.5, 27*xi]])
                             if deriv >= 3:
-                                J3 = np.array([[ [-81, 54], [54, -27] ], [ [54, -27], [-27, 0] ]])
+                                J3 = np.array([[ [81, 54], [54, 27] ], [ [54, 27], [27, 0] ]])
                         case 9: 
                             N = -3*(9/2)*(1-xi-eta)*(1/3-xi)*xi 
                             if deriv >= 1:
@@ -301,7 +335,7 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 Hess = np.array([[27*(1-xi-eta) - 54*xi + 9, -27*xi + 4.5], [-27*xi + 4.5, 0]])
                             if deriv >= 3:
                                 J3 = np.zeros((2,2,2))
-                                J3[0,0,0], J3[0,0,1], J3[0,1,0], J3[1,0,0] = 81, -27, -27, -27
+                                J3[0,0,0], J3[0,0,1], J3[0,1,0], J3[1,0,0] = -81, -27, -27, -27
                         case 10: 
                             N = 6*(9/2)*(1-xi-eta)*xi*eta
                             if deriv >= 1:
@@ -316,335 +350,44 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
                                 J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = -54
 
         case 2:    # QUADRILATERAL
+            # The quadrilateral shape functions are tensor products of 1D Lagrange
+            # basis functions: N_(i,j)(xi,eta) = L_i(xi) * L_j(eta). All derivatives
+            # follow directly from the 1D basis derivatives (see _Lagrange1Dderivatives),
+            # which is exact and avoids the sign/typo errors of hand-expanded formulas.
             xi = X[0]
             eta = X[1]
-            match elemOrder:
-                case 1: 
-                    # 4-----3
-                    # |     |
-                    # |     |
-                    # 1-----2
-                    match node:
-                        case 1:
-                            N = (1-xi)*(1-eta)/4
-                            if deriv >= 1:
-                                dNdxi = (eta-1)/4
-                                dNdeta = (xi-1)/4
-                        case 2:
-                            N = (1+xi)*(1-eta)/4
-                            if deriv >= 1:
-                                dNdxi = (1-eta)/4
-                                dNdeta = -(1+xi)/4
-                        case 3:
-                            N = (1+xi)*(1+eta)/4
-                            if deriv >= 1:
-                                dNdxi = (1+eta)/4
-                                dNdeta = (1+xi)/4
-                        case 4:
-                            N = (1-xi)*(1+eta)/4
-                            if deriv >= 1:
-                                dNdxi = -(1+eta)/4
-                                dNdeta = (1-xi)/4
-                case 2:
-                    # 4---7---3
-                    # |       |
-                    # 8   9   6
-                    # |       |
-                    # 1---5---2
-                    match node: 
-                        case 1:
-                            N = xi*(xi-1)*eta*(eta-1)/4
-                            if deriv >= 1:
-                                dNdxi = (xi-1/2)*eta*(eta-1)/2
-                                dNdeta = xi*(xi-1)*(eta-1/2)/2
-                            if deriv >= 2:
-                                Hess = np.array([[eta*(eta-1)/2, (xi-1/2)*(eta-1/2)], [(xi-1/2)*(eta-1/2), xi*(xi-1)/2]])
-                        case 2:
-                            N = xi*(xi+1)*eta*(eta-1)/4
-                            if deriv >= 1:
-                                dNdxi = (xi+1/2)*eta*(eta-1)/2
-                                dNdeta = xi*(xi+1)*(eta-1/2)/2
-                            if deriv >= 2:
-                                Hess = np.array([[eta*(eta-1)/2, (xi+1/2)*(eta-1/2)], [(xi+1/2)*(eta-1/2), xi*(xi+1)/2]])
-                        case 3:
-                            N = xi*(xi+1)*eta*(eta+1)/4
-                            if deriv >= 1:
-                                dNdxi = (xi+1/2)*eta*(eta+1)/2
-                                dNdeta = xi*(xi+1)*(eta+1/2)/2
-                            if deriv >= 2:
-                                Hess = np.array([[eta*(eta+1)/2, (xi+1/2)*(eta+1/2)], [(xi+1/2)*(eta+1/2), xi*(xi+1)/2]])
-                        case 4:
-                            N = xi*(xi-1)*eta*(eta+1)/4
-                            if deriv >= 1:
-                                dNdxi = (xi-1/2)*eta*(eta+1)/2
-                                dNdeta = xi*(xi-1)*(eta+1/2)/2
-                            if deriv >= 2:
-                                Hess = np.array([[eta*(eta+1)/2, (xi-1/2)*(eta+1/2)], [(xi-1/2)*(eta+1/2), xi*(xi-1)/2]])
-                        case 5:
-                            N = (1-xi**2)*eta*(eta-1)/2
-                            if deriv >= 1:
-                                dNdxi = -xi*eta*(eta-1)
-                                dNdeta = (1-xi**2)*(eta-1/2)
-                            if deriv >= 2:
-                                Hess = np.array([[-eta*(eta-1), -2*xi*eta + xi], [-2*xi*eta + xi, 1-xi**2]])
-                        case 6:
-                            N = xi*(xi+1)*(1-eta**2)/2
-                            if deriv >= 1:
-                                dNdxi = (xi+1/2)*(1-eta**2)
-                                dNdeta = xi*(xi+1)*(-eta)
-                            if deriv >= 2:
-                                # Calculating the Hessian for the quadratic terms
-                                Hess = np.array([[1 - eta**2,    -2*xi*eta - eta], [-2*xi*eta - eta,   -xi**2 - xi]])
-                        case 7:
-                            N = (1-xi**2)*eta*(eta+1)/2
-                            if deriv >= 1:
-                                dNdxi = -xi*eta*(eta+1)
-                                dNdeta = (1-xi**2)*(eta+1/2)
-                            if deriv >= 2:
-                                Hess = np.array([[-eta*(eta+1), -2*xi*eta - xi], [-2*xi*eta - xi, 1-xi**2]])
-                        case 8:
-                            N = xi*(xi-1)*(1-eta**2)/2
-                            if deriv >= 1:
-                                dNdxi = (xi-1/2)*(1-eta**2)
-                                dNdeta = xi*(xi-1)*(-eta)
-                            if deriv >= 2:
-                                Hess = np.array([[1 - eta**2,    -2*xi*eta - eta], [-2*xi*eta - eta,   -xi**2 + xi]])
-                        case 9:
-                            N = (1-xi**2)*(1-eta**2)
-                            if deriv >= 1:
-                                dNdxi = -2*xi*(1-eta**2)
-                                dNdeta = (1-xi**2)*(-2*eta)
-                            if deriv >= 2:
-                                Hess = np.array([[-2*(1-eta**2), -2*xi*(-2*eta)], [-2*xi*(-2*eta), -2*(1-xi**2)]])
-                case 3:
-                    # 4---10--9---3
-                    # |           |
-                    # 11  16  15  8
-                    # |           |
-                    # 12  13  14  7
-                    # |           |
-                    # 1---5---6---2
-                    a = 81./256.
-                    c = 1./3.
-                    s1 = 1. + xi
-                    s2 = c + xi
-                    s3 = c - xi
-                    s4 = 1. - xi
-                    t1 = 1. + eta
-                    t2 = c + eta
-                    t3 = c - eta
-                    t4 = 1. - eta
-                    match node:
-                        case 1:
-                            N = a*s2*s3*s4*t2*t3*t4
-                            if deriv >= 1:
-                                dNdxi = a*t2*t3*t4*(-s2*s3-s2*s4+s3*s4)
-                                dNdeta = a*s2*s3*s4*(-t2*t3-t2*t4+t3*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[a*t2*t3*t4*(-s2 - s3 - s4), a*(-s2*s3-s2*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4)], 
-                                                    [a*(-s2*s3-s2*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4), a*s2*s3*s4*(-t2 - t3 - t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = a*t2*t3*t4*(-s2 - s3 - s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = a*(-s2*s3-s2*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4)
-                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = a*s2*s3*s4*(-t2 - t3 - t4)
-                        case 2:
-                            N = a*s1*s2*s3*t2*t3*t4
-                            if deriv >= 1:
-                                dNdxi = a*t2*t3*t4*(-s1*s2+s1*s3+s2*s3)
-                                dNdeta = a*s1*s2*s3*(-t2*t3-t2*t4+t3*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[a*t2*t3*t4*(-s1 - s2 - s3), a*(-s1*s2-s1*s3+s2*s3)*(-t2*t3-t2*t4+t3*t4)], 
-                                                     [a*(-s1*s2-s1*s3+s2*s3)*(-t2*t3-t2*t4+t3*t4), a*s1*s2*s3*(-t2 - t3 - t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = a*t2*t3*t4*(-s1 - s2 - s3)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = a*(-s1*s2-s1*s3+s2*s3)*(-t2*t3-t2*t4+t3*t4)
-                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = a*s1*s2*s3*(-t2 - t3 - t4)
-
-                        case 3:
-                            N = a*s1*s2*s3*t1*t2*t3
-                            if deriv >= 1:
-                                dNdxi = a*t1*t2*t3*(-s1*s2+s1*s3+s2*s3)
-                                dNdeta = a*s1*s2*s3*(-t1*t2+t1*t3+t2*t3)
-                            if deriv >= 2:
-                                Hess = np.array([[a*t1*t2*t3*(-s1 - s2 - s3), a*(-s1*s2-s1*s3+s2*s3)*(-t1*t2+t1*t3+t2*t3)],
-                                                     [a*(-s1*s2-s1*s3+s2*s3)*(-t1*t2+t1*t3+t2*t3), a*s1*s2*s3*(-t1 - t2 - t3)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = a*t1*t2*t3*(-s1 - s2 - s3)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = a*(-s1*s2-s1*s3+s2*s3)*(-t1*t2+t1*t3+t2*t3)
-                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = a*s1*s2*s3*(-t1 - t2 - t3)
-                        case 4:
-                            N = a*s2*s3*s4*t1*t2*t3
-                            if deriv >= 1:
-                                dNdxi = a*t1*t2*t3*(-s2*s3-s2*s4+s3*s4)
-                                dNdeta = a*s2*s3*s4*(-t1*t2+t1*t3+t2*t3)
-                            if deriv >= 2:
-                                Hess = np.array([[a*t1*t2*t3*(-s2 - s3 - s4), a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3)],
-                                                     [a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3), a*s2*s3*s4*(-t1 - t2 - t3)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = a*t1*t2*t3*(-s2 - s3 - s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3)
-                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = a*s2*s3*s4*(-t1 - t2 - t3)
-                        case 5:
-                            N = -3.0*a*s1*s3*s4*t2*t3*t4 
-                            if deriv >= 1:
-                                dNdxi = -3.0*a*t2*t3*t4*(-s1*s3-s1*s4+s3*s4)
-                                dNdeta = -3.0*a *s1*s3*s4*(-t2*t3-t2*t4+t3*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[-6.0*a*t2*t3*t4*(-s1 - s3 - s4), -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4)],
-                                                     [-3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4), -6.0*a*s1*s3*s4*(-t2 - t3 - t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = -3.0*a*t2*t3*t4*(-s1 - s3 - s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t2*t3-t2*t4+t3*t4)
-                                J3[1,1,0] = J3[1,0,1] = J3[0,1,1] = -3.0*a*s1*s3*s4*(-t2 - t3 - t4)
-                        case 6:
-                            N = -3.0*a*s1*s2*s4*t2*t3*t4
-                            if deriv >= 1:
-                                dNdxi = -3.0*a*t2*t3*t4*(-s1*s2+s1*s4+s2*s4)
-                                dNdeta = -3.0*a *s1*s2*s4*(-t2*t3-t2*t4+t3*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[-6.0*a*t2*t3*t4*(-s1 - s2 + s4), -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4)],
-                                                    [-3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4), -6.0*a*s1*s2*s4*(-t2 - t3 - t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = -3.0*a*t2*t3*t4*(-s1 - s2 + s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t2*t3-t2*t4+t3*t4)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s2*s4*(-t2 - t3 - t4)
-                        case 7:
-                            # Node 7 at (1, -1/3) - right edge, s4=0 and t2=0
-                            N = -3.0*a*s1*s2*s3*t1*t3*t4
-                            if deriv >= 1:
-                                dNdxi = -3.0*a*t1*t3*t4*(-s1*s2+s1*s3+s2*s3)
-                                dNdeta = -3.0*a*s1*s2*s3*(-t1*t3+t1*t4+t3*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[-6.0*a*t1*t3*t4*(-s1 - s2 + s3), -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t3+t1*t4+t3*t4)],
-                                                     [-3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t3+t1*t4+t3*t4), -6.0*a*s1*s2*s3*(-t1 - t3 + t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = -3.0*a*t1*t3*t4*(-s1 - s2 + s3)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t3+t1*t4+t3*t4)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s2*s3*(-t1 - t3 + t4)
-                        case 8:
-                            N = -3.0*a*s1*s2*s3*t1*t2*t4
-                            if deriv >= 1:
-                                dNdxi = -3.0*a*t1*t2*t4*(-s1*s2+s1*s3+s2*s3)
-                                dNdeta = -3.0*a *s1*s2*s3*(-t1*t2+t1*t4+t2*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[-6.0*a*t1*t2*t4*(-s1 - s2 + s3), -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t2+t1*t4+t2*t4)],
-                                                     [-3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t2+t1*t4+t2*t4), -6.0*a*s1*s2*s3*(-t1 - t2 + t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = -3.0*a*t1*t2*t4*(-s1 - s2 + s3)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s2+s1*s3+s2*s3)*(-t1*t2+t1*t4+t2*t4)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s2*s3*(-t1 - t2 + t4)
-                        case 9:
-                            N = -3.0*a*s1*s2*s4*t1*t2*t3  
-                            if deriv >= 1:
-                                dNdxi = -3.0*a*t1*t2*t3*(-s1*s2+s1*s4+s2*s4)
-                                dNdeta = -3.0*a *s1*s2*s4*(-t1*t2+t1*t3+t2*t3)
-                            if deriv >= 2:
-                                Hess = np.array([[-6.0*a*t1*t2*t3*(-s1 - s2 + s4), -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t1*t2+t1*t3+t2*t3)],
-                                                     [-3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t1*t2+t1*t3+t2*t3), -6.0*a*s1*s2*s4*(-t1 - t2 + t3)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = -3.0*a*t1*t2*t3*(-s1 - s2 + s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s2+s1*s4+s2*s4)*(-t1*t2+t1*t3+t2*t3)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s2*s4*(-t1 - t2 + t3)
-                        case 10:
-                            N = -3.0*a*s1*s3*s4*t1*t2*t3 
-                            if deriv >= 1:
-                                dNdxi = -3.0*a*t1*t2*t3*(-s1*s3-s1*s4+s3*s4)
-                                dNdeta = -3.0*a *s1*s3*s4*(-t1*t2+t1*t3+t2*t3)
-                            if deriv >= 2:
-                                Hess = np.array([[-6.0*a*t1*t2*t3*(-s1 - s3 + s4), -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3)],
-                                                     [-3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3), -6.0*a*s1*s3*s4*(-t1 - t2 + t3)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = -3.0*a*t1*t2*t3*(-s1 - s3 + s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2+t1*t3+t2*t3)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s1*s3*s4*(-t1 - t2 + t3)
-                        case 11:
-                            N = -3.0*a*s2*s3*s4*t1*t2*t4
-                            if deriv >= 1:
-                                dNdxi = -3.0*a*t1*t2*t4*(-s2*s3-s2*s4+s3*s4)
-                                dNdeta = -3.0*a *s2*s3*s4*(-t1*t2+t1*t4+t2*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[-6.0*a*t1*t2*t4*(-s2 - s3 + s4), -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t4+t2*t4)],
-                                                     [-3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t4+t2*t4), -6.0*a*s2*s3*s4*(-t1 - t2 + t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = -3.0*a*t1*t2*t4*(-s2 - s3 + s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t2+t1*t4+t2*t4)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s2*s3*s4*(-t1 - t2 + t4)
-                        case 12:
-                            N = -3.0*a*s2*s3*s4*t1*t3*t4
-                            if deriv >= 1:
-                                dNdxi = -3.0*a*t1*t3*t4*(-s2*s3-s2*s4+s3*s4)
-                                dNdeta = -3.0*a *s2*s3*s4*(-t1*t3-t1*t4+t3*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[-6.0*a*t1*t3*t4*(-s2 - s3 + s4), -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4)],
-                                                     [-3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4), -6.0*a*s2*s3*s4*(-t1 - t3 + t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = -3.0*a*t1*t3*t4*(-s2 - s3 + s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = -3.0*a*(-s2*s3-s2*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = -3.0*a*s2*s3*s4*(-t1 - t3 + t4)
-                        case 13:
-                            N = 9.0*a*s1*s3*s4*t1*t3*t4
-                            if deriv >= 1:
-                                dNdxi = 9.0*a*t1*t3*t4*(-s1*s3-s1*s4+s3*s4)
-                                dNdeta = 9.0*a *s1*s3*s4*(-t1*t3-t1*t4+t3*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[9.0*a*t1*t3*t4*(-s1 - s3 + s4), 9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4)], 
-                                                     [9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4), 9.0*a*s1*s3*s4*(-t1 - t3 + t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = 9.0*a*t1*t3*t4*(-s1 - s3 + s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = 9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t3-t1*t4+t3*t4)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = 9.0*a*s1*s3*s4*(-t1 - t3 + t4)
-                        case 14:
-                            N = 9.0*a*s1*s2*s4*t1*t3*t4
-                            if deriv >= 1:
-                                dNdxi = 9.0*a*t1*t3*t4*(-s1*s2+s1*s4+s2*s4)
-                                dNdeta = 9.0*a *s1*s2*s4*(-t1*t3-t1*t4+t3*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[9.0*a*t1*t3*t4*(-s1 - s2 + s4), 9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t3-t1*t4+t3*t4)], 
-                                                     [9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t3-t1*t4+t3*t4), 9.0*a*s1*s2*s4*(-t1 - t3 + t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = 9.0*a*t1*t3*t4*(-s1 - s2 + s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = 9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t3-t1*t4+t3*t4)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = 9.0*a*s1*s2*s4*(-t1 - t3 + t4)
-                        case 15:
-                            N = 9.0*a*s1*s2*s4*t1*t2*t4
-                            if deriv >= 1:
-                                dNdxi = 9.0*a*t1*t2*t4*(-s1*s2+s1*s4+s2*s4)
-                                dNdeta = 9.0*a *s1*s2*s4*(-t1*t2+t1*t4+t2*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[9.0*a*t1*t2*t4*(-s1 - s2 + s4), 9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t2-t1*t4+t2*t4)], 
-                                                     [9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t2-t1*t4+t2*t4), 9.0*a*s1*s2*s4*(-t1 - t2 + t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = 9.0*a*t1*t2*t4*(-s1 - s2 + s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = 9.0*a*(-s1*s2-s1*s4+s2*s4)*(-t1*t2-t1*t4+t2*t4)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = 9.0*a*s1*s2*s4*(-t1 - t2 + t4)
-                        case 16:
-                            N = 9.0*a*s1*s3*s4*t1*t2*t4
-                            if deriv >= 1:
-                                dNdxi = 9.0*a*t1*t2*t4*(-s1*s3-s1*s4+s3*s4)
-                                dNdeta = 9.0*a *s1*s3*s4*(-t1*t2+t1*t4+t2*t4)
-                            if deriv >= 2:
-                                Hess = np.array([[9.0*a*t1*t2*t4*(-s1 - s3 + s4), 9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2-t1*t4+t2*t4)], 
-                                                     [9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2-t1*t4+t2*t4), 9.0*a*s1*s3*s4*(-t1 - t2 + t4)]])
-                            if deriv >= 3:
-                                J3 = np.zeros((2,2,2))
-                                J3[0,0,0] = 9.0*a*t1*t2*t4*(-s1 - s3 + s4)
-                                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = 9.0*a*(-s1*s3-s1*s4+s3*s4)*(-t1*t2-t1*t4+t2*t4)
-                                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = 9.0*a*s1*s3*s4*(-t1 - t2 + t4)
+            # 1D node positions (natural left-to-right ordering) for each element order
+            pos1D = {1: [-1.0, 1.0],
+                     2: [-1.0, 0.0, 1.0],
+                     3: [-1.0, -1.0/3.0, 1.0/3.0, 1.0]}[elemOrder]
+            # Map each 2D node (1-based) to its (i_xi, i_eta) indices into pos1D,
+            # consistent with ReferenceElementCoordinates(2, elemOrder):
+            #   order 1: 4---3    order 2: 4-7-3    order 3: 4-10-9-3
+            #            |   |             8 9 6             11 16 15 8
+            #            1---2             1-5-2             12 13 14 7
+            #                                               1--5--6-2
+            nodemap = {
+                1: [(0,0),(1,0),(1,1),(0,1)],
+                2: [(0,0),(2,0),(2,2),(0,2),(1,0),(2,1),(1,2),(0,1),(1,1)],
+                3: [(0,0),(3,0),(3,3),(0,3),(1,0),(2,0),(3,1),(3,2),
+                    (2,3),(1,3),(0,2),(0,1),(1,1),(2,1),(2,2),(1,2)],
+            }[elemOrder]
+            ix, iy = nodemap[node-1]
+            Lx = _Lagrange1Dderivatives(xi,  pos1D, ix, deriv)
+            Ly = _Lagrange1Dderivatives(eta, pos1D, iy, deriv)
+            N = Lx[0]*Ly[0]
+            if deriv >= 1:
+                dNdxi  = Lx[1]*Ly[0]
+                dNdeta = Lx[0]*Ly[1]
+            if deriv >= 2:
+                Hess = np.array([[Lx[2]*Ly[0], Lx[1]*Ly[1]],
+                                 [Lx[1]*Ly[1], Lx[0]*Ly[2]]])
+            if deriv >= 3:
+                J3 = np.zeros((2,2,2))
+                J3[0,0,0] = Lx[3]*Ly[0]
+                J3[0,0,1] = J3[0,1,0] = J3[1,0,0] = Lx[2]*Ly[1]
+                J3[0,1,1] = J3[1,0,1] = J3[1,1,0] = Lx[1]*Ly[2]
+                J3[1,1,1] = Lx[0]*Ly[3]
     match deriv:
         case 0:
             return N
@@ -782,29 +525,27 @@ def PhysicalGradient(dN, invJ, order = 1, maps = None):
     # E1: T_fwd contracted four times with invJ
     E1 = -np.einsum('kl,lmno,ma,nb,oc->kabc', invJ, T_fwd, invJ, invJ, invJ)
 
-    # E2: differentiate each of the three invJ factors in D
-    # ∂invJ[i,a]/∂x_c = −Σ_p invJ[i,p] · D[p,a,c]
-
-    # Use the clean closed-form (avoids index bookkeeping errors):
-    #   E = E1  +  three permutations of  (D contracted with D via H_fwd)
-    # The three permutations arise because ∂invJ[i,a]/∂x_c = −Σ_p invJ[i,p]·D[p,a,c]
-    # applied to each of the three invJ slots in D:
-    E2 = (
-        np.einsum('kp,pac,lmn,ma,nb->kabc',   invJ, D, H_fwd, invJ, invJ)  # slot 1 (k,l)
-      + np.einsum('kl,lmn,pa,pmc,nb->kabc',   invJ, H_fwd, D, invJ, invJ)  # slot 2 (m,a)
-      + np.einsum('kl,lmn,ma,pb,pnc->kabc',   invJ, H_fwd, invJ, D, invJ)  # slot 3 (n,b)
+    # E2: differentiate each of the three invJ factors in D w.r.t. x_c.
+    # Since D[k,a,b] = ∂²ξ_k/∂x_a∂x_b, we have ∂invJ[i,a]/∂x_c = D[i,a,c], so each
+    # of the three invJ factors in D = −invJ·H_fwd·invJ·invJ contributes one term
+    # (the H_fwd factor is handled by E1 above):
+    E2 = -(
+        np.einsum('klc,lmn,ma,nb->kabc',   D,    H_fwd, invJ, invJ)  # slot 1 (invJ[k,l])
+      + np.einsum('kl,lmn,mac,nb->kabc',   invJ, H_fwd, D,    invJ)  # slot 2 (invJ[m,a])
+      + np.einsum('kl,lmn,ma,nbc->kabc',   invJ, H_fwd, invJ, D   )  # slot 3 (invJ[n,b])
     )
  
     E = E1 + E2   # shape: (2, 2, 2, 2)
 
     termA = np.einsum('nijk,ia,jb,kc->nabc', dN[2], invJ, invJ, invJ)
  
-    # Term B: differentiate each of the two invJ in term1 of order-2 w.r.t. x_c
-    # gives three symmetry-equivalent permutations of free physical indices
+    # Term B: from differentiating the invJ factors in the order-2 result w.r.t. x_c.
+    # Order-2 is  term1 = dN[1]·invJ·invJ  and  term2 = dN[0]·D; with
+    # ∂invJ[i,a]/∂x_c = D[i,a,c] the surviving order-3 pieces are (dN[0]·E gives termC):
     termB = (
-        np.einsum('nij,ip,pac,jb->nabc', dN[1], invJ, D, invJ)   # perm on a
-        + np.einsum('nij,ia,jp,pbc->nabc', dN[1], invJ, invJ, D)   # perm on b  
-        + np.einsum('nij,ip,pbc,ja->nabc', dN[1], invJ, D, invJ)   # perm on c
+        np.einsum('nij,iac,jb->nabc', dN[1], D,    invJ)   # ∂invJ[i,a] in term1
+        + np.einsum('nij,ia,jbc->nabc', dN[1], invJ, D   )   # ∂invJ[j,b] in term1
+        + np.einsum('nij,iab,jc->nabc', dN[1], D,    invJ)   # ∂invJ[j,c] from term2
         )
  
     termC = np.einsum('ni,iabc->nabc', dN[0], E)
