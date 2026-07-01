@@ -83,77 +83,21 @@ def RefLagrangeBasis(X, elemType, elemOrder, node, deriv=1):
         case 0:    # LINE (1D ELEMENT)
             # Extract scalar from array for 1D case
             xi = float(X.flat[0]) if hasattr(X, 'flat') else float(X)
-            match elemOrder:
-                case 0:
-                    # --1--
-                    N = 1
-                case 1:
-                    # 1---2
-                    match node:
-                        case 1:
-                            N = (1-xi)/2
-                            if deriv >= 1:
-                                dNdxi = -1/2
-                        case 2:
-                            N = (1+xi)/2
-                            if deriv >= 1:
-                                dNdxi = 1/2 
-                case 2:         
-                    # 1---3---2
-                    match node:
-                        case 1:
-                            N = -xi*(1-xi)/2
-                            if deriv >= 1:
-                                dNdxi = xi - 0.5
-                            if deriv >= 2:
-                                d2Ndxi2 = 1.0
-                        case 2: 
-                            N = xi*(xi+1)/2
-                            if deriv >= 1:
-                                dNdxi = xi + 0.5
-                            if deriv >= 2:
-                                d2Ndxi2 = 1.0
-                        case 3: 
-                            N = 1 - xi**2
-                            if deriv >= 1:
-                                dNdxi = -2*xi
-                            if deriv >= 2:
-                                d2Ndxi2 = -2.0
-                case 3:         
-                    # 1-3-4-2
-                    match node:
-                        case 1:
-                            N = -9/16*(xi+1/3)*(xi-1/3)*(xi-1)
-                            if deriv >= 1:
-                                dNdxi = -9/16*((xi-1/3)*(xi-1)+(xi+1/3)*(xi-1)+(xi+1/3)*(xi-1/3))
-                            if deriv >= 2:
-                                d2Ndxi2 = -9/16 * (6*xi - 2)
-                            if deriv >= 3:
-                                d3Ndxi3 = -27/8
-                        case 2:
-                            N =  9/16*(xi+1)*(xi+1/3)*(xi-1/3)
-                            if deriv >= 1:
-                                dNdxi = 9/16*((xi+1/3)*(xi-1/3)+(xi+1)*(xi-1/3)+(xi+1)*(xi+1/3))
-                            if deriv >= 2:
-                                d2Ndxi2 = 9/16 * (6*xi + 2)
-                            if deriv >= 3:
-                                d3Ndxi3 = 27/8   
-                        case 3:
-                            N = 27/16*(xi+1)*(xi-1/3)*(xi-1)
-                            if deriv >= 1:
-                                dNdxi = 27/16*((xi-1/3)*(xi-1)+ (xi+1)*(xi-1)+ (xi+1)*(xi-1/3))
-                            if deriv >= 2:
-                                d2Ndxi2 = 27/16 * (6*xi - 2/3)
-                            if deriv >= 3:
-                                d3Ndxi3 = 81/8   
-                        case 4:
-                            N = -27/16*(xi+1)*(xi+1/3)*(xi-1)
-                            if deriv >= 1:
-                                dNdxi = -27/16*((xi+1/3)*(xi-1)+(xi+1)*(xi-1)+(xi+1)*(xi+1/3))
-                            if deriv >= 2:
-                                d2Ndxi2 = -27/16 * (6*xi + 2/3)
-                            if deriv >= 3:
-                                d3Ndxi3 = -81/8  
+            # 1D node positions per order, matching ReferenceElementCoordinates(0, elemOrder):
+            #   order 0: --1--   order 1: 1---2   order 2: 1---3---2   order 3: 1-3-4-2
+            pos1D = {0: [0.0],
+                     1: [-1.0, 1.0],
+                     2: [-1.0, 1.0, 0.0],
+                     3: [-1.0, 1.0, -1.0/3.0, 1.0/3.0]}[elemOrder]
+            # Lagrange basis value and derivatives via the shared 1D helper (node-1 -> 0-based index)
+            L = _Lagrange1Dderivatives(xi, pos1D, node-1, deriv)
+            N = L[0]
+            if deriv >= 1:
+                dNdxi = L[1]
+            if deriv >= 2:
+                d2Ndxi2 = L[2]
+            if deriv >= 3:
+                d3Ndxi3 = L[3]
 
             match deriv:
                 case 0:
