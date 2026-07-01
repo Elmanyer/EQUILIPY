@@ -22,9 +22,11 @@
 from _header import EQUILIPY_ROOT
 from _logging import EqPrint
 import numpy as np
+from collections import deque
 from os.path import basename
 from Element import *
 from matplotlib.path import Path
+import matplotlib.tri as mtri
 import _plot as eqplot
 
 class Mesh:
@@ -65,7 +67,6 @@ class Mesh:
         self.Nbound = None                  # NUMBER OF COMPUTATIONAL DOMAIN'S BOUNDARIES (NUMBER OF ELEMENTAL EDGES)
         self.Nnbound = None                 # NUMBER OF NODES ON COMPUTATIONAL DOMAIN'S BOUNDARY
         self.BoundaryNodes = None           # LIST OF NODES (GLOBAL INDEXES) ON THE COMPUTATIONAL DOMAIN'S BOUNDARY
-        self.BoundaryNodesSets = None
         self.BoundaryVertices = None        # LIST OF CONSECUTIVE NODES (GLOBAL INDEXES) WHICH ARE COMPUTATIONAL DOMAIN'S BOUNDARY VERTICES 
         self.boundary_path = None           # COMPUTATIONAL DOMAIN'S PATH (FOR PATCHING)
         self.DOFNodes = None                # LIST OF NODES (GLOBAL INDEXES) CORRESPONDING TO UNKNOW DEGREES OF FREEDOM IN THE CUTFEM SYSTEM
@@ -76,11 +77,14 @@ class Mesh:
         self.PlasmaElems = None             # LIST OF ELEMENTS (INDEXES) INSIDE PLASMA REGION
         self.VacuumElems = None             # LIST OF ELEMENTS (INDEXES) OUTSIDE PLASMA REGION (VACUUM REGION)
         self.PlasmaBoundElems = None        # LIST OF CUT ELEMENT'S INDEXES, CONTAINING INTERFACE BETWEEN PLASMA AND VACUUM
-        self.PlasmaBoundActiveElems = None  # LIST OF CUT ELEMENT'S INDEXES, CONTAINING INTERFACE BETWEEN PLASMA AND VACUUM, ON WHICH BC ARE APPLIED
         self.BoundaryElems = None           # LIST OF CUT (OR NOT) ELEMENT'S INDEXES AT THE COMPUTATIONAL DOMAIN'S BOUNDARY
         self.NonCutElems = None             # LIST OF ALL NON CUT ELEMENTS
-        self.ActiveElements = None          # LIST OF ELEMENTS ASSEMBLED WITH STANDARD QUADRATURE (PHASE 1): PlasmaElems (FIXED) / NonCutElems (FREE)
+
+        self.ActiveElements = None          # LIST OF ELEMENTS WITH NON-ZERO CONTRIBUTION TO THE DISCRETIZED SYSTEM 
+        self.NonCutActiveElems = None       # LIST OF NON-CUT ELEMENTS WITH NON-ZERO CONTRIBUTION TO THE DISCRETIZED SYSTEM
+        self.PlasmaBoundActiveElems = None  # LIST OF CUT ELEMENT'S INDEXES, CONTAINING INTERFACE BETWEEN PLASMA AND VACUUM, ON WHICH BC ARE APPLIED
         self.DirichletElems = None          # LIST OF ALL ELEMENTS POSSESSING A BOUNDARY NODE (NODE ON WHICH APPLY DIRICHLET BC)
+        
         self.Elements = None                # ARRAY CONTAINING ALL ELEMENTS IN MESH (PYTHON OBJECTS)
         
         self.nge = None                     # NUMBER OF INTEGRATION NODES PER ELEMENT (STANDARD SURFACE QUADRATURE)
@@ -93,7 +97,6 @@ class Mesh:
         if readfiles:
             EqPrint("READ MESH FILES...", end="")
             self.ReadMeshFile()
-            self.ReadFixFile()
             print('Done!')
         return
     
@@ -239,39 +242,6 @@ class Mesh:
         self.Zmin = np.min(self.X[:,1])
         return
     
-
-    def ReadFixFile(self):
-        """
-        Read fix set data from input file .fix.dat. 
-        """
-        # READ EQU FILE .equ.dat
-        FixDataFile = self.directory +'/' + self.name +'.fix.dat'
-        file = open(FixDataFile, 'r') 
-        self.BoundaryIden = np.zeros([self.Nbound],dtype=int)
-        for line in file:
-            l = line.split(' ')
-            l = [m for m in l if m != '']
-            for e, el in enumerate(l):
-                if el == '\n':
-                    l.remove('\n') 
-                elif el[-1:]=='\n':
-                    l[e]=el[:-1]
-            
-            if l[0] == "ON_BOUNDARIES" or l[0] == "END_ON_BOUNDARIES":
-                pass
-            else:
-                self.BoundaryIden[int(l[0])-1] = int(l[1])
-                
-        # DEFINE THE DIFFERENT SETS OF BOUNDARY NODES
-        self.BoundaryNodesSets = [set(),set()]
-        for iboun in range(self.Nbound):
-            for node in self.Tbound[iboun,:-1]:
-                self.BoundaryNodesSets[self.BoundaryIden[iboun]-1].add(node)
-        # CONVERT BOUNDARY NODES SET INTO ARRAY
-        self.BoundaryNodesSets[0] = np.array(sorted(self.BoundaryNodesSets[0]))
-        self.BoundaryNodesSets[1] = np.array(sorted(self.BoundaryNodesSets[1]))
-        return
-    
     
     def BoundaryAttributes(self):
         """
@@ -280,7 +250,6 @@ class Mesh:
 
         Tasks:
             - Extracts the global indices of nodes located on the boundary (`BoundaryNodes`).
-            - Computes the number of boundary nodes (`Nnbound`) and degrees of freedom (`DOFNodes`).
             - Identifies elements that are adjacent to the domain boundary (`BoundaryElems`).
             - Constructs a continuous, ordered path of nodal indices (`BoundaryVertices`) that trace the boundary.
             - Builds a closed geometric path (`boundary_path`) representing the computational domain's outer boundary,
@@ -295,12 +264,8 @@ class Mesh:
         self.BoundaryNodes = list(sorted(self.BoundaryNodes))
         self.Nnbound = len(self.BoundaryNodes)
         
-        # OBTAIN DOF NODES
-        self.DOFNodes =  [x for x in list(range(self.Nn)) if x not in set(self.BoundaryNodes)]
-        self.NnDOF = len(self.DOFNodes)
-        
         # OBTAIN BOUNDARY ELEMENTS
-        self.BoundaryElems = np.unique(self.Tbound[:,-1]) 
+        self.BoundaryElems = list(np.unique(self.Tbound[:,-1]))
         
         # OBTAIN BOUNDARY NODE PATH (CONSECUTIVE BOUNDARY NODAL VERTICES)
         self.BoundaryVertices = np.zeros([self.Nbound],dtype=int)
@@ -330,7 +295,6 @@ class Mesh:
         # CLOSE PATH
         compboundary[-1,:] = compboundary[0,:]
         self.boundary_path = Path(compboundary)
-        
         return
     
     
@@ -456,7 +420,7 @@ class Mesh:
         return
     
     
-    def ClassifyElements(self,PlasmaLS,FIXED_BOUNDARY):
+    def ClassifyElements(self,PlasmaLS):
         """ 
         Function that separates the elements inside vacuum vessel domain into 3 groups: 
                 - PlasmaElems: elements inside the plasma region 
@@ -469,7 +433,7 @@ class Mesh:
         WHICH CUTS TWICE THE SAME ELEMENTAL EDGE, MEANING THE INTERFACE ENTERS AND LEAVES THROUGH THE SAME SEGMENT. THE PROBLEM WITH THAT IS THE SUBROUTINE 
         RESPONSIBLE FOR APPROXIMATING THE INTERFACE INSIDE ELEMENTS ONLY SEES THE LEVEL-SET VALUES ON THE VERTICES, BECAUSE IT DOES ONLY BOTHER ON WHETHER THE 
         ELEMENTAL EDGE IS CUT OR NOT. 
-        IN LIGHT OF SUCH OCURRENCES, THE CLASSIFICATION OF ELEMENTS BASED ON LEVEL-SET SIGNS WILL BE IMPLEMENTED SUCH THAT ONLY THE VALUES ON THE VERTICES ARE
+        DUE TO SUCH OCURRENCES, THE CLASSIFICATION OF ELEMENTS BASED ON LEVEL-SET SIGNS WILL BE IMPLEMENTED SUCH THAT ONLY THE VALUES ON THE VERTICES ARE
         TAKEN INTO ACCOUNT. THAT WAY, THIS CASES ARE ELUDED. ON THE OTHER HAND, WE NEED TO DETECT ALSO SUCH CASES IN ORDER TO MODIFY THE VALUES OF THE MESH 
         LEVEL-SET VALUES AND ALSO ON THE ELEMENTAL VALUES. """
         
@@ -481,19 +445,22 @@ class Mesh:
         kvacuu = 0
         kint = 0
 
-        # SNAP NEAR-ZERO LEVEL-SET CORNER VALUES TO AVOID DEGENERATE CUT ELEMENTS
+        ##### SNAP NEAR-ZERO LEVEL-SET VERTEX VALUES TO AVOID DEGENERATE CUT ELEMENTS
         # When mesh nodes coincide exactly with interface cardinal points, floating-point
         # evaluation gives |phi| ~ 1e-16. This creates cut elements with plasma fraction
         # ~ 1e-16, producing Nitsche penalty entries O(beta/h_eff) ~ O(10^22).
+        # In order to solver this issue, snap near-zero level-set values to a small tolerance, 
+        # based on the maximum vertex value of the element, and thus displacing the interface slightly so that 
+        # the element is no longer cut and falls entirely in the plasma or vacuum region.
         for ielem in range(self.Ne):
             elem = self.Elements[ielem]
-            corners = elem.LSe[:elem.numedges]        # corner nodes only (not high-order midpoints)
-            max_phi = np.max(np.abs(corners))
+            phi_vertices = elem.LSe[:elem.numedges]   # vertices only (not high-order midpoints)
+            max_phi = np.max(np.abs(phi_vertices))
             if max_phi > 0:
                 tol = max_phi * 1e-10                 # relative snap tolerance
                 for _ci in range(elem.numedges):
-                    if abs(corners[_ci]) < tol:
-                        other_signs = [corners[j] for j in range(elem.numedges) if j != _ci]
+                    if abs(phi_vertices[_ci]) < tol:
+                        other_signs = [phi_vertices[j] for j in range(elem.numedges) if j != _ci]
                         n_vacuum = sum(v > 0 for v in other_signs)
                         n_plasma = sum(v < 0 for v in other_signs)
                         if n_vacuum >= n_plasma:
@@ -503,13 +470,14 @@ class Mesh:
                             elem.LSe[_ci] = -tol      # snap to plasma side (strict majority)
                             PlasmaLS[elem.Te[_ci]] = -tol
 
+        ##### CLASSIFY ELEMENTS BASED ON LEVEL-SET SIGN ON ELEMENT VERTICES
         for ielem in range(self.Ne):
             regionplasma, DHONplasma = self.Elements[ielem].CheckElementalVerticesLevelSetSigns()
             if regionplasma < 0:   # ALL PLASMA LEVEL-SET NODAL VALUES NEGATIVE -> INSIDE PLASMA DOMAIN 
                 # ALREADY CLASSIFIED AS COMPUTATIONAL BOUNDARY ELEMENT (= BOUNDARY ELEMENT)
                 if self.Elements[ielem].Dom == 2:  
                     # REMOVE FROM COMPUTATIONAL BOUNDARY ELEMENT LIST
-                    self.BoundaryElems = self.BoundaryElems[self.BoundaryElems != ielem]
+                    self.BoundaryElems.remove(ielem)
                 # REDEFINE CLASSIFICATION
                 self.PlasmaElems[kplasm] = ielem
                 self.Elements[ielem].Dom = -1
@@ -518,7 +486,7 @@ class Mesh:
                 # ALREADY CLASSIFIED AS COMPUTATIONAL BOUNDARY ELEMENT (= BOUNDARY ELEMENT)
                 if self.Elements[ielem].Dom == 2:  
                     # REMOVE FROM COMPUTATIONAL BOUNDARY ELEMENT LIST
-                    self.BoundaryElems = self.BoundaryElems[self.BoundaryElems != ielem]
+                    self.BoundaryElems.remove(ielem)
                 # REDEFINE CLASSIFICATION
                 self.PlasmaBoundElems[kint] = ielem
                 self.Elements[ielem].Dom = 0
@@ -539,30 +507,17 @@ class Mesh:
                     PlasmaLS[self.Elements[ielem].Te[inode]] *= -1       
         
         # DELETE REST OF UNUSED MEMORY
-        self.PlasmaElems = self.PlasmaElems[:kplasm]
-        self.VacuumElems = self.VacuumElems[:kvacuu]
-        self.PlasmaBoundElems = self.PlasmaBoundElems[:kint]
+        self.PlasmaElems = list(self.PlasmaElems[:kplasm])
+        self.VacuumElems = list(self.VacuumElems[:kvacuu])
+        self.PlasmaBoundElems = list(self.PlasmaBoundElems[:kint])
         
-        # GATHER NON-CUT ELEMENTS
-        self.NonCutElems = np.concatenate((self.PlasmaElems, self.VacuumElems, self.BoundaryElems), axis=0)
+        ##### GATHER NON-CUT ELEMENTS
+        self.NonCutElems = self.PlasmaElems + self.VacuumElems + self.BoundaryElems
 
+        ##### CHECK THAT THE NUMBER OF ELEMENTS IS CONSISTENT WITH THE CLASSIFICATION
         if len(self.NonCutElems) + len(self.PlasmaBoundElems) != self.Ne:
             raise ValueError("Non-cut elements + Cut elements =/= Total number of elements  --> Wrong mesh classification!!")
-
-        # DEFINE ACTIVE ELEMENTS: the elements for which a STANDARD quadrature must be computed.
-        # FIXED_BOUNDARY: the plasma region is fixed and the PDE is solved only inside it, so only
-        #   plasma-interior elements need a standard quadrature (cut elements use adapted ones;
-        #   vacuum and computational-boundary elements are not assembled).
-        # FREE_BOUNDARY: the plasma region evolves, so any element may later become a plasma element
-        #   and need its standard quadrature; since quadratures are computed once at initialisation,
-        #   they must be computed for every element.
-        if FIXED_BOUNDARY:
-            self.ActiveElements = self.PlasmaElems
-        else:
-            self.ActiveElements = np.arange(self.Ne)
         
-        # CLASSIFY NODES ACCORDING TO NEW ELEMENT CLASSIFICATION
-        #self.ClassifyNodes()
         return PlasmaLS
     
     
@@ -581,36 +536,45 @@ class Mesh:
             Classification[ielem] = +2
             
         return Classification
-    
-    
-    def ClassifyNodes(self):
-        self.PlasmaNodes = set()
-        self.VacuumNodes = set()
-        for ielem in self.PlasmaElems:
-            for node in self.T[ielem,:]:
-                self.PlasmaNodes.add(node) 
-        for ielem in self.VacuumElems:
-            for node in self.T[ielem,:]:
-                self.VacuumNodes.add(node)    
-        for ielem in self.PlasmaBoundElems:
-            for node in self.T[ielem,:]:
-                if self.PlasmaLS[node] < 0:
-                    self.PlasmaNodes.add(node)
-                else:
-                    self.VacuumNodes.add(node)
-        for ielem in self.BoundaryElems:
-            for node in self.T[ielem,:]:
-                self.VacuumNodes.add(node)
-        for node in self.BoundaryNodes:
-            if node in self.VacuumNodes:
-                self.VacuumNodes.remove(node)   
+
+
+    def ObtainActiveMesh(self, FIXED_BOUNDARY):
+        """
+        Function which defines the active mesh, i.e. the elements which are assembled and yield contributions to the discretised system.
+
+        - For the FIXED BOUNDARY problem, the active mesh consists of the plasma interior elements and (if existing) plasma cut elements, 
+          as the plasma region is fixed and the PDE is solved only inside it. 
+            -> For the FEM solver, BC are imposed strongly on boundary elements corresponding to the 
+                plasma boundary. There are no vacuum elements.
+            -> For the CUTFEM solver, BC are imposed weakly on plasma boundary cut elements, and vacuum and computational-boundary elements 
+                are irrelevant to the system and therefore are not assembled.
+
+        - For the FREE BOUNDARY problem, the active mesh consists of all elements, as the plasma region evolves and any element may later 
+        become a plasma element.
+        """
         
-        self.PlasmaNodes = np.array(sorted(list(self.PlasmaNodes)))
-        self.VacuumNodes = np.array(sorted(list(self.VacuumNodes)))
-        
-        if self.out_pickle:
-            self.PlasmaNodes_sim.append(self.PlasmaNodes.copy())
-            self.VacuumNodes_sim.append(self.VacuumNodes.copy())
+        if FIXED_BOUNDARY:
+            # OBTAIN ACTIVE MESH
+            self.ActiveElements = self.PlasmaElems + self.PlasmaBoundElems
+            # OBTAIN ACTIVE NON-CUT ELEMENTS MESH
+            self.NonCutActiveElems = self.PlasmaElems
+            # OBTAIN NODES CORRESPONDING TO UNKNOW DEGREES OF FREEDOM (ACTIVE MESH DOFs)
+            self.DOFNodes = set()
+            for ielem in self.ActiveElements:
+                self.DOFNodes.update(self.Elements[ielem].Te)
+            self.DOFNodes = list(self.DOFNodes)
+
+        # FREE BOUNDARY PROBLEM
+        else:
+            # OBTAIN ACTIVE MESH
+            self.ActiveElements = list(range(self.Ne))
+            # OBTAIN ACTIVE NON-CUT ELEMENTS MESH
+            self.NonCutActiveElems = self.NonCutElems
+            # OBTAIN NODES CORRESPONDING TO UNKNOW DEGREES OF FREEDOM (ALL DOFs except BOUNDARY NODES)
+            self.DOFNodes =  [x for x in list(range(self.Nn)) if x not in set(self.BoundaryNodes)]
+
+        # COUNT NUMBER OF NODES CORRESPONDING TO UNKNOWN DEGREES OF FREEDOM
+        self.NnDOF = len(self.DOFNodes)
         return
     
     
@@ -620,38 +584,63 @@ class Mesh:
     
     def ObtainPlasmaBoundaryElementalPath(self):
         """
-        Constructs an ordered path of plasma boundary elements.
+        Constructs an ordered path of the plasma boundary (cut) elements.
 
-        The resulting `PlasmaBoundElemPath` is stored as a list of element indices representing a connected boundary path.
+        The cut elements are chained together through FACE-adjacency (`neighbours`)
+        into ordered contiguous segments. Face-adjacency, however, does not always
+        produce a single closed loop: at fine resolutions the interface may step
+        diagonally so that two consecutive cut elements meet only at a vertex (not
+        an edge), and several plasma lobes may coexist. The cut band is therefore
+        made of one or more connected components, each an open chain or a closed
+        loop, possibly with branches.
+
+        To be robust to all of these, this routine traces every component in BOTH
+        directions from a seed and concatenates them, so that the resulting
+        `PlasmaBoundElemPath` ALWAYS contains every element of `PlasmaBoundElems`
+        exactly once, i.e. len(PlasmaBoundElemPath) == len(PlasmaBoundElems).
         """
-        self.PlasmaBoundElemPath = np.zeros([len(self.PlasmaBoundElems)], dtype=int)
-        
-        if self.PlasmaBoundElems.size != 0:
-            # INTIALISE PATH LIST
-            self.PlasmaBoundElemPath[0] = self.PlasmaBoundElems[0]
-            # CONSTRUCT PATH
-            ipos = 1
-            for ielem in range(len(self.PlasmaBoundElems)-1):
-                # LOOK AT ELEMENT NEIGHBOURS
-                for ineigh in self.Elements[self.PlasmaBoundElemPath[ielem]].neighbours:
-                    if ineigh == -1:
-                        pass
-                    else:
-                        # IF NEIGHBOUR ELEMENT IS PLASMA BOUNDARY ELEMENT
-                        if self.Elements[ineigh].Dom == 0:
-                            # IF FIRST ITERATION TAKE THE FIRST NEIGHBOR WHICH IS A PLASMA BOUNDARY ELEMENT
-                            if ielem == 0:
-                                self.PlasmaBoundElemPath[ipos] = self.Elements[ineigh].index
-                                ipos += 1
-                                break
-                            else:
-                                # CHECK THAT IS NOT THE PREVIOUS ADJACENT ELEMENT
-                                if ineigh != self.PlasmaBoundElemPath[ipos-1]:
-                                    self.PlasmaBoundElemPath[ipos] = self.Elements[ineigh].index
-                                    ipos += 1
-                                    break
-        # TURN IT INTO A LIST
-        self.PlasmaBoundElemPath = list(self.PlasmaBoundElemPath)
+        self.PlasmaBoundElemPath = []
+        if len(self.PlasmaBoundElems) == 0:
+            return
+
+        # Set of all cut elements, for O(1) membership tests, plus the set of
+        # elements still to be placed on the path.
+        cut_set = set(int(e) for e in self.PlasmaBoundElems)
+        unvisited = set(cut_set)
+
+        def cut_neighbours(elem):
+            # Face-neighbours of `elem` that are themselves cut elements.
+            return [int(n) for n in self.Elements[elem].neighbours
+                    if n != -1 and int(n) in cut_set]
+
+        path = []
+        # Seed from every cut element in their original order (deterministic).
+        # Elements already placed on the path are skipped, so each connected
+        # component is traced exactly once.
+        for seed in (int(e) for e in self.PlasmaBoundElems):
+            if seed not in unvisited:
+                continue
+            # Grow a chain from `seed` in both directions: an interior seed still
+            # yields the whole chain, and both endpoints of an open chain are reached.
+            chain = deque([seed])
+            unvisited.discard(seed)
+            # Forward extension.
+            while True:
+                nxt = next((n for n in cut_neighbours(chain[-1]) if n in unvisited), None)
+                if nxt is None:
+                    break
+                chain.append(nxt)
+                unvisited.discard(nxt)
+            # Backward extension.
+            while True:
+                prv = next((n for n in cut_neighbours(chain[0]) if n in unvisited), None)
+                if prv is None:
+                    break
+                chain.appendleft(prv)
+                unvisited.discard(prv)
+            path.extend(chain)
+
+        self.PlasmaBoundElemPath = path
         return
     
     
@@ -916,23 +905,15 @@ class Mesh:
     def ComputeStandardQuadratures(self,QuadOrder2D):
         """
         Computes the STANDARD FEM numerical integration QUADRATURES for the active mesh elements.
-
-        Iterates self.ActiveElements (set by ClassifyElements): PlasmaElems for the FIXED_BOUNDARY
-        problem (only plasma-interior elements need a standard quadrature — cut elements use adapted
-        ones, vacuum and computational-boundary elements are not assembled) or every element for the
-        FREE_BOUNDARY problem (the evolving plasma may promote any element to plasma later).
-        Requires the elements to be classified beforehand (Dom flags + ActiveElements set by
-        ClassifyElements).
         """
         # COMPUTE STANDARD 2D QUADRATURE ENTITIES.
         # nge (nodes per standard quadrature) is taken from the first active element; it is
         # mesh-uniform, so sourcing it from any active element is equivalent and robust.
         self.nge = None
         for ielem in self.ActiveElements:
-            ELEMENT = self.Elements[ielem]
-            ELEMENT.ComputeStandardQuadrature2D(QuadOrder2D)
+            self.Elements[ielem].ComputeStandardQuadrature2D(QuadOrder2D)
             if self.nge is None:
-                self.nge = ELEMENT.ng
+                self.nge = self.Elements[ielem].ng
         return
     
     def ComputeAdaptedQuadratures(self,QuadOrder2D,QuadOrder1D):
@@ -1405,17 +1386,34 @@ class Mesh:
             ax.plot(Xe[:,0], Xe[:,1], color=eqplot.Black, linewidth=1)
             ax.fill(Xe[:,0], Xe[:,1], color = color)
 
-        # PLOT PLASMA BOUNDARY  
+        # PLOT PLASMA BOUNDARY
         if type(PlasmaLS) != type(None):
-            ax.tricontour(self.X[:,0],self.X[:,1], PlasmaLS, levels=[0], 
+            ax.tricontour(self.X[:,0],self.X[:,1], PlasmaLS, levels=[0],
                         colors = eqplot.plasmabouncolor,
                         linewidths = eqplot.plasmabounlinewidth)
-                
-        # PLOT GHOSTFACES 
+
+        # PLOT GHOSTFACES
         if GHOSTFACES:
             for ghostface in self.GhostFaces:
                 ax.plot(self.X[ghostface[0][:2],0],self.X[ghostface[0][:2],1],
                          linewidth=2,
                          color=eqplot.ghostfacescolor)
         return
-    
+
+
+    def ActiveElementsTriangulation(self):
+        """
+        Builds a matplotlib triangulation restricted to the active mesh elements
+        (plasma interior + cut elements, i.e. self.ActiveElements). Used to plot
+        fields only where the problem is actually integrated. Quadrilateral
+        elements are split into two triangles (fan from the first corner).
+        """
+        triangles = []
+        for ielem in self.ActiveElements:
+            corners = self.T[ielem][:self.numedges]
+            if self.numedges == 3:            # TRIANGLE
+                triangles.append(corners)
+            else:                             # QUADRILATERAL -> 2 triangles
+                triangles.append([corners[0], corners[1], corners[2]])
+                triangles.append([corners[0], corners[2], corners[3]])
+        return mtri.Triangulation(self.X[:,0], self.X[:,1], np.array(triangles, dtype=int))

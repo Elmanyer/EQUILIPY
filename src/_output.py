@@ -559,7 +559,7 @@ class EquilipyOutput:
     def writePlasmaBoundaryData(self):
         self.writePlasmaLS()
         self.writeElementsClassification()
-        if self.MESH.PlasmaBoundElems.size > 0:
+        if len(self.MESH.PlasmaBoundElems) > 0:
             self.writePlasmaapprox()
             self.writeGhostFaces()
         return
@@ -637,6 +637,39 @@ class EquilipyOutput:
             
             if not self.FIXED_BOUNDARY: 
                 self.file_quadratures.write("END_ITERATION\n")
+        return
+    
+
+    def writeElementalContributions(self, ELEMENT, LHSe, RHSe, SUBELEM=None):
+        if SUBELEM is None:
+            self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index+1,ELEMENT.Dom))
+        else:
+            self.file_elemsys.write("elem {:d} {:d} subelem {:d} {:d}\n".format(ELEMENT.index+1,ELEMENT.Dom,SUBELEM.index+1,SUBELEM.Dom))
+
+        self.file_elemsys.write('elmat\n')
+        for irow in range(ELEMENT.n):
+            values = " ".join("{:.6e}".format(val) for val in LHSe[irow,:])
+            self.file_elemsys.write("{}\n".format(values))
+        self.file_elemsys.write('elrhs\n')
+        values = " ".join("{:.6e}".format(val) for val in RHSe)
+        self.file_elemsys.write("{}\n".format(values))
+        return
+    
+
+    def writeGlobalSystem(self):
+        self.file_globalsys.write('RHS_VECTOR\n')
+        for inode in range(self.MESH.Nn):
+            self.file_globalsys.write("{:d} {:f}\n".format(inode+1, self.RHS[inode,0]))
+        self.file_globalsys.write('END_RHS_VECTOR\n')
+            
+        self.file_globalsys.write('LHS_MATRIX\n')
+        inode = 0
+        for irow in range(self.MESH.Nn):
+            for jcol in range(self.MESH.Nn):
+                if self.LHS[irow,jcol] != 0:
+                    inode += 1
+                    self.file_globalsys.write("{:d} {:d} {:d} {:f}\n".format(inode, irow+1, jcol+1, self.LHS[irow,jcol]))
+        self.file_globalsys.write('END_LHS_MATRIX\n')
         return
     
 

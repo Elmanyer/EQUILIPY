@@ -220,9 +220,15 @@ class EquilipyPlotting:
 
             EqPrint("="*70 + "\n")
 
-            # Compute global min and max across both datasets
-            vmin = min(AnaliticalNorm)
-            vmax = max(AnaliticalNorm)
+            # Triangulation restricted to the active mesh elements (plasma interior
+            # + cut elements). Outside this region the fixed-boundary problem is not
+            # integrated (PSI = 0), so the solution is only plotted here.
+            activetri = self.MESH.ActiveElementsTriangulation()
+            active_nodes = np.unique(activetri.triangles)
+
+            # Compute global min and max over the active region only
+            vmin = min(AnaliticalNorm[active_nodes])
+            vmax = max(AnaliticalNorm[active_nodes])
 
             fig, axs = plt.subplots(1, 4, figsize=(16,5),gridspec_kw={'width_ratios': [1,1,0.25,1]})
 
@@ -233,11 +239,11 @@ class EquilipyPlotting:
             axs[0].set_xlabel('R (in m)')
             axs[0].set_ylabel('Z (in m)')
             axs[0].set_title('PSI exact')
-            a1 = axs[0].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], AnaliticalNorm, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
+            a1 = axs[0].tricontourf(activetri, AnaliticalNorm, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
             axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0],
                               colors = plasmabouncolor,
                               linewidths=plasmabounlinewidth)
-            axs[0].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], AnaliticalNorm, levels=[0], colors = 'black')
+            axs[0].tricontour(activetri, AnaliticalNorm, levels=[0], colors = 'black')
             self.MESH.PlotBoundary(ax = axs[0])
 
             # CENTRAL PLOT: NUMERICAL SOLUTION
@@ -246,11 +252,11 @@ class EquilipyPlotting:
             axs[1].set_xlabel('R (in m)')
             axs[1].set_aspect('equal')
             axs[1].set_title('PSI numeric')
-            axs[1].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
+            axs[1].tricontourf(activetri, self.PSI_CONV, levels=Npsilevels, cmap=plasmacmap, vmin=vmin, vmax=vmax)
             axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0],
                               colors = plasmabouncolor,
                               linewidths=plasmabounlinewidth)
-            axs[1].tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PSI_CONV, levels=[0], colors = 'black')
+            axs[1].tricontour(activetri, self.PSI_CONV, levels=[0], colors = 'black')
             self.MESH.PlotBoundary(ax = axs[1])
             # COLORBAR
             axs[2].axis('off')
@@ -262,9 +268,9 @@ class EquilipyPlotting:
             axs[3].set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
             axs[3].set_xlabel('R (in m)')
             axs[3].set_title('PSI error')
-            vmax = max(np.log10(self.PSIerror))
+            vmax = max(np.log10(self.PSIerror[active_nodes]))
             vmin = np.log10(1e-14)
-            a = axs[3].tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], np.log10(self.PSIerror), levels=np.linspace(vmin, vmax, 15), vmax=vmax, vmin=vmin)
+            a = axs[3].tricontourf(activetri, np.log10(self.PSIerror), levels=np.linspace(vmin, vmax, 15), vmax=vmax, vmin=vmin)
             self.MESH.PlotBoundary(ax = axs[3])
 
             plt.colorbar(a, ax=axs[3])

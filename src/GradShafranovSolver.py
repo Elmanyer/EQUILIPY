@@ -260,14 +260,13 @@ class GradShafranovSolver(EquilipyInitialisation,
         #####################################################################
         ################# RUN-TIME DOMAIN DISCRETISATION ####################
         
-        # CLASSIFY ELEMENTS (also sets MESH.ActiveElements: the elements needing a standard
-        # quadrature -> PlasmaElems for FIXED_BOUNDARY, every element for FREE_BOUNDARY).
+        # CLASSIFY ELEMENTS
         EqPrint("     -> CLASSIFY ELEMENTS...", end="")
-        self.PlasmaLS = self.MESH.ClassifyElements(self.PlasmaLS, self.FIXED_BOUNDARY)
+        self.PlasmaLS = self.MESH.ClassifyElements(self.PlasmaLS)
+        self.MESH.ObtainActiveMesh(self.FIXED_BOUNDARY)
         print('Done!')
 
         # COMPUTE STANDARD 2D QUADRATURE ENTITIES (ONCE, AT INITIALISATION) FOR THE ACTIVE ELEMENTS.
-        # Done after classification so MESH.ActiveElements is known.
         if INITIALISATION:
             EqPrint('     -> COMPUTE STANDARD NUMERICAL INTEGRATION QUADRATURES...', end="")
             self.MESH.ComputeStandardQuadratures(self.QuadratureOrder2D)
@@ -499,19 +498,12 @@ class GradShafranovSolver(EquilipyInitialisation,
         if self.out_elemsys:
             self.file_elemsys.write('NON_CUT_ELEMENTS\n')
 
-        # INTEGRATE OVER THE SURFACE OF ACTIVE NON-CUT ELEMENTS (STANDARD QUADRATURES)
+        #########################################################################################
+        #### I. INTEGRATE OVER THE SURFACE OF ACTIVE NON-CUT ELEMENTS (STANDARD QUADRATURES) ####
+        #########################################################################################
         EqPrint("     Integrate non-cut elements contributions...", end="")
-
-        # Non-cut elements assembled with their standard quadrature (cut elements are handled in
-        # Phase 2 via adapted quadratures, so they are excluded here):
-        #   FIXED_BOUNDARY: plasma-interior elements only. Vacuum and computational-boundary
-        #     (Dirichlet) elements are irrelevant — the boundary condition is imposed weakly on
-        #     the fixed plasma boundary via Nitsche — so they are neither quadratured nor assembled.
-        #   FREE_BOUNDARY: all non-cut elements (plasma, vacuum, boundary); Δ*ψ=0 in the vacuum.
-        # (This is a subset of MESH.ActiveElements, which additionally covers every element in the
-        #  free-boundary case so a later plasma promotion always finds its standard quadrature.)
-        AssembledNonCutElems = self.MESH.PlasmaElems if self.FIXED_BOUNDARY else self.MESH.NonCutElems
-        for ielem in AssembledNonCutElems:
+        
+        for ielem in self.MESH.NonCutActiveElems:
             # ISOLATE ELEMENT
             ELEMENT = self.MESH.Elements[ielem]
             # COMPUTE SOURCE TERM (PLASMA CURRENT)  mu0*R*Jphi  IN PLASMA REGION NODES
@@ -530,14 +522,7 @@ class GradShafranovSolver(EquilipyInitialisation,
                 LHSe, RHSe = ELEMENT.PrescribeDirichletBC(LHSe,RHSe)
 
             if self.out_elemsys:
-                self.file_elemsys.write("elem {:d} {:d}\n".format(ELEMENT.index+1,ELEMENT.Dom))
-                self.file_elemsys.write('elmat\n')
-                for irow in range(ELEMENT.n):
-                    values = " ".join("{:.6e}".format(val) for val in LHSe[irow,:])
-                    self.file_elemsys.write("{}\n".format(values))
-                self.file_elemsys.write('elrhs\n')
-                values = " ".join("{:.6e}".format(val) for val in RHSe)
-                self.file_elemsys.write("{}\n".format(values))
+                self.writeElementalContributions(ELEMENT,LHSe,RHSe)
 
             # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
             for i in range(ELEMENT.n):   # ROWS ELEMENTAL MATRIX
@@ -551,8 +536,11 @@ class GradShafranovSolver(EquilipyInitialisation,
             self.file_elemsys.write('END_NON_CUT_ELEMENTS\n')
             self.file_elemsys.write('CUT_ELEMENTS_SURFACE\n')
         
-        # INTEGRATE OVER THE SURFACES OF SUBELEMENTS IN ELEMENTS CUT BY INTERFACES (ADAPTED QUADRATURES)
-        EqPrint("     Integrate cut-elements subelements contributions...", end="")
+        ############################################################################################################
+        #### II. INTEGRATE OVER THE SURFACES OF SUBELEMENTS IN ELEMENTS CUT BY INTERFACES (ADAPTED QUADRATURES) ####
+        ############################################################################################################
+        if len(self.MESH.PlasmaBoundElems) > 0:
+            EqPrint("     Integrate cut-elements subelements contributions...", end="")
         
         for ielem in self.MESH.PlasmaBoundElems:
             # ISOLATE ELEMENT 
@@ -582,29 +570,26 @@ class GradShafranovSolver(EquilipyInitialisation,
                     LHSe, RHSe = ELEMENT.PrescribeDirichletBC(LHSe,RHSe)
                 
                 if self.out_elemsys:
-                    self.file_elemsys.write("elem {:d} {:d} subelem {:d} {:d}\n".format(ELEMENT.index+1,ELEMENT.Dom,SUBELEM.index+1,SUBELEM.Dom))
-                    self.file_elemsys.write('elmat\n')
-                    for irow in range(ELEMENT.n):
-                        values = " ".join("{:.6e}".format(val) for val in LHSe[irow,:])
-                        self.file_elemsys.write("{}\n".format(values))
-                    self.file_elemsys.write('elrhs\n')
-                    values = " ".join("{:.6e}".format(val) for val in RHSe)
-                    self.file_elemsys.write("{}\n".format(values))
+                    self.writeElementalContributions(ELEMENT,LHSe,RHSe,SUBELEM)
                 
                 # ASSEMBLE ELEMENTAL CONTRIBUTIONS INTO GLOBAL SYSTEM
                 for i in range(SUBELEM.n):   # ROWS ELEMENTAL MATRIX
                     for j in range(SUBELEM.n):   # COLUMNS ELEMENTAL MATRIX
                         self.LHS[SUBELEM.Te[i],SUBELEM.Te[j]] += LHSe[i,j]
                     self.RHS[SUBELEM.Te[i]] += RHSe[i]
-                
-        print('Done!')
+
+        if len(self.MESH.PlasmaBoundElems) > 0:        
+            print('Done!')
         
         if self.out_elemsys:
             self.file_elemsys.write('END_CUT_ELEMENTS_SURFACE\n')
             self.file_elemsys.write('CUT_ELEMENTS_INTERFACE\n')
         
-        # INTEGRATE OVER THE CUT EDGES IN ELEMENTS CUT BY INTERFACES (ADAPTED QUADRATURES)
-        EqPrint("     Integrate cut-elements interface contributions...", end="")
+        ###############################################################################################
+        #### III. INTEGRATE OVER THE CUT EDGES IN ELEMENTS CUT BY INTERFACES (ADAPTED QUADRATURES) ####
+        ###############################################################################################
+        if len(self.MESH.PlasmaBoundActiveElems) > 0:
+            EqPrint("     Integrate cut-elements interface contributions...", end="")
 
         if self.beta is None:
             raise ValueError("Nitsche penalty parameter 'beta' must be set before assembling interface terms.")
@@ -635,12 +620,15 @@ class GradShafranovSolver(EquilipyInitialisation,
                     self.LHS[ELEMENT.Te[i],ELEMENT.Te[j]] += LHSe[i,j]
                 self.RHS[ELEMENT.Te[i]] += RHSe[i]
         
-        print('Done!')
+        if len(self.MESH.PlasmaBoundActiveElems) > 0:
+            print('Done!')
         
         if self.out_elemsys:
             self.file_elemsys.write('END_CUT_ELEMENTS_INTERFACE\n')
       
-        # INTEGRATE GHOST PENALTY TERM OVER CUT ELEMENTS INTERNAL CUT EDGES
+        ###############################################################################
+        #### IV. INTEGRATE GHOST PENALTY TERM OVER CUT ELEMENTS INTERNAL CUT EDGES ####
+        ###############################################################################
         if self.GhostStabilization:
             EqPrint("     Integrate ghost faces contributions...", end="")
             self.IntegrateGhostStabilizationTerms()
@@ -656,19 +644,7 @@ class GradShafranovSolver(EquilipyInitialisation,
 
         # WRITE GLOBAL SYSTEM MATRICES
         if self.out_elemsys:
-            self.file_globalsys.write('RHS_VECTOR\n')
-            for inode in range(self.MESH.Nn):
-                self.file_globalsys.write("{:d} {:f}\n".format(inode+1, self.RHS[inode,0]))
-            self.file_globalsys.write('END_RHS_VECTOR\n')
-                
-            self.file_globalsys.write('LHS_MATRIX\n')
-            inode = 0
-            for irow in range(self.MESH.Nn):
-                for jcol in range(self.MESH.Nn):
-                    if self.LHS[irow,jcol] != 0:
-                        inode += 1
-                        self.file_globalsys.write("{:d} {:d} {:d} {:f}\n".format(inode, irow+1, jcol+1, self.LHS[irow,jcol]))
-            self.file_globalsys.write('END_LHS_MATRIX\n')
+            self.writeGlobalSystem()
         
         # RUN VALIDATION TESTS ON ASSEMBLED SYSTEM
         if self.RunTests:
@@ -943,9 +919,9 @@ class GradShafranovSolver(EquilipyInitialisation,
                 EqPrint("    (Computing CutFEM diagnostics...)")
                 self.GetDiagnostics(verbose=False)
                 self.PrintErrorSummary()
-                return
 
         EqPrint("="*70 + "\n")
+        return
     
     
     
