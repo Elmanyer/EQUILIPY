@@ -287,13 +287,15 @@ class EquilipyPlotting:
             ax.set_ylim(self.MESH.Zmin-pady,self.MESH.Zmax+pady)
             ax.set_xlabel('R (in m)')
             ax.set_ylabel('Z (in m)')
+
+            activetri = self.MESH.ActiveElementsTriangulation()
             
             # PLOT PSI FIELD
             if normalised:
                 psisep = self.PSI_NORMseparatrix
             else:
                 psisep = self.PSI_X
-            contourf = ax.tricontourf(self.MESH.X[:,0],self.MESH.X[:,1], field, levels=Npsilevels, cmap=plasmacmap)
+            contourf = ax.tricontourf(activetri, field, levels=Npsilevels, cmap=plasmacmap)
             contour1 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], field, levels=[psisep], colors = 'black',linewidths=2)
             contour2 = ax.tricontour(self.MESH.X[:,0],self.MESH.X[:,1], self.PlasmaLS, levels=[0], 
                                      colors = plasmabouncolor, 
